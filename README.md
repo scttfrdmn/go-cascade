@@ -347,3 +347,18 @@ ordering, semantic caching, mutation testing. What is composed here is
 reduce cost at fixed risk — together with cache-as-arm-zero under a single joint
 risk budget and the miss-distribution correction. Worth a literature check
 before claiming novelty for that combination.
+
+## Disclaimer
+
+This is a personal research project. It is not affiliated with, endorsed by, or
+a product of any employer. The per-token prices in `internal/config` are
+**illustrative** and go stale; they are not a quote. Model IDs are guesses that
+drift — discover the real ones for your account with `go-cascade models`. Nothing
+here has been run against a live model (see the status banner above), so every
+behavioural number comes from the deterministic mock. Use at your own risk under
+the Apache-2.0 license; running `--provider=bedrock` incurs real AWS charges that
+are entirely your responsibility.
+
+## License
+
+Apache License 2.0. Copyright 2026 Scott Friedman. See [`LICENSE`](LICENSE).
