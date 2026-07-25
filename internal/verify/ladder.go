@@ -1,3 +1,8 @@
+// Package verify is the verifier ladder: it refutes candidate solutions by
+// execution rather than scoring them by confidence. Each stage is sound, so a
+// failure means incorrect with no probability attached, which is why a refuted
+// candidate costs nothing against the risk budget. Stages are ordered by
+// measured cost on a warm build cache and stop at the first refutation.
 package verify
 
 import (
