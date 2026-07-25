@@ -56,6 +56,13 @@ func (r *Router) judgeAccept(ctx context.Context, judgeModel, problem, api, src 
 // Like Profile, it profiles every tier so any threshold vector replays offline,
 // and it runs on the cache-bypass path (Shadow) to preserve exchangeability.
 func (r *Router) ProfileJudge(ctx context.Context, id, problem, judgeModel string) (*calibrate.Record, error) {
+	// An empty judgeModel falls back to the configured test model, so a caller
+	// that does not set --judge-model still names a real model rather than
+	// sending an empty ModelID to the provider. Centralised here so every caller
+	// (solve, calibrate, compare) inherits the fallback.
+	if judgeModel == "" {
+		judgeModel = r.judgeModelDefault()
+	}
 	spec, err := r.spec(ctx, problem, &Result{})
 	if err != nil {
 		return nil, fmt.Errorf("spec phase: %w", err)
