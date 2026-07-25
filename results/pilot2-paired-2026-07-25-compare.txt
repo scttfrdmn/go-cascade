@@ -1,0 +1,10 @@
+
+arm         valid  cert-α    emp-risk  real-risk verdict
+  --------------------------------------------------------------------
+execution   false  0.100     0.1071    0.1071    could not certify
+judge       false  0.100     0.1429    0.1071    could not certify
+
+Both arms ruled on the same candidates, so the difference is the oracle,
+not sampling. The execution oracle is sound (β=0): realized risk equals
+empirical. Where the judge's realized risk exceeds its empirical risk, that
+gap is the false-acceptance rate it certified against but cannot see.
