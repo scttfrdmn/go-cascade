@@ -81,6 +81,39 @@ func TestCodeUserIncludesNegativeConstraints(t *testing.T) {
 	}
 }
 
+func TestParseJudge(t *testing.T) {
+	cases := []struct {
+		reply    string
+		wantPass bool
+		wantErr  bool
+	}{
+		{"VERDICT: PASS", true, false},
+		{"VERDICT: FAIL", false, false},
+		{"Some reasoning.\nVERDICT: pass\n", true, false}, // case-insensitive
+		{"VERDICT:FAIL", false, false},                    // no space
+		{"I think this is fine.", false, true},            // no verdict line => error
+		{"", false, true},
+	}
+	for _, c := range cases {
+		pass, err := ParseJudge(c.reply)
+		if (err != nil) != c.wantErr {
+			t.Errorf("ParseJudge(%q): err=%v, wantErr=%v", c.reply, err, c.wantErr)
+		}
+		if err == nil && pass != c.wantPass {
+			t.Errorf("ParseJudge(%q): pass=%v, want %v", c.reply, pass, c.wantPass)
+		}
+	}
+}
+
+func TestJudgeUserWithholdsTests(t *testing.T) {
+	// The judge is the alternative to an executable oracle. If the prompt leaked
+	// the test suites it would become one, defeating the comparison (§5.5c).
+	u := JudgeUser("do a thing", "package solution\n\nfunc F() {}", "package solution\n\nfunc F() {}")
+	if contains(u, "TestV") || contains(u, "TestH") || contains(u, "testing") {
+		t.Errorf("judge prompt leaked test material:\n%s", u)
+	}
+}
+
 func contains(hay, needle string) bool {
 	return len(hay) >= len(needle) && indexOf(hay, needle) >= 0
 }

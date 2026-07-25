@@ -285,8 +285,14 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	outPath := fs.String("o", "thresholds.json", "certificate output path")
 	recOut := fs.String("records", "", "also write the raw calibration records here")
 	fromRec := fs.String("from-records", "", "replay calibration from saved records instead of profiling again")
+	oracle := fs.String("oracle", "execution", "acceptance oracle: execution (sound) or judge (LLM reviewer, §5.5c)")
+	compare := fs.Bool("compare", false, "profile both oracles and report certified vs realized risk for each")
+	judgeModel := fs.String("judge-model", "", "model that plays the judge oracle (default: test_model)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *oracle != "execution" && *oracle != "judge" {
+		return fmt.Errorf("unknown -oracle %q (want execution or judge)", *oracle)
 	}
 	if *bench == "" && *fromRec == "" {
 		return errors.New("one of -bench or -from-records is required")
@@ -341,12 +347,24 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	}
 	defer r.Close() //nolint:errcheck // scratch dir
 
+	opts := calibrate.Options{
+		Alpha: cfg.Alpha, Delta: *delta, Step: *step, Method: calibrate.Method(*method),
+	}
+
+	// Compare mode profiles both oracles on the same problems and prints the
+	// certified-vs-realized risk for each. This is the §5.5c experiment in
+	// miniature: the execution arm's realized risk should match its certified
+	// alpha, while the judge arm's realized risk can exceed it.
+	if *compare {
+		return runCompare(ctx, r, probs, names, opts, *judgeModel)
+	}
+
 	recs := make([]calibrate.Record, 0, len(probs))
 	for i, p := range probs {
-		fmt.Fprintf(os.Stderr, "[%d/%d] %s\n", i+1, len(probs), p.ID)
-		rec, err := r.Profile(ctx, p.ID, p.Problem)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  skipped: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[%d/%d] %s (oracle=%s)\n", i+1, len(probs), p.ID, *oracle)
+		rec, perr := profileOne(ctx, r, p, *oracle, *judgeModel)
+		if perr != nil {
+			fmt.Fprintf(os.Stderr, "  skipped: %v\n", perr)
 			continue
 		}
 		recs = append(recs, *rec)
@@ -357,9 +375,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 		}
 	}
 
-	cert, err := calibrate.Calibrate(recs, names, calibrate.Options{
-		Alpha: cfg.Alpha, Delta: *delta, Step: *step, Method: calibrate.Method(*method),
-	})
+	cert, err := calibrate.Calibrate(recs, names, opts)
 	if err != nil {
 		return err
 	}
@@ -368,6 +384,59 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	}
 
 	printCert(*outPath, cert)
+	return nil
+}
+
+// profileOne dispatches to the execution or judge oracle. The execution oracle
+// (Profile) is sound; the judge oracle (ProfileJudge) records execution truth
+// alongside the judge verdict so the certificate can be checked against reality.
+func profileOne(ctx context.Context, r *cascade.Router, p benchProblem, oracle, judgeModel string) (*calibrate.Record, error) {
+	if oracle == "judge" {
+		return r.ProfileJudge(ctx, p.ID, p.Problem, judgeModel)
+	}
+	return r.Profile(ctx, p.ID, p.Problem)
+}
+
+// runCompare profiles both oracles and prints a side-by-side of what each
+// certifies against what it actually delivers.
+func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, names []string, opts calibrate.Options, judgeModel string) error {
+	type arm struct {
+		name   string
+		oracle string
+	}
+	arms := []arm{{"execution", "execution"}, {"judge", "judge"}}
+
+	fmt.Printf("\n%-11s %-6s %-9s %-9s %-9s %s\n",
+		"arm", "valid", "cert-α", "emp-risk", "real-risk", "verdict")
+	fmt.Println("  " + strings.Repeat("-", 68))
+	for _, a := range arms {
+		recs := make([]calibrate.Record, 0, len(probs))
+		for i, p := range probs {
+			fmt.Fprintf(os.Stderr, "[%s %d/%d] %s\n", a.name, i+1, len(probs), p.ID)
+			rec, err := profileOne(ctx, r, p, a.oracle, judgeModel)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  skipped: %v\n", err)
+				continue
+			}
+			recs = append(recs, *rec)
+		}
+		cert, err := calibrate.Calibrate(recs, names, opts)
+		if err != nil {
+			return fmt.Errorf("%s arm: %w", a.name, err)
+		}
+		verdict := "certified risk holds"
+		switch {
+		case !cert.Valid:
+			verdict = "could not certify"
+		case cert.RealizedRisk > cert.Alpha+1e-9:
+			verdict = "NOMINAL ONLY: realized risk exceeds α (judge noise floor)"
+		}
+		fmt.Printf("%-11s %-6v %-9.3f %-9.4f %-9.4f %s\n",
+			a.name, cert.Valid, cert.Alpha, cert.EmpiricalRisk, cert.RealizedRisk, verdict)
+	}
+	fmt.Println("\nThe execution oracle is sound (β=0), so its realized risk equals its")
+	fmt.Println("empirical risk. The judge oracle certifies against its own verdicts; where")
+	fmt.Println("realized risk exceeds α, that gap is the false-acceptance rate it cannot see.")
 	return nil
 }
 
@@ -380,6 +449,7 @@ func printCert(path string, cert *calibrate.Certificate) {
 	fmt.Printf("  method          %s over a grid of %d\n", cert.Method, cert.GridSize)
 	fmt.Printf("  thresholds      %v\n", cert.Thresholds)
 	fmt.Printf("  empirical risk  %.4f (p=%.4g)\n", cert.EmpiricalRisk, cert.PValue)
+	fmt.Printf("  realized risk   %.4f (ground truth)\n", cert.RealizedRisk)
 	fmt.Printf("  expected cost   $%.5f per query\n", cert.ExpectedCost)
 	if cert.Note != "" {
 		fmt.Printf("  note            %s\n", cert.Note)

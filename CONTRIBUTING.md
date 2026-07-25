@@ -33,7 +33,11 @@ Ranked roughly by how much they would improve the project's standing:
 1. **A real evaluation.** §5.5 of the paper specifies it: 400+ Go problems, five
    arms including a judge-oracle variant, primary outcome being the lowest alpha
    each arm can certify at fixed delta and n. Without this the central
-   comparative claim stays argued rather than demonstrated.
+   comparative claim stays argued rather than demonstrated. The judge-oracle arm
+   itself is now implemented (`calibrate --oracle=judge`, `--compare`; see
+   `internal/cascade/judge.go`) and demonstrated against the mock, so what
+   remains is the live run on a real benchmark — which is gated on building that
+   benchmark, since `examples/problems.jsonl` is 18 variants of one task.
 2. **Oracle-gap validation.** Correlate mutation score against measured
    false-acceptance rate on problems with reference implementations. This tests
    whether §3.7's estimator is usable at all; its bias direction is currently

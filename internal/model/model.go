@@ -27,6 +27,12 @@ const (
 	PurposeSpec   Purpose = "spec"   // derive API contract + tests from the problem
 	PurposeCode   Purpose = "code"   // write a solution against the contract
 	PurposeRepair Purpose = "repair" // fix a solution given verifier diagnostics
+	// PurposeJudge asks a model to rule on a candidate's correctness. It backs
+	// the judge-oracle comparison arm (paper §5.5c) and is deliberately *not* a
+	// verifier stage: a judge verdict is a noisy prediction, not a sound
+	// refutation, so it must be modelled as its own oracle rather than added to
+	// the ladder. See internal/cascade/judge.go.
+	PurposeJudge Purpose = "judge"
 )
 
 // Role values.

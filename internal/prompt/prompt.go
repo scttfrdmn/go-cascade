@@ -100,6 +100,49 @@ func RepairUser(problem, api, prev, stage, diag string) string {
 	return b.String()
 }
 
+const judgeSystem = `You are a strict code reviewer. You are given a Go problem
+statement, the API the solution must satisfy, and a candidate implementation.
+Decide whether the implementation is correct for every valid input, not merely
+plausible.
+
+You cannot run the code. Judge by reading alone.
+
+Respond with exactly one line, nothing else:
+VERDICT: PASS
+or
+VERDICT: FAIL
+
+PASS means you are confident the code is correct for all valid inputs, including
+boundary and adversarial ones. FAIL means you found, or strongly suspect, a
+defect. When in doubt, FAIL.`
+
+// JudgeSystem returns the judge-phase system prompt.
+func JudgeSystem() string { return judgeSystem }
+
+// JudgeUser renders a judge turn. It deliberately withholds the test suites:
+// the judge is the alternative to an executable oracle, so giving it the tests
+// would turn it back into one and defeat the comparison (paper §5.5c).
+func JudgeUser(problem, api, candidate string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Problem statement:\n\n%s\n\n", strings.TrimSpace(problem))
+	fmt.Fprintf(&b, "Required API:\n\n```go\n%s\n```\n\n", strings.TrimSpace(api))
+	fmt.Fprintf(&b, "Candidate implementation:\n\n```go\n%s\n```\n", strings.TrimSpace(candidate))
+	return b.String()
+}
+
+var judgeRE = regexp.MustCompile(`(?i)VERDICT:\s*(PASS|FAIL)`)
+
+// ParseJudge extracts a PASS/FAIL verdict. A reply with no parseable verdict is
+// treated by the caller as a refusal to pass; ParseJudge reports that as an
+// error so the caller can decide the safe default rather than guessing here.
+func ParseJudge(reply string) (pass bool, err error) {
+	m := judgeRE.FindStringSubmatch(reply)
+	if m == nil {
+		return false, fmt.Errorf("no VERDICT: PASS/FAIL line in judge reply (%d bytes)", len(reply))
+	}
+	return strings.EqualFold(m[1], "PASS"), nil
+}
+
 var (
 	fenceRE   = regexp.MustCompile("(?s)```(?:go|golang)?\\s*\\n(.*?)```")
 	headingRE = regexp.MustCompile(`(?mi)^#{1,6}\s*(API|VISIBLE TESTS|HIDDEN TESTS)\s*$`)

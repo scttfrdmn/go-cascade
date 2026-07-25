@@ -47,6 +47,8 @@ func (m Mock) Generate(_ context.Context, req Request) (*Response, error) {
 		text = p.spec
 	case PurposeRepair:
 		text = fence(m.repair(p, last))
+	case PurposeJudge:
+		text = m.judge(p, last)
 	default:
 		// Fold the problem into the seed so that a benchmark of many problems
 		// produces a varied defect distribution rather than one repeated
@@ -99,6 +101,43 @@ func (Mock) repair(p *mockProblem, prompt string) string {
 	}
 }
 
+// judge models an LLM code reviewer ruling on a candidate by reading alone. It
+// exists to make the judge-oracle arm's failure mode observable and
+// deterministic, so it must reproduce the one asymmetry that matters:
+//
+//   - Gross defects are visible on the page. A hallucinated API or an off-by-one
+//     that a doc comment contradicts gets a FAIL.
+//   - A *subtle* semantic defect -- here the non-strict `>=` that satisfies the
+//     stated behaviour on every ordinary input and only diverges on the held-out
+//     boundary case -- reads as correct. The judge PASSes it.
+//
+// That second case is eta_fa > 0: a wrong program the oracle accepts. Execution
+// against the hidden partition catches it; a reader does not. The whole point of
+// paper §3.1 is that a judge cannot certify below the rate at which this
+// happens, and this method is what lets the mock demonstrate it rather than
+// merely assert it.
+//
+// The prompt (JudgeUser) carries the candidate source, so the mock recognises
+// each stipulated defect by the same marker the repair path uses.
+func (Mock) judge(p *mockProblem, prompt string) string {
+	verdict := func(pass bool) string {
+		if pass {
+			return "VERDICT: PASS"
+		}
+		return "VERDICT: FAIL"
+	}
+	switch {
+	case strings.Contains(prompt, p.badAPIMarker):
+		return verdict(false) // invented API: a careful reader catches it
+	case strings.Contains(prompt, p.badLogicMarker):
+		return verdict(false) // the doc comment contradicts the code: caught
+	case strings.Contains(prompt, p.subtleMarker):
+		return verdict(true) // reads as correct; only execution refutes it
+	default:
+		return verdict(true) // the correct solution
+	}
+}
+
 func fence(code string) string { return "```go\n" + code + "\n```" }
 
 type mockProblem struct {
@@ -109,6 +148,7 @@ type mockProblem struct {
 	badLogic       string
 	badLogicMarker string
 	subtle         string
+	subtleMarker   string // a substring unique to the subtle variant's source
 }
 
 func pickProblem(text string) *mockProblem {
@@ -266,6 +306,7 @@ func LongestIncreasingRun(xs []int) int {
 	}
 	return best
 }`,
+	subtleMarker: "xs[i] >= xs[i-1]",
 }
 
 var parallelMap = mockProblem{
@@ -456,6 +497,7 @@ func ParallelMap[T, U any](xs []T, workers int, f func(T) U) []U {
 	wg.Wait()
 	return out
 }`,
+	subtleMarker: "i := next",
 }
 
 // problemNonce derives a small stable integer from the problem statement.
