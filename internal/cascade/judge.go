@@ -117,3 +117,85 @@ func (r *Router) ProfileJudge(ctx context.Context, id, problem, judgeModel strin
 // the comparison isolates *how* the oracle judges (reading vs execution) rather
 // than *which* model does. Callers can override.
 func (r *Router) judgeModelDefault() string { return r.cfg.TestModel }
+
+// ProfilePaired profiles one problem under BOTH oracles against a single,
+// shared candidate stream and returns (execution, judge) records.
+//
+// This is the fix for the confounder in the independent-sampling comparison:
+// Profile and ProfileJudge each generated their own spec and re-sampled their
+// own candidates, so the two arms never ruled on the same programs and any
+// difference in risk was dominated by sampling variance rather than by the
+// oracle. Here the spec is generated once, each tier is sampled once, and the
+// same representative is submitted to both the held-out tests (execution) and
+// the reading-only judge. The two records are therefore paired: they share
+// tier, score, cost and — for the execution record — TrueCorrect equals
+// Correct, while the judge record carries the judge verdict as Correct and the
+// same execution truth as TrueCorrect. Any divergence between the arms is now
+// attributable to the oracle alone, which is what §5.5c actually asks for.
+func (r *Router) ProfilePaired(ctx context.Context, id, problem, judgeModel string) (execRec, judgeRec *calibrate.Record, err error) {
+	if judgeModel == "" {
+		judgeModel = r.judgeModelDefault()
+	}
+	spec, err := r.spec(ctx, problem, &Result{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("spec phase: %w", err)
+	}
+	execRec = &calibrate.Record{ID: id, Problem: problem, Shadow: true}
+	judgeRec = &calibrate.Record{ID: id, Problem: problem, Shadow: true}
+
+	for k, tier := range r.cfg.Tiers {
+		if err := ctx.Err(); err != nil {
+			return execRec, judgeRec, err
+		}
+		// Sampling is shared: draw the candidates once and cost them once. Both
+		// arms carry this identical sampling cost.
+		local := &Result{}
+		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil)
+		if err != nil {
+			return execRec, judgeRec, err
+		}
+		sampleCost := local.Cost.TotalUSD
+		score, winner := cluster.Score(cluster.Group(cands))
+
+		execObs := calibrate.TierObs{Tier: tier.Name, Score: score, Cost: sampleCost}
+		judgeObs := calibrate.TierObs{Tier: tier.Name, Score: score, Cost: sampleCost}
+
+		if winner != nil {
+			rep := cands[indexOf(cands, winner.Rep)]
+
+			// Execution oracle: run the held-out tests on the shared
+			// representative. This is both the execution arm's acceptance
+			// decision and the ground truth used to check the judge arm.
+			acc, cpu := r.acceptOne(ctx, rep.Source, spec)
+			truth := acc != nil && acc.OK
+			execObs.Cost += cpu.Seconds() * r.cfg.ComputeUSDPerCoreSecond
+
+			// Judge oracle: rule on the same representative by reading only.
+			pass, jcost, jerr := r.judgeAccept(ctx, judgeModel, problem, spec.API, rep.Source)
+			if jerr != nil {
+				return execRec, judgeRec, jerr
+			}
+			judgeObs.Cost += jcost
+
+			// Execution arm: oracle verdict IS truth (sound, beta=0).
+			execObs.Correct = truth
+			execObs.TrueCorrect = &truth
+			// Judge arm: oracle verdict is the judge's PASS; execution truth is
+			// recorded alongside so realized risk can be checked against reality.
+			judgeObs.Correct = pass
+			judgeObs.TrueCorrect = &truth
+		}
+		execRec.Tiers = append(execRec.Tiers, execObs)
+		judgeRec.Tiers = append(judgeRec.Tiers, judgeObs)
+
+		// Contamination differs per arm: execution's oracle is the test model,
+		// judge's oracle is the judge model. Flag each against its own oracle.
+		if tier.ModelID == r.cfg.TestModel {
+			execRec.Contaminated = true
+		}
+		if tier.ModelID == judgeModel {
+			judgeRec.Contaminated = true
+		}
+	}
+	return execRec, judgeRec, nil
+}

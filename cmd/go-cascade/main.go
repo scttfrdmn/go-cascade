@@ -410,39 +410,45 @@ func armRecordPath(recOut, arm string) string {
 	return stem + "." + arm + ext
 }
 
-// runCompare profiles both oracles and prints a side-by-side of what each
-// certifies against what it actually delivers. When recOut is set, each arm's
-// raw records are written to <recOut-stem>.<arm>.json so a live run can be
-// replayed offline at any alpha rather than thrown away.
+// runCompare profiles both oracles against a single shared candidate stream and
+// prints a side-by-side of what each certifies against what it actually
+// delivers. Both arms rule on the identical spec and candidates per problem, so
+// any difference between them is attributable to the oracle rather than to
+// independent sampling variance. When recOut is set, each arm's raw records are
+// written to <recOut-stem>.<arm>.json so a live run can be replayed offline at
+// any alpha rather than thrown away.
 func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, names []string, opts calibrate.Options, judgeModel, recOut string) error {
-	type arm struct {
-		name   string
-		oracle string
+	execRecs := make([]calibrate.Record, 0, len(probs))
+	judgeRecs := make([]calibrate.Record, 0, len(probs))
+	for i, p := range probs {
+		fmt.Fprintf(os.Stderr, "[paired %d/%d] %s\n", i+1, len(probs), p.ID)
+		er, jr, err := r.ProfilePaired(ctx, p.ID, p.Problem, judgeModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  skipped: %v\n", err)
+			continue
+		}
+		execRecs = append(execRecs, *er)
+		judgeRecs = append(judgeRecs, *jr)
 	}
-	arms := []arm{{"execution", "execution"}, {"judge", "judge"}}
+
+	if recOut != "" {
+		for name, recs := range map[string][]calibrate.Record{"execution": execRecs, "judge": judgeRecs} {
+			path := armRecordPath(recOut, name)
+			if err := writeJSONFile(path, recs); err != nil {
+				return fmt.Errorf("write %s records: %w", name, err)
+			}
+			fmt.Fprintf(os.Stderr, "wrote %d %s records to %s\n", len(recs), name, path)
+		}
+	}
 
 	fmt.Printf("\n%-11s %-6s %-9s %-9s %-9s %s\n",
 		"arm", "valid", "cert-α", "emp-risk", "real-risk", "verdict")
 	fmt.Println("  " + strings.Repeat("-", 68))
-	for _, a := range arms {
-		recs := make([]calibrate.Record, 0, len(probs))
-		for i, p := range probs {
-			fmt.Fprintf(os.Stderr, "[%s %d/%d] %s\n", a.name, i+1, len(probs), p.ID)
-			rec, err := profileOne(ctx, r, p, a.oracle, judgeModel)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "  skipped: %v\n", err)
-				continue
-			}
-			recs = append(recs, *rec)
-		}
-		if recOut != "" {
-			path := armRecordPath(recOut, a.name)
-			if err := writeJSONFile(path, recs); err != nil {
-				return fmt.Errorf("write %s records: %w", a.name, err)
-			}
-			fmt.Fprintf(os.Stderr, "wrote %d %s records to %s\n", len(recs), a.name, path)
-		}
-		cert, err := calibrate.Calibrate(recs, names, opts)
+	for _, a := range []struct {
+		name string
+		recs []calibrate.Record
+	}{{"execution", execRecs}, {"judge", judgeRecs}} {
+		cert, err := calibrate.Calibrate(a.recs, names, opts)
 		if err != nil {
 			return fmt.Errorf("%s arm: %w", a.name, err)
 		}
@@ -456,9 +462,10 @@ func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, na
 		fmt.Printf("%-11s %-6v %-9.3f %-9.4f %-9.4f %s\n",
 			a.name, cert.Valid, cert.Alpha, cert.EmpiricalRisk, cert.RealizedRisk, verdict)
 	}
-	fmt.Println("\nThe execution oracle is sound (β=0), so its realized risk equals its")
-	fmt.Println("empirical risk. The judge oracle certifies against its own verdicts; where")
-	fmt.Println("realized risk exceeds α, that gap is the false-acceptance rate it cannot see.")
+	fmt.Println("\nBoth arms ruled on the same candidates, so the difference is the oracle,")
+	fmt.Println("not sampling. The execution oracle is sound (β=0): realized risk equals")
+	fmt.Println("empirical. Where the judge's realized risk exceeds its empirical risk, that")
+	fmt.Println("gap is the false-acceptance rate it certified against but cannot see.")
 	return nil
 }
 
