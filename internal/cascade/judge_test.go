@@ -7,6 +7,33 @@ import (
 	"github.com/scttfrdmn/go-cascade/internal/calibrate"
 )
 
+// An empty judgeModel must fall back to the configured test model rather than
+// reaching the provider with an empty ModelID. This regresses a live failure
+// where --compare passed the unset --judge-model default ("") straight through
+// and every judge call errored with "modelId must not be empty".
+func TestProfileJudgeEmptyModelFallsBack(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = ""
+	r := newRouter(t, cfg, nil)
+	ctx := context.Background()
+
+	rec, err := r.ProfileJudge(ctx, "seq", seqProblem, "") // empty on purpose
+	if err != nil {
+		t.Fatalf("ProfileJudge with empty judgeModel should fall back, got error: %v", err)
+	}
+	if len(rec.Tiers) != len(cfg.Tiers) {
+		t.Fatalf("expected %d tiers profiled, got %d", len(cfg.Tiers), len(rec.Tiers))
+	}
+	// Contamination is judge-vs-code; with the fallback the judge is the test
+	// model (mock-oracle), distinct from every code tier, so nothing is flagged.
+	if rec.Contaminated {
+		t.Errorf("fallback judge (test model) should not collide with any code tier")
+	}
+}
+
 // The judge arm and the execution arm profile the same problem. The execution
 // oracle is sound, so its recorded correctness is ground truth. The judge reads
 // the code and, by construction of the mock, passes the subtle defect that only
