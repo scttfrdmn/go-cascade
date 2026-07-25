@@ -1,0 +1,9 @@
+
+arm         valid  cert-α    emp-risk  real-risk verdict
+  --------------------------------------------------------------------
+execution   false  0.100     0.1429    0.1429    could not certify
+judge       false  0.100     0.0714    0.0714    could not certify
+
+The execution oracle is sound (β=0), so its realized risk equals its
+empirical risk. The judge oracle certifies against its own verdicts; where
+realized risk exceeds α, that gap is the false-acceptance rate it cannot see.
