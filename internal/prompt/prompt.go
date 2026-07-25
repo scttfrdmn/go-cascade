@@ -45,7 +45,20 @@ Rules:
 - Standard library only. No third-party imports.
 - Tests must compile against the API block alone.
 - Do not use testing.T.Parallel unless the problem is about concurrency.
-- Deterministic only: no time-of-day, no unseeded randomness, no network.`
+- Deterministic only: no time-of-day, no unseeded randomness, no network.
+
+Correctness of expected values is critical. A test that asserts the wrong
+answer rejects every correct implementation, which is worse than no test. For
+each test:
+- Compute the expected value by hand, stepping through the input, before you
+  write the assertion. Do not guess it from the input's shape.
+- Re-scan the whole input for the property in question. A contiguous run,
+  match, or extreme can begin one element earlier or later than it first
+  appears; an adjacent element often extends the case you had in mind.
+- If a comment states the reasoning, make the asserted value agree with the
+  comment. If they disagree, recompute both.
+When unsure of an expected value, omit that test rather than assert a value you
+have not verified.`
 
 // SpecUser renders the spec-phase user turn.
 func SpecUser(problem string) string {
