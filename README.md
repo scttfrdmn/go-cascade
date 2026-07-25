@@ -165,6 +165,34 @@ offline without querying a model again:
 go-cascade calibrate -from-records records.json -alpha 0.15 -o cert.json
 ```
 
+### Executable oracle vs. LLM judge
+
+The central comparative claim — that an executable oracle certifies below a
+judge's noise floor (§3.1) — has a runnable harness. `-compare` profiles the
+benchmark twice, once accepting on the held-out tests and once on an LLM
+reviewer that reads the code but cannot run it, and prints what each *certifies*
+against what it actually *delivers*:
+
+```bash
+go-cascade calibrate --provider=mock -bench problems.jsonl -alpha 0.15 -compare
+```
+
+```
+arm         valid  cert-α    emp-risk  real-risk verdict
+execution   true   0.150     0.0000    0.0000    certified risk holds
+judge       true   0.150     0.0000    0.2222    NOMINAL ONLY: realized risk exceeds α (judge noise floor)
+```
+
+Both arms report zero *empirical* risk and issue a valid certificate. The judge
+arm's *realized* (ground-truth) risk is higher because it passes a defect that
+only the hidden partition catches — that gap is η_fa, which a judge cannot see
+and so cannot certify against. **These are mock numbers**: the mock's judge
+misses exactly the class of defect the design says it should, which exercises
+the mechanism but measures no real model. The judge oracle is never a verifier
+ladder stage (that would break soundness); it replaces only the acceptance
+decision. Use `--oracle=judge` to calibrate a single judge-arm certificate,
+`--judge-model` to pick the reviewer.
+
 ### What calibration actually found
 
 Running this on an 18-problem benchmark changed the design twice, which is the

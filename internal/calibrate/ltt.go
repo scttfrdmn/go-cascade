@@ -20,6 +20,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -27,10 +28,29 @@ import (
 // every tier on every problem so that any threshold vector can be replayed
 // offline without re-querying a model.
 type TierObs struct {
-	Tier    string  `json:"tier"`
-	Score   float64 `json:"score"`   // largest verified behavioural cluster mass
-	Correct bool    `json:"correct"` // survived the held-out partition
-	Cost    float64 `json:"cost_usd"`
+	Tier  string  `json:"tier"`
+	Score float64 `json:"score"` // largest verified behavioural cluster mass
+	// Correct is the oracle's verdict: what the calibration arm treats as truth.
+	// Under the execution oracle it is "survived the held-out partition"; under
+	// the judge oracle it is the judge's PASS. Calibration is computed against
+	// this field, so a noisy oracle calibrates against noisy labels.
+	Correct bool `json:"correct"`
+	// TrueCorrect is execution ground truth (survived the held-out partition),
+	// recorded even in the judge arm so the certificate a judge issues can be
+	// checked against reality. When it is unset (older records) RealizedRisk
+	// falls back to Correct, i.e. it assumes the oracle was sound. See §5.5.
+	TrueCorrect *bool   `json:"true_correct,omitempty"`
+	Cost        float64 `json:"cost_usd"`
+}
+
+// truth returns the ground-truth correctness for a tier observation: execution
+// truth if it was recorded, otherwise the oracle verdict (which is exact for the
+// sound execution oracle and the only thing available for legacy records).
+func (t TierObs) truth() bool {
+	if t.TrueCorrect != nil {
+		return *t.TrueCorrect
+	}
+	return t.Correct
 }
 
 // Record is one calibration problem.
@@ -79,7 +99,13 @@ func Replay(r Record, tau []float64) Outcome {
 	return Outcome{Correct: false, Cost: cost, AcceptedAt: "exhausted"}
 }
 
-// Risk returns the empirical risk and mean cost of a threshold vector.
+// Risk returns the empirical risk and mean cost of a threshold vector, measured
+// against the oracle verdict the policy actually routed on. This is the
+// quantity Learn-then-Test controls: P[Risk(tau_hat) <= alpha] >= 1 - delta.
+//
+// If the oracle is unsound, this is risk with respect to the oracle's labels,
+// not with respect to truth. RealizedRisk measures the latter, and the gap
+// between the two is the judge's noise floor made visible.
 func Risk(recs []Record, tau []float64) (risk, cost float64) {
 	if len(recs) == 0 {
 		return 1, 0
@@ -94,6 +120,42 @@ func Risk(recs []Record, tau []float64) (risk, cost float64) {
 	}
 	n := float64(len(recs))
 	return bad / n, total / n
+}
+
+// RealizedRisk returns the ground-truth risk of a threshold vector: the policy
+// accepts wherever its oracle said accept, but a returned solution counts as
+// wrong whenever execution truth says it is wrong, regardless of what the oracle
+// believed. For the sound execution oracle this equals Risk exactly (its labels
+// are truth). For the judge oracle it can be strictly larger -- that difference
+// is eta_fa, the false-acceptance rate the judge cannot see and therefore cannot
+// certify against (paper §3.1, §5.5c).
+func RealizedRisk(recs []Record, tau []float64) float64 {
+	if len(recs) == 0 {
+		return 1
+	}
+	var bad float64
+	for _, r := range recs {
+		if !replayTruth(r, tau) {
+			bad++
+		}
+	}
+	return bad / float64(len(recs))
+}
+
+// replayTruth mirrors Replay's acceptance decision but reports ground-truth
+// correctness of whatever the policy accepted. It must track Replay's control
+// flow exactly, or the two risks would describe different policies.
+func replayTruth(r Record, tau []float64) bool {
+	if r.CacheHit {
+		return r.CacheCorrect // the cache gate is executed, so its verdict is truth
+	}
+	for k, t := range r.Tiers {
+		last := k == len(r.Tiers)-1
+		if last || (k < len(tau) && t.Score >= tau[k]) {
+			return t.truth()
+		}
+	}
+	return false
 }
 
 // Method selects the multiplicity correction.
@@ -125,11 +187,18 @@ type Certificate struct {
 	Tiers         []string  `json:"tiers"`
 	Thresholds    []float64 `json:"thresholds"`
 	EmpiricalRisk float64   `json:"empirical_risk"`
-	PValue        float64   `json:"p_value"`
-	ExpectedCost  float64   `json:"expected_cost_usd"`
-	MutationMean  float64   `json:"mutation_score_mean"`
-	Note          string    `json:"note,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
+	// RealizedRisk is the ground-truth risk of the selected thresholds (§5.5).
+	// Under the sound execution oracle it equals EmpiricalRisk. Under a judge
+	// oracle it can exceed alpha even when the certificate is Valid: the judge
+	// certified against its own labels, not against truth. When
+	// RealizedRisk > Alpha on a Valid certificate, the guarantee is nominal
+	// only -- the arm cannot honestly certify at this alpha.
+	RealizedRisk float64   `json:"realized_risk"`
+	PValue       float64   `json:"p_value"`
+	ExpectedCost float64   `json:"expected_cost_usd"`
+	MutationMean float64   `json:"mutation_score_mean"`
+	Note         string    `json:"note,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // Options configures a calibration run.
@@ -196,6 +265,8 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 	if len(grid) == 0 {
 		cert.Valid = true
 		cert.EmpiricalRisk, cert.ExpectedCost = Risk(use, nil)
+		cert.RealizedRisk = RealizedRisk(use, nil)
+		flagIfNominal(cert)
 		return cert, nil
 	}
 
@@ -256,6 +327,7 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 		cert.PValue = cheapest.p
 		cert.Thresholds = cheapest.tau
 		cert.ExpectedCost = cheapest.cost
+		cert.RealizedRisk = RealizedRisk(use, cheapest.tau)
 		cert.Note = fmt.Sprintf("%s; no threshold vector certifies alpha=%.3f at delta=%.3f with n=%d. "+
 			"Lowest achievable empirical risk is %.3f. Raise alpha, add calibration data, or add a tier.",
 			note, opts.Alpha, opts.Delta, n, cheapest.risk)
@@ -267,7 +339,29 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 	cert.EmpiricalRisk = best.risk
 	cert.PValue = best.p
 	cert.ExpectedCost = best.cost
+	cert.RealizedRisk = RealizedRisk(use, best.tau)
+	flagIfNominal(cert)
 	return cert, nil
+}
+
+// flagIfNominal appends a warning when a valid certificate's ground-truth risk
+// exceeds alpha. That is the judge oracle's tell: it certified against its own
+// verdicts, not truth, so the Valid flag would otherwise imply a guarantee the
+// arm has not earned. The sound execution oracle never trips this, since its
+// labels are truth and realized risk equals empirical risk.
+func flagIfNominal(cert *Certificate) {
+	if cert.RealizedRisk <= cert.Alpha+1e-9 {
+		return
+	}
+	msg := fmt.Sprintf("WARNING: realized (ground-truth) risk %.3f exceeds alpha %.3f. "+
+		"The oracle certified against its own verdicts, not against execution truth; "+
+		"this certificate is nominal only. This is the judge-oracle noise floor of §3.1",
+		cert.RealizedRisk, cert.Alpha)
+	if cert.Note == "" {
+		cert.Note = msg
+	} else {
+		cert.Note = strings.TrimSpace(cert.Note) + ". " + msg
+	}
 }
 
 func sum(xs []float64) float64 {
