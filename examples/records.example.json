@@ -1,0 +1,524 @@
+[
+  {
+    "id": "seq00",
+    "problem": "Return the length of the longest strictly increasing contiguous run in a slice of integers. (variant 0)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0024867656498009003
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.003613746879208
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030078453099607
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq01",
+    "problem": "Given a list of ints, compute the size of the biggest strictly ascending consecutive stretch. (variant 1)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "cost_usd": 0.0030467033933422
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.0035015505793496
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030138807153597
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq02",
+    "problem": "Find the maximum length of a strictly increasing consecutive subsequence in an int slice. (variant 2)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.272461989949914,
+        "correct": false,
+        "cost_usd": 0.0027713621446321004
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.0036145528641955
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030071958595759003
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq03",
+    "problem": "Compute how long the longest run of strictly rising adjacent integers is. (variant 3)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0023000353909675
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.003589924012066
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0029856999493377
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq04",
+    "problem": "Return the length of the longest strictly increasing contiguous run in a slice of integers. (variant 4)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0023746688727778
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.0034922378044436
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030070277811584003
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq05",
+    "problem": "Given a list of ints, compute the size of the biggest strictly ascending consecutive stretch. (variant 5)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "cost_usd": 0.0030445241653066
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "cost_usd": 0.0035009833887599
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030124381809741
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq06",
+    "problem": "Find the maximum length of a strictly increasing consecutive subsequence in an int slice. (variant 6)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.272461989949914,
+        "correct": false,
+        "cost_usd": 0.0026740093356980004
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "cost_usd": 0.0034952046861165998
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030073936675632
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq07",
+    "problem": "Compute how long the longest run of strictly rising adjacent integers is. (variant 7)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0023000257486537
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.0034719478204911
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0029871156323134002
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq08",
+    "problem": "Return the length of the longest strictly increasing contiguous run in a slice of integers. (variant 8)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0023200306449822
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "cost_usd": 0.0034964229887664996
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030094338284181003
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq09",
+    "problem": "Given a list of ints, compute the size of the biggest strictly ascending consecutive stretch. (variant 9)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.14269339978831969,
+        "correct": true,
+        "cost_usd": 0.002636230027654
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.0036218967020874
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030125381025441
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq10",
+    "problem": "Find the maximum length of a strictly increasing consecutive subsequence in an int slice. (variant 10)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.14269339978831969,
+        "correct": true,
+        "cost_usd": 0.0026823398952975
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.0036149495491176998
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030068461589785
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq11",
+    "problem": "Compute how long the longest run of strictly rising adjacent integers is. (variant 11)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.14269339978831969,
+        "correct": true,
+        "cost_usd": 0.0027561963225995003
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.0035894571174546
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0029862815407019003
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq12",
+    "problem": "Return the length of the longest strictly increasing contiguous run in a slice of integers. (variant 12)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.14269339978831969,
+        "correct": true,
+        "cost_usd": 0.0027825565348263
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.0036211680463589
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030120784319208
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq13",
+    "problem": "Given a list of ints, compute the size of the biggest strictly ascending consecutive stretch. (variant 13)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.14269339978831969,
+        "correct": false,
+        "cost_usd": 0.0025926440364473003
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "cost_usd": 0.0035011570417128
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030116930725604
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq14",
+    "problem": "Find the maximum length of a strictly increasing consecutive subsequence in an int slice. (variant 14)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.14269339978831969,
+        "correct": true,
+        "cost_usd": 0.0027773352723688004
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "cost_usd": 0.0034957495198983998
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030071286876200004
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq15",
+    "problem": "Compute how long the longest run of strictly rising adjacent integers is. (variant 15)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.14269339978831969,
+        "correct": true,
+        "cost_usd": 0.002757180019128
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "cost_usd": 0.0034715093349323997
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.002987987422469
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq16",
+    "problem": "Return the length of the longest strictly increasing contiguous run in a slice of integers. (variant 16)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.14269339978831969,
+        "correct": true,
+        "cost_usd": 0.002783856013574
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "cost_usd": 0.0035005263836960002
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030128061091284
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq17",
+    "problem": "Given a list of ints, compute the size of the biggest strictly ascending consecutive stretch. (variant 17)",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.272461989949914,
+        "correct": false,
+        "cost_usd": 0.0026387373626148005
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "cost_usd": 0.0034991065213416
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "cost_usd": 0.0030112630268093
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  }
+]

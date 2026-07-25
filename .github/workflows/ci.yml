@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
+
+      - name: vet
+        run: go vet ./...
+
+      - name: build
+        run: go build ./...
+
+      # The suite compiles and executes model-authored Go, so the runner needs
+      # the toolchain on PATH. GOCACHE persistence matters: a cold cache adds
+      # ~30s to the first candidate.
+      - name: test
+        run: go test ./... -timeout 30m
+        env:
+          GOTOOLCHAIN: local
+
+      - name: end-to-end (mock provider, no credentials)
+        run: |
+          go build -o ./bin/go-cascade ./cmd/go-cascade
+          ./bin/go-cascade solve --provider=mock --mutants=4 --no-cache \
+            "Return the length of the longest strictly increasing contiguous run in a slice of integers."
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest

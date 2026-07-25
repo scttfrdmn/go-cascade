@@ -1,0 +1,36 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - misspell
+    - revive
+    - unconvert
+    - prealloc
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+        - name: package-comments
+          disabled: false
+
+  exclusions:
+    rules:
+      # Scratch directories and best-effort cache writes are intentionally
+      # unchecked; the code documents each with a //nolint comment.
+      - path: internal/(cache|verify|cascade)/
+        linters: [errcheck]
+        text: "Remove|Close|PutSolution|PutSpec|AddFailure"
+      - path: _test\.go
+        linters: [errcheck, prealloc]
+
+formatters:
+  enable:
+    - gofmt

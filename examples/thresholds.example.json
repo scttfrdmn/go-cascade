@@ -1,0 +1,25 @@
+{
+  "valid": true,
+  "alpha": 0.15,
+  "delta": 0.1,
+  "n_calibration": 18,
+  "n_shadow": 18,
+  "n_excluded_contaminated": 0,
+  "method": "fixed-sequence",
+  "grid_size": 121,
+  "tiers": [
+    "small",
+    "mid",
+    "large"
+  ],
+  "thresholds": [
+    0.6,
+    1
+  ],
+  "empirical_risk": 0,
+  "p_value": 0.05364640980555618,
+  "expected_cost_usd": 0.008470838482423228,
+  "mutation_score_mean": 0,
+  "note": "only 18 shadow records; calibrated on the full sample, which may be optimistic once the cache warms",
+  "created_at": "2026-07-25T16:01:49.293587866Z"
+}
