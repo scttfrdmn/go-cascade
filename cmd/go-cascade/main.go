@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -356,7 +357,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	// miniature: the execution arm's realized risk should match its certified
 	// alpha, while the judge arm's realized risk can exceed it.
 	if *compare {
-		return runCompare(ctx, r, probs, names, opts, *judgeModel)
+		return runCompare(ctx, r, probs, names, opts, *judgeModel, *recOut)
 	}
 
 	recs := make([]calibrate.Record, 0, len(probs))
@@ -397,9 +398,23 @@ func profileOne(ctx context.Context, r *cascade.Router, p benchProblem, oracle, 
 	return r.Profile(ctx, p.ID, p.Problem)
 }
 
+// armRecordPath inserts the arm name before the extension of the -records path,
+// e.g. ("records.json", "judge") -> "records.judge.json", so the two arms do
+// not overwrite each other.
+func armRecordPath(recOut, arm string) string {
+	ext := filepath.Ext(recOut)
+	stem := strings.TrimSuffix(recOut, ext)
+	if ext == "" {
+		ext = ".json"
+	}
+	return stem + "." + arm + ext
+}
+
 // runCompare profiles both oracles and prints a side-by-side of what each
-// certifies against what it actually delivers.
-func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, names []string, opts calibrate.Options, judgeModel string) error {
+// certifies against what it actually delivers. When recOut is set, each arm's
+// raw records are written to <recOut-stem>.<arm>.json so a live run can be
+// replayed offline at any alpha rather than thrown away.
+func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, names []string, opts calibrate.Options, judgeModel, recOut string) error {
 	type arm struct {
 		name   string
 		oracle string
@@ -419,6 +434,13 @@ func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, na
 				continue
 			}
 			recs = append(recs, *rec)
+		}
+		if recOut != "" {
+			path := armRecordPath(recOut, a.name)
+			if err := writeJSONFile(path, recs); err != nil {
+				return fmt.Errorf("write %s records: %w", a.name, err)
+			}
+			fmt.Fprintf(os.Stderr, "wrote %d %s records to %s\n", len(recs), a.name, path)
 		}
 		cert, err := calibrate.Calibrate(recs, names, opts)
 		if err != nil {
