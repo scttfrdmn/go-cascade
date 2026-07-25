@@ -42,9 +42,13 @@ arm is internally consistent against its own generated contract.
 # Validate the references (offline, no model, no cost):
 bash examples/bench/validate.sh
 
-# Live comparison of the two oracles (needs Bedrock; costs real money):
+# Live comparison of the two oracles (needs Bedrock; costs real money).
+# test_model must differ from every tier or the contamination guard excludes
+# every record; -records saves each arm to <stem>.<arm>.json for offline replay.
 AWS_PROFILE=aws go-cascade calibrate --provider=bedrock \
-  -bench examples/bench/problems.jsonl -alpha 0.10 -delta 0.10 -compare
+  --config config.example.json \
+  -bench examples/bench/problems.jsonl -alpha 0.10 -delta 0.10 -compare \
+  -records pilot.json
 ```
 
 At n=28 the achievable certified alpha is bounded by sample size, not model
