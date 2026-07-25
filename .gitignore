@@ -20,3 +20,5 @@ records.json
 *.swp
 results/pilot-progress.txt
 results/pilot-compare.txt
+results/pilot2-progress.txt
+results/pilot2-compare.txt

@@ -34,6 +34,47 @@ func TestProfileJudgeEmptyModelFallsBack(t *testing.T) {
 	}
 }
 
+// ProfilePaired must return two records drawn from ONE shared candidate stream:
+// same spec, same samples, same representative per tier. The pairing is what
+// removes the sampling-variance confounder from the execution-vs-judge
+// comparison, so assert the invariants that encode it: identical per-tier
+// scores, identical execution ground truth (TrueCorrect), and a sound execution
+// arm (Correct == TrueCorrect everywhere).
+func TestProfilePairedSharesCandidateStream(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = ""
+	r := newRouter(t, cfg, nil)
+
+	er, jr, err := r.ProfilePaired(context.Background(), "seq", seqProblem, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(er.Tiers) != len(jr.Tiers) || len(er.Tiers) != len(cfg.Tiers) {
+		t.Fatalf("tier count mismatch: exec=%d judge=%d cfg=%d",
+			len(er.Tiers), len(jr.Tiers), len(cfg.Tiers))
+	}
+	for i := range er.Tiers {
+		e, j := er.Tiers[i], jr.Tiers[i]
+		// Shared stream => identical score and identical execution truth.
+		if e.Score != j.Score {
+			t.Errorf("tier %d: scores differ (exec %.3f, judge %.3f); candidates not shared",
+				i, e.Score, j.Score)
+		}
+		if (e.TrueCorrect == nil) != (j.TrueCorrect == nil) ||
+			(e.TrueCorrect != nil && *e.TrueCorrect != *j.TrueCorrect) {
+			t.Errorf("tier %d: TrueCorrect differs between arms; ground truth not shared", i)
+		}
+		// Execution arm is sound: its verdict IS truth.
+		if e.TrueCorrect != nil && e.Correct != *e.TrueCorrect {
+			t.Errorf("tier %d: execution arm Correct=%v but TrueCorrect=%v",
+				i, e.Correct, *e.TrueCorrect)
+		}
+	}
+}
+
 // The judge arm and the execution arm profile the same problem. The execution
 // oracle is sound, so its recorded correctness is ground truth. The judge reads
 // the code and, by construction of the mock, passes the subtle defect that only
