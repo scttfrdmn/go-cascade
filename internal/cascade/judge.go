@@ -25,9 +25,16 @@ import (
 // A reply with no parseable verdict is treated as a refusal to pass. The judge
 // oracle is asymmetric on purpose: only an explicit PASS accepts.
 func (r *Router) judgeAccept(ctx context.Context, judgeModel, problem, api, src string) (pass bool, cost float64, err error) {
+	return r.judgeAt(ctx, r.judgeStrictness(), judgeModel, problem, api, src)
+}
+
+// judgeAt is judgeAccept at an explicit strictness, so the same candidate can be
+// judged at several operating points without mutating config. This is what lets
+// the strictness sweep be a true A/B on identical programs.
+func (r *Router) judgeAt(ctx context.Context, strictness prompt.JudgeStrictness, judgeModel, problem, api, src string) (pass bool, cost float64, err error) {
 	resp, gerr := r.prov.Generate(ctx, model.Request{
 		ModelID: judgeModel, Purpose: model.PurposeJudge,
-		System:    prompt.JudgeSystem(r.judgeStrictness()),
+		System:    prompt.JudgeSystem(strictness),
 		Messages:  []model.Message{{Role: model.RoleUser, Text: prompt.JudgeUser(problem, api, src)}},
 		MaxTokens: 256, Temperature: 0.0,
 	})
@@ -207,4 +214,82 @@ func (r *Router) ProfilePaired(ctx context.Context, id, problem, judgeModel stri
 		}
 	}
 	return execRec, judgeRec, nil
+}
+
+// ProfileStrictnessReplay samples each tier once and judges the SAME
+// representative at every requested strictness level, returning one execution
+// record plus one judge record per level (keyed by level string).
+//
+// This isolates strictness as the only variable: unlike running ProfilePaired once
+// per level (which re-samples, so the levels judge different programs), here the
+// candidate stream and execution truth are fixed and only the judge's tie-break
+// instruction changes. A verdict that flips FAIL->PASS as the judge loosens is
+// then attributable to strictness alone, which is what tracing the η_fa/β
+// operating curve requires.
+func (r *Router) ProfileStrictnessReplay(ctx context.Context, id, problem, judgeModel string,
+	levels []prompt.JudgeStrictness,
+) (execRec *calibrate.Record, judgeRecs map[prompt.JudgeStrictness]*calibrate.Record, err error) {
+	if judgeModel == "" {
+		judgeModel = r.judgeModelDefault()
+	}
+	spec, err := r.spec(ctx, problem, &Result{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("spec phase: %w", err)
+	}
+	execRec = &calibrate.Record{ID: id, Problem: problem, Shadow: true}
+	judgeRecs = make(map[prompt.JudgeStrictness]*calibrate.Record, len(levels))
+	for _, lvl := range levels {
+		judgeRecs[lvl] = &calibrate.Record{ID: id, Problem: problem, Shadow: true}
+	}
+
+	for k, tier := range r.cfg.Tiers {
+		if err := ctx.Err(); err != nil {
+			return execRec, judgeRecs, err
+		}
+		local := &Result{}
+		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil)
+		if err != nil {
+			return execRec, judgeRecs, err
+		}
+		sampleCost := local.Cost.TotalUSD
+		score, winner := cluster.Score(cluster.Group(cands))
+
+		execObs := calibrate.TierObs{Tier: tier.Name, Score: score, Cost: sampleCost}
+		var truth bool
+		var repSource string
+		haveRep := false
+		if winner != nil {
+			rep := cands[indexOf(cands, winner.Rep)]
+			repSource = rep.Source
+			haveRep = true
+			acc, cpu := r.acceptOne(ctx, rep.Source, spec)
+			truth = acc != nil && acc.OK
+			execObs.Cost += cpu.Seconds() * r.cfg.ComputeUSDPerCoreSecond
+			execObs.Correct = truth
+			execObs.TrueCorrect = &truth
+		}
+		execRec.Tiers = append(execRec.Tiers, execObs)
+		if tier.ModelID == r.cfg.TestModel {
+			execRec.Contaminated = true
+		}
+
+		for _, lvl := range levels {
+			jObs := calibrate.TierObs{Tier: tier.Name, Score: score, Cost: sampleCost}
+			if haveRep {
+				pass, jcost, jerr := r.judgeAt(ctx, lvl, judgeModel, problem, spec.API, repSource)
+				if jerr != nil {
+					return execRec, judgeRecs, jerr
+				}
+				t := truth
+				jObs.Correct = pass
+				jObs.TrueCorrect = &t
+				jObs.Cost += jcost
+			}
+			judgeRecs[lvl].Tiers = append(judgeRecs[lvl].Tiers, jObs)
+			if tier.ModelID == judgeModel {
+				judgeRecs[lvl].Contaminated = true
+			}
+		}
+	}
+	return execRec, judgeRecs, nil
 }

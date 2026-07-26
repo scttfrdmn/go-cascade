@@ -21,6 +21,7 @@ import (
 	"github.com/scttfrdmn/go-cascade/internal/cascade"
 	"github.com/scttfrdmn/go-cascade/internal/config"
 	"github.com/scttfrdmn/go-cascade/internal/model"
+	"github.com/scttfrdmn/go-cascade/internal/prompt"
 )
 
 const usage = `go-cascade - route a Go coding problem to the cheapest model that provably solves it
@@ -290,7 +291,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	compare := fs.Bool("compare", false, "profile both oracles and report certified vs realized risk for each")
 	judgeModel := fs.String("judge-model", "", "model that plays the judge oracle (default: test_model)")
 	judgeStrict := fs.String("judge-strictness", "", "judge PASS/FAIL boundary on doubt: strict|balanced|permissive (default strict)")
-	judgeSweep := fs.Bool("judge-sweep", false, "run --compare once per judge strictness level to trace the η_fa/β curve")
+	judgeSweep := fs.Bool("judge-sweep", false, "judge one shared candidate stream at every strictness level to trace the η_fa/β curve")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -424,75 +425,76 @@ func armRecordPath(recOut, arm string) string {
 	return stem + "." + arm + ext
 }
 
-// runJudgeSweep runs a paired comparison once per judge strictness level and
-// prints how the judge's false-acceptance (η_fa) and false-rejection (β) counts
-// move as the PASS/FAIL boundary shifts. The point is to test whether a
-// permissive judge trades β for η_fa — i.e. whether the §3.1 dangerous mode (a
-// judge certifying below its true risk) can be elicited by loosening the judge,
-// which the strict-prompt live runs did not exhibit.
-//
-// Each level re-samples (ProfilePaired regenerates candidates), so the levels
-// are independent paired snapshots, not a controlled A/B on identical programs.
-// The execution arm is strictness-independent by construction, so its risk is
-// reported per level only as a sanity check that the underlying difficulty is
-// stable.
+// runJudgeSweep traces the judge oracle's false-acceptance (η_fa) /
+// false-rejection (β) operating curve across strictness levels, judging the SAME
+// candidate stream at every level. The candidates are sampled once per problem
+// and execution truth is fixed; only the judge's PASS/FAIL tie-break changes. A
+// verdict that flips as the judge loosens is therefore attributable to
+// strictness alone — the controlled A/B the earlier re-sampling sweep could not
+// provide. The point is to test whether the §3.1 dangerous mode (a judge
+// certifying below its true risk) is reachable by loosening the judge.
 func runJudgeSweep(ctx context.Context, cfg *config.Config, prov model.Provider, probs []benchProblem, names []string, opts calibrate.Options, judgeModel, recOut string) error {
-	levels := []string{"strict", "balanced", "permissive"}
+	levels := []prompt.JudgeStrictness{prompt.JudgeStrict, prompt.JudgeBalanced, prompt.JudgePermissive}
+	r, err := cascade.New(cfg, prov, nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close() //nolint:errcheck // scratch dir
 
-	fmt.Printf("\n%-11s %-9s %-9s %-9s %-6s %-6s\n",
-		"strictness", "exec-risk", "judge-emp", "judge-real", "η_fa", "β")
-	fmt.Println("  " + strings.Repeat("-", 60))
-
-	for _, level := range levels {
-		lcfg := *cfg
-		lcfg.JudgeStrictness = level
-		r, err := cascade.New(&lcfg, prov, nil)
-		if err != nil {
-			return err
+	var execRecs []calibrate.Record
+	judgeRecs := map[prompt.JudgeStrictness][]calibrate.Record{}
+	for i, p := range probs {
+		fmt.Fprintf(os.Stderr, "[sweep %d/%d] %s\n", i+1, len(probs), p.ID)
+		er, jrs, perr := r.ProfileStrictnessReplay(ctx, p.ID, p.Problem, judgeModel, levels)
+		if perr != nil {
+			fmt.Fprintf(os.Stderr, "  skipped: %v\n", perr)
+			continue
 		}
+		execRecs = append(execRecs, *er)
+		for _, lvl := range levels {
+			judgeRecs[lvl] = append(judgeRecs[lvl], *jrs[lvl])
+		}
+	}
 
-		execRecs := make([]calibrate.Record, 0, len(probs))
-		judgeRecs := make([]calibrate.Record, 0, len(probs))
-		var fa, fr int
-		for i, p := range probs {
-			fmt.Fprintf(os.Stderr, "[%s %d/%d] %s\n", level, i+1, len(probs), p.ID)
-			er, jr, perr := r.ProfilePaired(ctx, p.ID, p.Problem, judgeModel)
-			if perr != nil {
-				fmt.Fprintf(os.Stderr, "  skipped: %v\n", perr)
-				continue
+	if recOut != "" {
+		if err := writeJSONFile(armRecordPath(recOut, "execution"), execRecs); err != nil {
+			return fmt.Errorf("write execution records: %w", err)
+		}
+		for _, lvl := range levels {
+			if err := writeJSONFile(armRecordPath(recOut, string(lvl)), judgeRecs[lvl]); err != nil {
+				return fmt.Errorf("write %s records: %w", lvl, err)
 			}
-			execRecs = append(execRecs, *er)
-			judgeRecs = append(judgeRecs, *jr)
-			f, b := countJudgeErrors(*er, *jr)
+		}
+	}
+
+	// The execution arm is identical across levels (strictness-independent), so
+	// report it once as the ground-truth baseline.
+	execCert, err := calibrate.Calibrate(execRecs, names, opts)
+	if err != nil {
+		return fmt.Errorf("execution arm: %w", err)
+	}
+	fmt.Printf("\nexecution baseline (all levels): risk %.4f over n=%d\n", execCert.EmpiricalRisk, execCert.N)
+
+	fmt.Printf("\n%-11s %-9s %-9s %-6s %-6s\n", "strictness", "judge-emp", "judge-real", "η_fa", "β")
+	fmt.Println("  " + strings.Repeat("-", 50))
+	for _, lvl := range levels {
+		var fa, fr int
+		for i := range execRecs {
+			f, b := countJudgeErrors(execRecs[i], judgeRecs[lvl][i])
 			fa += f
 			fr += b
 		}
-		_ = r.Close() //nolint:errcheck // scratch dir
-
-		if recOut != "" {
-			for arm, recs := range map[string][]calibrate.Record{
-				level + ".execution": execRecs, level + ".judge": judgeRecs,
-			} {
-				if err := writeJSONFile(armRecordPath(recOut, arm), recs); err != nil {
-					return fmt.Errorf("write %s records: %w", arm, err)
-				}
-			}
-		}
-
-		execCert, err := calibrate.Calibrate(execRecs, names, opts)
+		cert, err := calibrate.Calibrate(judgeRecs[lvl], names, opts)
 		if err != nil {
-			return fmt.Errorf("%s execution arm: %w", level, err)
+			return fmt.Errorf("%s arm: %w", lvl, err)
 		}
-		judgeCert, err := calibrate.Calibrate(judgeRecs, names, opts)
-		if err != nil {
-			return fmt.Errorf("%s judge arm: %w", level, err)
-		}
-		fmt.Printf("%-11s %-9.4f %-9.4f %-9.4f %-6d %-6d\n",
-			level, execCert.EmpiricalRisk, judgeCert.EmpiricalRisk, judgeCert.RealizedRisk, fa, fr)
+		fmt.Printf("%-11s %-9.4f %-9.4f %-6d %-6d\n",
+			lvl, cert.EmpiricalRisk, cert.RealizedRisk, fa, fr)
 	}
-	fmt.Println("\nη_fa = judge passed a program the tests refute (the dangerous mode).")
-	fmt.Println("β    = judge failed a program the tests accept (safe but costly).")
-	fmt.Println("If loosening strictness raises η_fa, the §3.1 danger is reachable by prompt.")
+	fmt.Println("\nSame candidates at every level, so any η_fa/β movement is the strictness")
+	fmt.Println("knob alone. η_fa = judge passed a program the tests refute (the dangerous")
+	fmt.Println("mode). β = judge failed a program the tests accept. Rising η_fa as the judge")
+	fmt.Println("loosens means the §3.1 danger is reachable by prompt.")
 	return nil
 }
 
