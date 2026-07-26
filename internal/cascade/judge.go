@@ -27,7 +27,7 @@ import (
 func (r *Router) judgeAccept(ctx context.Context, judgeModel, problem, api, src string) (pass bool, cost float64, err error) {
 	resp, gerr := r.prov.Generate(ctx, model.Request{
 		ModelID: judgeModel, Purpose: model.PurposeJudge,
-		System:    prompt.JudgeSystem(),
+		System:    prompt.JudgeSystem(r.judgeStrictness()),
 		Messages:  []model.Message{{Role: model.RoleUser, Text: prompt.JudgeUser(problem, api, src)}},
 		MaxTokens: 256, Temperature: 0.0,
 	})
@@ -117,6 +117,15 @@ func (r *Router) ProfileJudge(ctx context.Context, id, problem, judgeModel strin
 // the comparison isolates *how* the oracle judges (reading vs execution) rather
 // than *which* model does. Callers can override.
 func (r *Router) judgeModelDefault() string { return r.cfg.TestModel }
+
+// judgeStrictness resolves the judge's operating point from config, defaulting
+// to strict (the behaviour before the knob existed).
+func (r *Router) judgeStrictness() prompt.JudgeStrictness {
+	if r.cfg.JudgeStrictness == "" {
+		return prompt.JudgeStrict
+	}
+	return prompt.JudgeStrictness(r.cfg.JudgeStrictness)
+}
 
 // ProfilePaired profiles one problem under BOTH oracles against a single,
 // shared candidate stream and returns (execution, judge) records.
