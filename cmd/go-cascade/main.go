@@ -699,8 +699,12 @@ func printCert(path string, cert *calibrate.Certificate) {
 	fmt.Printf("  n               %d (%d excluded as contaminated, %d shadow)\n",
 		cert.N, cert.NExcluded, cert.NShadow)
 	if cert.NOracleUnsound > 0 {
-		fmt.Printf("  oracle-unsound  %d excluded (generated tests refuted the reference solution)\n",
+		fmt.Printf("  oracle-unsound  %d excluded (generated tests refuted the compiling reference)\n",
 			cert.NOracleUnsound)
+	}
+	if cert.NOracleInconclusive > 0 {
+		fmt.Printf("  oracle-check    %d inconclusive & kept (reference did not fit the generated API)\n",
+			cert.NOracleInconclusive)
 	}
 	fmt.Printf("  method          %s over a grid of %d\n", cert.Method, cert.GridSize)
 	fmt.Printf("  thresholds      %v\n", cert.Thresholds)

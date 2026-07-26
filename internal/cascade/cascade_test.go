@@ -100,18 +100,20 @@ import "testing"
 func TestHDoubleZero(t *testing.T) { if Double(0) != 0 { t.Fatal("want 0") } }`,
 	}
 	r.SetReferences(map[string]string{"dbl": ref})
-	if ok, diag := r.validateOracle(ctx, "dbl", soundSpec); !ok {
-		t.Errorf("sound generated tests were flagged unsound: %s", diag)
+	if v, diag := r.validateOracle(ctx, "dbl", soundSpec); v != OracleSound {
+		t.Errorf("sound generated tests were not classified sound (v=%d): %s", v, diag)
 	}
 
 	// An id with no registered reference is unchecked: the default path is
 	// unchanged for benchmarks that ship no reference.
-	if ok, _ := r.validateOracle(ctx, "no-ref", soundSpec); !ok {
+	if v, _ := r.validateOracle(ctx, "no-ref", soundSpec); v != OracleSound {
 		t.Error("a problem with no reference must pass the check unchanged")
 	}
 
 	// A hidden test asserting the wrong expected value refutes the correct
-	// reference — exactly the scale_two_sum failure mode observed live.
+	// reference — exactly the scale_two_sum failure mode observed live. The
+	// reference compiles (Double exists), so this is a behavioural refutation:
+	// unsound, not inconclusive.
 	buggySpec := &prompt.Spec{
 		API:          api,
 		VisibleTests: soundSpec.VisibleTests,
@@ -119,12 +121,33 @@ func TestHDoubleZero(t *testing.T) { if Double(0) != 0 { t.Fatal("want 0") } }`,
 import "testing"
 func TestHDoubleWrong(t *testing.T) { if Double(2) != 5 { t.Fatal("test asserts a wrong answer") } }`,
 	}
-	ok, diag := r.validateOracle(ctx, "dbl", buggySpec)
-	if ok {
-		t.Error("a test that refutes the correct reference must be flagged unsound")
+	v, diag := r.validateOracle(ctx, "dbl", buggySpec)
+	if v != OracleUnsoundVerdict {
+		t.Errorf("a test that refutes the compiling reference must be unsound, got v=%d", v)
 	}
 	if !strings.Contains(diag, "reference refuted") {
 		t.Errorf("diagnostic should explain the refutation, got: %q", diag)
+	}
+
+	// A spec whose tests call a DIFFERENT function name than the reference
+	// implements must be INCONCLUSIVE (API mismatch), not unsound — the reference
+	// cannot compile, which says nothing about whether the tests are correct for a
+	// candidate written against the generated API. This is the class that
+	// over-fired 12x when misclassified as unsound.
+	mismatchSpec := &prompt.Spec{
+		API: `package solution
+// Twice returns n*2.
+func Twice(n int) int { panic("not implemented") }`,
+		VisibleTests: `package solution
+import "testing"
+func TestVTwice(t *testing.T) { if Twice(3) != 6 { t.Fatal("want 6") } }`,
+		HiddenTests: `package solution
+import "testing"
+func TestHTwiceZero(t *testing.T) { if Twice(0) != 0 { t.Fatal("want 0") } }`,
+	}
+	v, diag = r.validateOracle(ctx, "dbl", mismatchSpec)
+	if v != OracleInconclusive {
+		t.Errorf("an API-name mismatch must be inconclusive, not unsound; got v=%d diag=%q", v, diag)
 	}
 }
 

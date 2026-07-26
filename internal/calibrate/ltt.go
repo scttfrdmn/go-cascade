@@ -65,14 +65,23 @@ type Record struct {
 	// that wrote the code. Such records are excluded from calibration.
 	Contaminated bool `json:"contaminated"`
 	// OracleUnsound marks a record whose generated test suite is not a sound
-	// oracle: it refutes a known-correct reference solution. A test that rejects
-	// correct code violates invariant #4 (a failed stage must be a sound
-	// refutation), so on that problem the labels are noise, not truth. Such
-	// records are excluded from calibration exactly like Contaminated ones —
-	// only set when calibrating with a reference set (-refs). OracleUnsoundDiag
-	// carries the reference's failure output for the write-up.
+	// oracle: a known-correct reference solution *compiled* against the generated
+	// API but was refuted by a generated assertion (a test/race/accept failure).
+	// Rejecting correct code violates invariant #4, so on that problem the labels
+	// are noise, not truth. Such records are excluded from calibration exactly
+	// like Contaminated ones — only set when calibrating with a reference set
+	// (-refs). OracleUnsoundDiag carries the reference's failure output.
 	OracleUnsound     bool   `json:"oracle_unsound,omitempty"`
 	OracleUnsoundDiag string `json:"oracle_unsound_diag,omitempty"`
+	// OracleInconclusive marks a record where the reference solution did not
+	// compile against the generated tests — the spec model invented an API name
+	// or signature that differs from the reference's canonical one. This is NOT
+	// evidence the tests are wrong (a candidate matching the generated API could
+	// still be judged soundly), so the record is KEPT in calibration; the flag is
+	// recorded only so the run can report how often the reference check could not
+	// reach a verdict. Distinguishing this from OracleUnsound is essential: a
+	// naming mismatch is not an unsound oracle.
+	OracleInconclusive bool `json:"oracle_inconclusive,omitempty"`
 	// Shadow marks a record collected on the stream that bypasses the cache.
 	// Calibration uses shadow records where available, because the router in a
 	// warm system sees the conditional distribution of cache misses, not the
@@ -185,18 +194,19 @@ const (
 // Certificate is the artefact the router loads. A run without one is explicitly
 // uncertified and must not claim a guarantee.
 type Certificate struct {
-	Valid          bool      `json:"valid"`
-	Alpha          float64   `json:"alpha"`
-	Delta          float64   `json:"delta"`
-	N              int       `json:"n_calibration"`
-	NShadow        int       `json:"n_shadow"`
-	NExcluded      int       `json:"n_excluded_contaminated"`
-	NOracleUnsound int       `json:"n_excluded_oracle_unsound,omitempty"`
-	Method         Method    `json:"method"`
-	GridSize       int       `json:"grid_size"`
-	Tiers          []string  `json:"tiers"`
-	Thresholds     []float64 `json:"thresholds"`
-	EmpiricalRisk  float64   `json:"empirical_risk"`
+	Valid               bool      `json:"valid"`
+	Alpha               float64   `json:"alpha"`
+	Delta               float64   `json:"delta"`
+	N                   int       `json:"n_calibration"`
+	NShadow             int       `json:"n_shadow"`
+	NExcluded           int       `json:"n_excluded_contaminated"`
+	NOracleUnsound      int       `json:"n_excluded_oracle_unsound,omitempty"`
+	NOracleInconclusive int       `json:"n_oracle_inconclusive,omitempty"`
+	Method              Method    `json:"method"`
+	GridSize            int       `json:"grid_size"`
+	Tiers               []string  `json:"tiers"`
+	Thresholds          []float64 `json:"thresholds"`
+	EmpiricalRisk       float64   `json:"empirical_risk"`
 	// RealizedRisk is the ground-truth risk of the selected thresholds (§5.5).
 	// Under the sound execution oracle it equals EmpiricalRisk. Under a judge
 	// oracle it can exceed alpha even when the certificate is Valid: the judge
@@ -230,6 +240,7 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 	}
 	excluded := 0
 	unsound := 0
+	inconclusive := 0
 	var use []Record
 	for _, r := range recs {
 		if r.Contaminated {
@@ -243,6 +254,12 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 		if r.OracleUnsound {
 			unsound++
 			continue
+		}
+		// Inconclusive means the reference did not fit the generated API (a naming
+		// mismatch, not an unsound test), so the check reached no verdict. Keep the
+		// record — it is only tallied for reporting.
+		if r.OracleInconclusive {
+			inconclusive++
 		}
 		use = append(use, r)
 	}
@@ -283,7 +300,8 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 	grid := buildGrid(free, opts.Step)
 	cert := &Certificate{
 		Alpha: opts.Alpha, Delta: opts.Delta, N: n, NShadow: len(shadow),
-		NExcluded: excluded, NOracleUnsound: unsound, Method: opts.Method, GridSize: len(grid),
+		NExcluded: excluded, NOracleUnsound: unsound, NOracleInconclusive: inconclusive,
+		Method: opts.Method, GridSize: len(grid),
 		Tiers: tiers, Note: note, CreatedAt: time.Now().UTC(),
 	}
 	if len(grid) == 0 {
