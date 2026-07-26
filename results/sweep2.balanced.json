@@ -1,0 +1,194 @@
+[
+  {
+    "id": "conc_parallel_map",
+    "problem": "Apply f to every element of a slice using at most workers goroutines, returning the results in input order. A workers value of zero or less means one worker per element. An empty input yields an empty result.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.017530339072060898
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.013635300642660102
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0159213803468711
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "conc_safe_counter",
+    "problem": "Given a number of goroutines and a per-goroutine increment count, start that many goroutines, have each increment a shared counter that many times, wait for all to finish, and return the final total. Access to the counter must be free of data races.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.009081925711070301
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0105309325035156
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0091889718377711
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_conc_rate_limiter",
+    "problem": "Implement a token-bucket rate limiter with capacity and refill count. Allow(n) atomically consumes n tokens if at least n are available and reports whether it succeeded; refill adds up to capacity. It must be safe for concurrent callers, and the total number of tokens ever granted must never exceed what the bucket could supply. Model the interface so correctness under concurrency is testable.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.021588687098736802
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0245606418920508
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0216287160610289
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "seq_longest_run",
+    "problem": "Return the length of the longest strictly increasing contiguous run in a slice of integers. Return 0 for an empty slice.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0083024726164961
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.009585657668353101
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0083333861303039
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "slice_most_frequent",
+    "problem": "Return the most frequently occurring integer in a non-empty slice. If several values tie for the highest count, return the smallest of them.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.009842929084767901
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0116734137114672
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0094558460204836
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "str_valid_ipv4",
+    "problem": "Report whether a string is a valid dotted-decimal IPv4 address: exactly four decimal octets separated by dots, each from 0 to 255, with no leading zeros (except the single digit 0) and no extra characters.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0154064804062422
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.014592835466000001
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0161341089293508
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  }
+]

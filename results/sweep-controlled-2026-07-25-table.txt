@@ -1,0 +1,13 @@
+
+execution baseline (all levels): risk 0.0000 over n=6
+
+strictness  judge-emp judge-real η_fa   β     
+  --------------------------------------------------
+strict      0.0000    0.0000    0      3     
+balanced    0.0000    0.0000    0      3     
+permissive  0.0000    0.0000    0      2     
+
+Same candidates at every level, so any η_fa/β movement is the strictness
+knob alone. η_fa = judge passed a program the tests refute (the dangerous
+mode). β = judge failed a program the tests accept. Rising η_fa as the judge
+loosens means the §3.1 danger is reachable by prompt.
