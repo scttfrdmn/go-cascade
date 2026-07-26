@@ -1,0 +1,6 @@
+{
+  "_comment": "Config for live benchmark runs. test_model MUST differ from every tier model, or the contamination guard (invariant #3) excludes every calibration record. Here the tiers are haiku/sonnet-4.5/opus-4.5 and the oracle+judge is sonnet-4.6. Prices are illustrative; verify model IDs with `go-cascade models`.",
+  "test_model": "us.anthropic.claude-sonnet-4-6",
+  "test_input_usd_per_mtok": 3.0,
+  "test_output_usd_per_mtok": 15.0
+}

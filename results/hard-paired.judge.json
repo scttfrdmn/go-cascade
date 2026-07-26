@@ -1,0 +1,386 @@
+[
+  {
+    "id": "hard_conc_rate_limiter",
+    "problem": "Implement a token-bucket rate limiter with capacity and refill count. Allow(n) atomically consumes n tokens if at least n are available and reports whether it succeeded; refill adds up to capacity. It must be safe for concurrent callers, and the total number of tokens ever granted must never exceed what the bucket could supply. Model the interface so correctness under concurrency is testable.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0237087732908859
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.027097812576794496
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0235397982249453
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_conc_once_init",
+    "problem": "Provide a lazily-initialised cache: the first call to Get(key, compute) for a key runs compute exactly once even under concurrent callers, and every caller for that key observes the same value. compute is expensive and must never run twice for the same key.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0136968175230085
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.013392462899946899
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.011499866517106999
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_conc_ordered_fanout",
+    "problem": "Process a slice concurrently with up to workers goroutines and return results in input order, but each result also carries the index; the shared progress counter reporting how many items are done must be readable concurrently and equal len(input) at the end. Results must be exactly one per input.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0218737155600672
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0271239195954031
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0190962092226625
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_num_mean_overflow",
+    "problem": "Return the integer mean (floor of the average) of a non-empty slice of int64 values. The result must be correct even when the sum of the values would overflow int64.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.1426933997883197,
+        "correct": false,
+        "true_correct": false,
+        "cost_usd": 0.0283400528243383
+      },
+      {
+        "tier": "mid",
+        "score": 0.12085198061245214,
+        "correct": false,
+        "true_correct": false,
+        "cost_usd": 0.0166730461217969
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0258364534470047
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_num_midpoint",
+    "problem": "Return the index midpoint (low+high)/2 rounding down, given two non-negative int indices low \u003c= high that may both be near the maximum int value. The computation must not overflow.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0069626107506359
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.005325223363080499
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0046283223721797
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_num_pow_mod",
+    "problem": "Compute (base^exp) mod m for non-negative int64 base, exp and positive m, returning a value in [0, m). It must be correct for large base and m where intermediate products would overflow int64 if multiplied naively.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0240068413694664
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0216190531772125
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0213286126429547
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_slice_dedup_inplace",
+    "problem": "Given a slice sorted in ascending order, remove consecutive duplicates in place and return the prefix length k such that the first k elements are the distinct values in order. The caller reuses the original backing array, so elements beyond k may be anything but the first k must be correct.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.007354960491206201
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0111482855721547
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0072323829730844
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_slice_no_mutate_reverse",
+    "problem": "Return a new slice containing the elements of the input in reverse order. The input slice must not be modified in any way, including its backing array.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.005204431117535899
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0067246169215328
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0052166806165375
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_slice_partition_stable",
+    "problem": "Partition a slice into elements satisfying a predicate followed by those that do not, preserving the original relative order within each group (a stable partition). Return the new slice; do not modify the input.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.1426933997883197,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0093970568719399
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0107191008168805
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0098556388957
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_str_utf8_reverse",
+    "problem": "Reverse a UTF-8 string by Unicode code point (rune), not by byte, so multi-byte characters are preserved intact. The empty string reverses to the empty string.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0064236309246937
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0073326871102601995
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0063276878668586
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_str_word_count",
+    "problem": "Count words in a string, where a word is a maximal run of non-whitespace characters and whitespace is any Unicode space. Leading, trailing, and repeated separators must not create empty words; a string that is empty or all whitespace has zero words.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.007210387554533601
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0083731970850203
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.007251474676716401
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_map_group_stable",
+    "problem": "Given a slice of (key,value) pairs, return a map from key to the slice of its values in first-seen order. Iterating the input once, values for each key must appear in the order they occurred in the input.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.6488429508079716,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0060922193511101
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.007565768652107
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0064237754950125
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  }
+]
