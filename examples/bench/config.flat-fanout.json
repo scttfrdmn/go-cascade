@@ -1,0 +1,10 @@
+{
+  "test_model": "us.anthropic.claude-sonnet-4-6",
+  "test_input_usd_per_mtok": 3.0,
+  "test_output_usd_per_mtok": 15.0,
+  "tiers": [
+    {"name":"small","model_id":"us.anthropic.claude-haiku-4-5-20251001-v1:0","input_usd_per_mtok":1.0,"output_usd_per_mtok":5.0,"samples":1,"repair_depth":2,"temperature":0.8},
+    {"name":"mid","model_id":"us.anthropic.claude-sonnet-4-5-20250929-v1:0","input_usd_per_mtok":3.0,"output_usd_per_mtok":15.0,"samples":1,"repair_depth":2,"temperature":0.4},
+    {"name":"large","model_id":"us.anthropic.claude-opus-4-5-20251101-v1:0","input_usd_per_mtok":5.0,"output_usd_per_mtok":25.0,"samples":1,"repair_depth":2,"temperature":0.2}
+  ]
+}
