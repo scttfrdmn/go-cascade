@@ -293,6 +293,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	judgeStrict := fs.String("judge-strictness", "", "judge PASS/FAIL boundary on doubt: strict|balanced|permissive (default strict)")
 	judgeSweep := fs.Bool("judge-sweep", false, "judge one shared candidate stream at every strictness level to trace the η_fa/β curve")
 	judgeSeed := fs.Int("judge-seed", 0, "seeded dangerous-mode test: judge N known-wrong (killed-mutant) candidates per problem at every strictness level")
+	seedKind := fs.String("seed-kind", "logic", "seeded-defect class: logic (single-edit mutants) or race (sync-deletion mutants, -race-refuted)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -360,7 +361,14 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	// models emitting a wrong candidate — wrong candidates are seeded, so η_fa is
 	// directly measurable.
 	if *judgeSeed > 0 {
-		return runSeededSweep(ctx, cfg, prov, probs, *judgeModel, *judgeSeed)
+		if *seedKind != "logic" && *seedKind != "race" {
+			return fmt.Errorf("unknown -seed-kind %q (want logic or race)", *seedKind)
+		}
+		kind := cascade.SeedLogic
+		if *seedKind == "race" {
+			kind = cascade.SeedRace
+		}
+		return runSeededSweep(ctx, cfg, prov, probs, *judgeModel, *judgeSeed, kind)
 	}
 
 	// Judge-sweep runs --compare once per strictness level to trace the judge
@@ -440,7 +448,7 @@ func armRecordPath(recOut, arm string) string {
 // every judged candidate is known-wrong by execution, any PASS is an
 // unambiguous η_fa, and a rate that climbs as the judge loosens is the §3.1
 // danger demonstrated directly rather than left to chance.
-func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider, probs []benchProblem, judgeModel string, nSeed int) error {
+func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider, probs []benchProblem, judgeModel string, nSeed int, seedKind cascade.SeedKind) error {
 	levels := []prompt.JudgeStrictness{prompt.JudgeStrict, prompt.JudgeBalanced, prompt.JudgePermissive}
 	r, err := cascade.New(cfg, prov, nil)
 	if err != nil {
@@ -455,7 +463,7 @@ func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider
 	usedProblems, totalWrong := 0, 0
 	for i, p := range probs {
 		fmt.Fprintf(os.Stderr, "[seed %d/%d] %s\n", i+1, len(probs), p.ID)
-		res, nWrong, perr := r.ProfileSeeded(ctx, p.Problem, judgeModel, nSeed, levels)
+		res, nWrong, perr := r.ProfileSeeded(ctx, p.Problem, judgeModel, nSeed, levels, seedKind)
 		if perr != nil {
 			fmt.Fprintf(os.Stderr, "  skipped: %v\n", perr)
 			continue

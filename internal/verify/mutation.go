@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"strconv"
 	"time"
 )
 
@@ -214,6 +215,125 @@ func KilledMutants(ctx context.Context, r *Runner, src, visible, hidden string, 
 type KilledMutant struct {
 	Source string
 	Desc   string
+}
+
+// collectRaceSites finds statements whose deletion introduces a data race
+// without breaking compilation: a `wg.Wait()` call (letting the function return
+// while goroutines still write) or a mutex `Lock`/`Unlock`/`RLock`/`RUnlock`
+// call (unguarding a shared access). Each site removes one statement.
+//
+// These are the operators the logic-mutation set (collectSites) cannot produce,
+// and they target the one defect class observed to slip past the judge live: a
+// race is invisible to a reader and caught only under `-race`.
+func collectRaceSites(src string) ([]mutation, *token.FileSet, *ast.File, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "solution.go", src, parser.ParseComments)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	syncMethods := map[string]bool{
+		"Wait": true, "Lock": true, "Unlock": true, "RLock": true, "RUnlock": true,
+	}
+	var sites []mutation
+	// Walk every statement list and mark deletable sync-call statements. We edit
+	// the enclosing block's Stmt slice, replacing the target with an empty
+	// statement so positions of siblings are unaffected and the edit is reversible.
+	ast.Inspect(f, func(n ast.Node) bool {
+		block, ok := n.(*ast.BlockStmt)
+		if !ok {
+			return true
+		}
+		for idx, stmt := range block.List {
+			exprStmt, ok := stmt.(*ast.ExprStmt)
+			if !ok {
+				continue
+			}
+			call, ok := exprStmt.X.(*ast.CallExpr)
+			if !ok {
+				continue
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || !syncMethods[sel.Sel.Name] {
+				continue
+			}
+			i, orig := idx, stmt
+			method := sel.Sel.Name
+			pos := fset.Position(exprStmt.Pos()).String()
+			sites = append(sites, mutation{
+				apply:  func() { block.List[i] = &ast.EmptyStmt{} },
+				revert: func() { block.List[i] = orig },
+				desc:   pos + ": delete ." + method + "()",
+			})
+		}
+		return true
+	})
+	return sites, fset, f, nil
+}
+
+// RaceKilledMutants returns up to n mutant sources that COMPILE and are refuted
+// by the race detector (`go test -race`). Each deletes one synchronization
+// statement, producing a genuine data race a reader is unlikely to catch — the
+// seed set for probing the judge's one observed blind spot (paper §3.1;
+// results/seeded-2026-07-25.md found η_fa=0 on logic defects but the sole live
+// η_fa was a race). Whether the mutant also flakes without -race is not a
+// filter: the reader-invisibility is intrinsic to the defect (a missing lock
+// reads as fine), and flakiness is precisely what a reader cannot rely on.
+func RaceKilledMutants(ctx context.Context, r *Runner, src, visible, hidden string, n, raceCount int, timeout time.Duration) ([]KilledMutant, error) {
+	sites, fset, f, err := collectRaceSites(src)
+	if err != nil {
+		return nil, err
+	}
+	if len(sites) == 0 || n <= 0 {
+		return nil, nil
+	}
+	if raceCount < 1 {
+		raceCount = 1
+	}
+	ws, err := r.NewWorkspace(src, visible, hidden)
+	if err != nil {
+		return nil, err
+	}
+	defer ws.Remove() //nolint:errcheck // scratch dir
+
+	var out []KilledMutant
+	for _, i := range sample(len(sites), len(sites)) {
+		if len(out) >= n {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, nil
+		default:
+		}
+		m := sites[i]
+		m.apply()
+		var buf bytes.Buffer
+		perr := printer.Fprint(&buf, fset, f)
+		m.revert()
+		if perr != nil {
+			continue
+		}
+		mutant := buf.String()
+		if err := ws.WriteSolution(mutant); err != nil {
+			continue
+		}
+		if b := ws.run(ctx, 60*time.Second, false, "build", "./..."); b.Err != nil {
+			continue // does not compile
+		}
+		// The defining property of a race-class defect is that the race detector
+		// refutes it. We require a -race failure and do NOT require the plain run
+		// to pass: a synchronization deletion may or may not flake without -race
+		// depending on timing, but the reader-invisibility is intrinsic to the
+		// defect (a missing lock reads as fine on the page) regardless. Requiring
+		// plain to pass would discard genuine races that happen to also flake, and
+		// flakiness is exactly what a reader cannot rely on catching.
+		race := ws.run(ctx, timeout*time.Duration(raceCount)+30*time.Second, true,
+			"test", "-race", "-count="+strconv.Itoa(raceCount), "./...")
+		if race.Err != nil || race.TimedOut {
+			out = append(out, KilledMutant{Source: mutant, Desc: m.desc}) // race-refuted
+		}
+	}
+	return out, nil
 }
 
 // sample picks up to budget evenly spaced indices from [0,n).

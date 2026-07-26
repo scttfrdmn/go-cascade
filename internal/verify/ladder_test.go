@@ -370,6 +370,79 @@ func TestKilledMutantsAreProvablyWrong(t *testing.T) {
 	}
 }
 
+func TestRaceKilledMutantsAreRaceRefuted(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and executes candidates under -race")
+	}
+	// A correct, race-free concurrent solution: each worker writes its own slot,
+	// and wg.Wait() ensures all writes finish before the result is read. Deleting
+	// the Wait() lets the read race the writes -- caught only under -race.
+	const src = `package solution
+
+import "sync"
+
+// SumParts adds xs concurrently, one goroutine per element, into private slots.
+func SumParts(xs []int) int {
+	parts := make([]int, len(xs))
+	var wg sync.WaitGroup
+	for i := range xs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			parts[i] = xs[i]
+		}(i)
+	}
+	wg.Wait()
+	total := 0
+	for _, p := range parts {
+		total += p
+	}
+	return total
+}`
+	const visible = `package solution
+
+import "testing"
+
+func TestV_Sum(t *testing.T) {
+	xs := make([]int, 256)
+	for i := range xs {
+		xs[i] = i
+	}
+	want := 0
+	for _, v := range xs {
+		want += v
+	}
+	if got := SumParts(xs); got != want {
+		t.Fatalf("got %d want %d", got, want)
+	}
+}`
+	r := newTestRunner(t)
+	ctx := context.Background()
+
+	muts, err := RaceKilledMutants(ctx, r, src, visible, "", 2, 3, 60*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(muts) == 0 {
+		t.Fatal("expected at least one race-refuted mutant from deleting wg.Wait()")
+	}
+	// Each returned mutant must compile and fail specifically under -race.
+	for _, m := range muts {
+		ws, err := r.NewWorkspace(m.Source, visible, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b := ws.run(ctx, 60*time.Second, false, "build", "./..."); b.Err != nil {
+			t.Errorf("mutant %q does not compile", m.Desc)
+		}
+		race := ws.run(ctx, 90*time.Second, true, "test", "-race", "-count=3", "./...")
+		if race.Err == nil && !race.TimedOut {
+			t.Errorf("mutant %q passed under -race; RaceKilledMutants must return only race-refuted candidates", m.Desc)
+		}
+		_ = ws.Remove()
+	}
+}
+
 func TestParseAllocs(t *testing.T) {
 	out := "BenchmarkX-8   1000   1234 ns/op   56 B/op   3 allocs/op\n" +
 		"BenchmarkY-8   1000   99 ns/op   0 B/op   7 allocs/op"

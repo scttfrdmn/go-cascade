@@ -306,6 +306,16 @@ type SeededJudgeResult struct {
 	FalseAccept int // judge said PASS on a wrong candidate (η_fa)
 }
 
+// SeedKind selects which class of provably-wrong candidate the seeded test
+// harvests.
+type SeedKind int
+
+// Seed kinds.
+const (
+	SeedLogic SeedKind = iota // single-edit logic mutants, killed by ordinary tests
+	SeedRace                  // sync-deletion mutants, refuted only under -race
+)
+
 // ProfileSeeded runs the judge dangerous-mode experiment for one problem. It
 // samples a correct-ish solution, harvests up to nSeed mutants that COMPILE and
 // are KILLED by the hidden tests (provably wrong, but a single edit from
@@ -316,8 +326,13 @@ type SeededJudgeResult struct {
 //
 // It returns nil (not an error) when no killed mutant could be produced for the
 // problem, so the caller can skip it rather than count a vacuous zero.
+//
+// seedKind selects the defect class: SeedLogic harvests single-edit logic
+// mutants killed by ordinary testing; SeedRace harvests sync-deletion mutants
+// refuted only under the race detector — the reader-invisible class that is the
+// judge's one observed blind spot.
 func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, nSeed int,
-	levels []prompt.JudgeStrictness,
+	levels []prompt.JudgeStrictness, seedKind SeedKind,
 ) (map[prompt.JudgeStrictness]*SeededJudgeResult, int, error) {
 	if judgeModel == "" {
 		judgeModel = r.judgeModelDefault()
@@ -339,8 +354,15 @@ func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, 
 	}
 	seed := cands[indexOf(cands, winner.Rep)].Source
 
-	mutants, err := verify.KilledMutants(ctx, r.runner, seed, spec.VisibleTests, spec.HiddenTests,
-		nSeed, r.cfg.TestTimeout)
+	var mutants []verify.KilledMutant
+	switch seedKind {
+	case SeedRace:
+		mutants, err = verify.RaceKilledMutants(ctx, r.runner, seed, spec.VisibleTests, spec.HiddenTests,
+			nSeed, r.cfg.RaceCount, r.cfg.TestTimeout)
+	default:
+		mutants, err = verify.KilledMutants(ctx, r.runner, seed, spec.VisibleTests, spec.HiddenTests,
+			nSeed, r.cfg.TestTimeout)
+	}
 	if err != nil {
 		return nil, 0, err
 	}
