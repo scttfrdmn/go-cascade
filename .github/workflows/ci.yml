@@ -12,9 +12,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
           check-latest: true
@@ -47,14 +47,14 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
       # .golangci.yml is a v2 config, so this must be a v2 golangci-lint whose
       # own Go build is >= the module's go directive (1.26). The action's
       # "latest" resolved to a v1.x binary built with go1.24, which cannot parse
       # a v2 config and refuses a go1.26 target. Pin an explicit v2 release.
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
