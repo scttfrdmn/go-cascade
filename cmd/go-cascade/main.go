@@ -287,6 +287,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	outPath := fs.String("o", "thresholds.json", "certificate output path")
 	recOut := fs.String("records", "", "also write the raw calibration records here")
 	fromRec := fs.String("from-records", "", "replay calibration from saved records instead of profiling again")
+	baselines := fs.Bool("baselines", false, "also report cascade vs always-cheapest vs always-frontier (cost and ground-truth risk)")
 	oracle := fs.String("oracle", "execution", "acceptance oracle: execution (sound) or judge (LLM reviewer, §5.5c)")
 	compare := fs.Bool("compare", false, "profile both oracles and report certified vs realized risk for each")
 	judgeModel := fs.String("judge-model", "", "model that plays the judge oracle (default: test_model)")
@@ -341,6 +342,13 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 			return err
 		}
 		printCert(*outPath, cert)
+		// The cascade only earns its keep if it beats the single-model policies:
+		// cheaper than always-frontier at no worse correctness, more correct than
+		// always-cheapest. Score all three on the same records, under the
+		// certified thresholds, on ground truth.
+		if *baselines {
+			printBaselines(calibrate.Baselines(recs, cert.Thresholds))
+		}
 		return nil
 	}
 
@@ -652,6 +660,21 @@ func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, na
 	fmt.Println("empirical. Where the judge's realized risk exceeds its empirical risk, that")
 	fmt.Println("gap is the false-acceptance rate it certified against but cannot see.")
 	return nil
+}
+
+// printBaselines renders the cascade against the two single-model policies it
+// must beat. The comparison is on ground-truth correctness and measured cost, so
+// it answers "is the cascade actually the better choice", not "which risk can it
+// certify".
+func printBaselines(ps []calibrate.Policy) {
+	fmt.Printf("\nbaselines (ground-truth risk, mean cost/query, n)\n")
+	fmt.Printf("  %-18s %-10s %-12s %s\n", "policy", "risk", "mean-cost", "n")
+	fmt.Println("  " + strings.Repeat("-", 48))
+	for _, p := range ps {
+		fmt.Printf("  %-18s %-10.4f $%-11.5f %d\n", p.Name, p.Risk, p.MeanUSD, p.N)
+	}
+	fmt.Println("\nThe cascade earns its keep only if it is cheaper than always-frontier at no")
+	fmt.Println("worse risk, and lower-risk than always-cheapest. Compare the rows above.")
 }
 
 func printCert(path string, cert *calibrate.Certificate) {

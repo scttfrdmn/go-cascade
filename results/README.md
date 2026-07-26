@@ -6,7 +6,7 @@ never sent a query to a real model — every number came from the deterministic
 mock. These runs replace that gap with measurements, and with an honest account
 of what they do and do not establish.
 
-**One-line summary:** across eight live experiments the executable oracle was
+**One-line summary:** across nine live experiments the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
 that widened with scale (α 0.27 vs 0.32 at n=28; **0.19 vs 0.30 at n=64**)** —
@@ -40,7 +40,7 @@ comparison was argued, never demonstrated. These runs demonstrate the pieces.
   floor needs n ≥ 22 even at zero errors), so the *risk numbers* are point
   estimates; the *oracle-divergence* counts are the signal.
 
-## The eight experiments
+## The nine experiments
 
 Each row links to its full write-up. "η_fa" = judge passed a program the tests
 refute (the dangerous direction). "β" = judge failed a program the tests accept.
@@ -56,6 +56,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 6 | [race-seeded test](race-seeded-2026-07-25.md) | strictness on **seeded race** defects | judge caught **all 20** — but the operator leaves a scar (see caveat) |
 | 7 | [certification comparison](certification-comparison-2026-07-25.md) | **lowest certifiable α per oracle** (paired replay, n=28) | **execution α=0.27 < judge α=0.32** — the §5.5 primary outcome |
 | 8 | [scaled certification](scaled-certification-2026-07-25.md) | same, at **n=64** | **execution α=0.19 < judge α=0.30** — gap widens; floor is model accuracy, not n |
+| 9 | [cost baseline](cost-baseline-2026-07-25.md) | **cascade vs single-model policies** (cost + truth) | **always-frontier wins here** — cascade is priciest; the 5:2:1 fan-out erases the cheap tier's edge |
 
 ### How each run answered the previous one's limitation
 
@@ -98,6 +99,22 @@ The value is in the chain, not any single number:
    the gap over the judge to **0.19 vs 0.30**. But α=0.05 stayed out of reach, and
    the run showed why: execution's empirical risk held at ~0.11, so the ceiling is
    **model accuracy, not sample size** — a lever the earlier runs couldn't isolate.
+9. **Cost baseline** finally measured the value proposition itself: cascade vs
+   always-cheapest vs always-frontier, on cost and truth. **Always-frontier won**
+   — same risk as the cascade at lower cost — because the 5:2:1 sample fan-out
+   makes 5 cheap calls cost as much as 1 frontier call. The cascade's cost
+   advantage is not demonstrated here; the fix (flatter fan-out, cheaper bottom
+   tier) is the open frontier.
+
+### Two candidate levers raised during this work (not yet run)
+
+- **A cheaper/more-accurate bottom tier** (e.g. a Go-specialist small model)
+  attacks both losing terms at once: fewer escalations *and* cheaper cheap-tier
+  samples, and — if more accurate — a lower risk floor (the α=0.05 blocker).
+- **A generalist-instructs-specialist arm**: a strong general model rewrites the
+  problem into a precise spec/plan that a narrow code model executes. Testable in
+  this harness as a two-stage tier. Both are config/prompt-level experiments the
+  cost baseline and cert comparison could score directly.
 
 ## What is established
 
@@ -140,14 +157,18 @@ underweights, but one that still favours the executable oracle.
   self-consistent racy code that was actually false-accepted. A **scar-free race
   operator** (narrow a critical section, swap a goroutine capture) is needed to
   probe that class. **This is the recommended next experiment.**
-- **No cost baseline — the biggest unrun experiment.** Everything here measures
-  *which risk each oracle can certify*. None of it measures the project's actual
-  value proposition: **is the cascade cheaper than always calling the frontier
-  model, at equal correctness?** That needs a head-to-head — always-frontier over
-  the same 64 problems, comparing total cost (including the cascade's verification
-  overhead) at matched realized correctness. Per-run cost is recorded, but this
-  comparison has not been run. Until it is, "cheaper at equal correctness" remains
-  argued, not demonstrated (README "known gaps").
+- **Cost baseline: RUN (experiment 9), and it does not favour the cascade here.**
+  See [`cost-baseline-2026-07-25.md`](cost-baseline-2026-07-25.md). On n=64,
+  always-frontier matched the cascade's risk (0.094) at lower cost ($0.0079 vs
+  $0.0093); the cascade was the *most expensive* of the three policies, and
+  always-cheapest was both pricier and riskier than frontier. Cause: the default
+  5:2:1 sample fan-out spends the cheap tier's per-token advantage on volume (per
+  *sample* Opus is 5× Haiku, but 5 Haiku samples ≈ 1 Opus call), and verification
+  cost is tier-independent. This is workload/config-specific, not a refutation —
+  the cascade should win with a flatter fan-out (1:1:1), a cheaper/more-accurate
+  bottom tier, or a wider price gap. **But as run, "cheaper at equal correctness"
+  is NOT demonstrated on this benchmark — the opposite is.** Reducing the fan-out
+  (a config change) is the immediate next test.
 - **Judge β depends on the prompt.** The judge ran with "when in doubt, FAIL";
   its false-rejection counts would move under a different operating point. The
   strictness knob exists (`--judge-strictness`) but was only exercised on small n.
@@ -184,4 +205,4 @@ AWS_PROFILE=<profile> go-cascade calibrate --provider=bedrock \
 Raw records (`*.execution.json`, `*.judge.json`, per-level and seeded JSON) are
 committed alongside each write-up so any α can be re-evaluated offline.
 
-Total live spend for all eight experiments plus diagnosis: roughly $29–33.
+Total live spend for all nine experiments plus diagnosis: roughly $29–33 (experiment 9 was offline/free).
