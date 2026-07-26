@@ -1,0 +1,10 @@
+
+strictness  exec-risk judge-emp judge-real η_fa   β     
+  ------------------------------------------------------------
+strict      0.1667    0.0000    0.1667    3      2     
+balanced    0.0000    0.0000    0.0000    0      4     
+permissive  0.1667    0.1667    0.1667    3      2     
+
+η_fa = judge passed a program the tests refute (the dangerous mode).
+β    = judge failed a program the tests accept (safe but costly).
+If loosening strictness raises η_fa, the §3.1 danger is reachable by prompt.

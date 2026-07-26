@@ -24,3 +24,5 @@ results/pilot2-progress.txt
 results/pilot2-compare.txt
 results/hard-progress.txt
 results/hard-compare.txt
+results/sweep-progress.txt
+results/sweep-out.txt
