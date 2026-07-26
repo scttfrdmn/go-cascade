@@ -5,7 +5,47 @@ import (
 	"testing"
 
 	"github.com/scttfrdmn/go-cascade/internal/calibrate"
+	"github.com/scttfrdmn/go-cascade/internal/prompt"
 )
+
+// ProfileStrictnessReplay must judge the SAME candidate stream at every
+// strictness level: one shared execution record, and every level's judge record
+// sharing per-tier score and execution truth with it. That shared stream is what
+// makes the strictness sweep a controlled A/B rather than a re-sampling
+// comparison, so assert it.
+func TestProfileStrictnessReplaySharesStream(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = ""
+	r := newRouter(t, cfg, nil)
+	levels := []prompt.JudgeStrictness{prompt.JudgeStrict, prompt.JudgeBalanced, prompt.JudgePermissive}
+
+	er, jrs, err := r.ProfileStrictnessReplay(context.Background(), "seq", seqProblem, "", levels)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jrs) != len(levels) {
+		t.Fatalf("expected %d judge records, got %d", len(levels), len(jrs))
+	}
+	for _, lvl := range levels {
+		jr := jrs[lvl]
+		if jr == nil || len(jr.Tiers) != len(er.Tiers) {
+			t.Fatalf("level %s: judge record shape mismatch", lvl)
+		}
+		for i := range er.Tiers {
+			if er.Tiers[i].Score != jr.Tiers[i].Score {
+				t.Errorf("level %s tier %d: score differs from execution (%.3f vs %.3f); stream not shared",
+					lvl, i, er.Tiers[i].Score, jr.Tiers[i].Score)
+			}
+			et, jt := er.Tiers[i].TrueCorrect, jr.Tiers[i].TrueCorrect
+			if (et == nil) != (jt == nil) || (et != nil && *et != *jt) {
+				t.Errorf("level %s tier %d: TrueCorrect differs from execution; stream not shared", lvl, i)
+			}
+		}
+	}
+}
 
 // An empty judgeModel must fall back to the configured test model rather than
 // reaching the provider with an empty ModelID. This regresses a live failure
