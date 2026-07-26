@@ -113,7 +113,22 @@ func RepairUser(problem, api, prev, stage, diag string) string {
 	return b.String()
 }
 
-const judgeSystem = `You are a strict code reviewer. You are given a Go problem
+// JudgeStrictness sets where the judge's PASS/FAIL boundary sits when it is
+// uncertain. It is the knob that traces the judge oracle's η_fa/β operating
+// curve: a permissive judge accepts on doubt (raising false acceptances), a
+// strict judge rejects on doubt (raising false rejections). Only the tie-break
+// instruction changes; everything else about the prompt is held fixed so the
+// sweep isolates the operating point.
+type JudgeStrictness string
+
+// Judge strictness levels.
+const (
+	JudgeStrict     JudgeStrictness = "strict"     // when in doubt, FAIL
+	JudgeBalanced   JudgeStrictness = "balanced"   // no thumb on the scale
+	JudgePermissive JudgeStrictness = "permissive" // when in doubt, PASS
+)
+
+const judgeSystemBase = `You are a code reviewer. You are given a Go problem
 statement, the API the solution must satisfy, and a candidate implementation.
 Decide whether the implementation is correct for every valid input, not merely
 plausible.
@@ -125,12 +140,25 @@ VERDICT: PASS
 or
 VERDICT: FAIL
 
-PASS means you are confident the code is correct for all valid inputs, including
-boundary and adversarial ones. FAIL means you found, or strongly suspect, a
-defect. When in doubt, FAIL.`
+PASS means the code is correct for all valid inputs, including boundary and
+adversarial ones. FAIL means you found, or suspect, a defect. `
 
-// JudgeSystem returns the judge-phase system prompt.
-func JudgeSystem() string { return judgeSystem }
+var judgeTieBreak = map[JudgeStrictness]string{
+	JudgeStrict:     "When in doubt, FAIL.",
+	JudgeBalanced:   "Weigh the evidence and give your best single judgement; do not default either way.",
+	JudgePermissive: "When in doubt, PASS.",
+}
+
+// JudgeSystem returns the judge-phase system prompt at the given strictness. An
+// unrecognised value falls back to strict, which is the conservative default and
+// the behaviour prior to the strictness knob.
+func JudgeSystem(s JudgeStrictness) string {
+	tie, ok := judgeTieBreak[s]
+	if !ok {
+		tie = judgeTieBreak[JudgeStrict]
+	}
+	return judgeSystemBase + tie
+}
 
 // JudgeUser renders a judge turn. It deliberately withholds the test suites:
 // the judge is the alternative to an executable oracle, so giving it the tests

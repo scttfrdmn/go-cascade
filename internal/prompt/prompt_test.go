@@ -105,6 +105,32 @@ func TestParseJudge(t *testing.T) {
 	}
 }
 
+func TestJudgeSystemStrictness(t *testing.T) {
+	// Each level must carry its own tie-break instruction and share the rest.
+	strict := JudgeSystem(JudgeStrict)
+	perm := JudgeSystem(JudgePermissive)
+	bal := JudgeSystem(JudgeBalanced)
+	if !contains(strict, "When in doubt, FAIL") {
+		t.Errorf("strict prompt missing FAIL tie-break:\n%s", strict)
+	}
+	if !contains(perm, "When in doubt, PASS") {
+		t.Errorf("permissive prompt missing PASS tie-break:\n%s", perm)
+	}
+	if contains(bal, "When in doubt") {
+		t.Errorf("balanced prompt should not default either way:\n%s", bal)
+	}
+	// Unknown strictness falls back to strict (the conservative default).
+	if JudgeSystem("bogus") != strict {
+		t.Error("unknown strictness should fall back to strict")
+	}
+	// The base (everything but the tie-break) must be identical across levels,
+	// so the sweep isolates the operating point and nothing else.
+	trim := func(s, suffix string) string { return s[:len(s)-len(suffix)] }
+	if trim(strict, "When in doubt, FAIL.") != trim(perm, "When in doubt, PASS.") {
+		t.Error("strict and permissive prompts differ beyond the tie-break line")
+	}
+}
+
 func TestJudgeUserWithholdsTests(t *testing.T) {
 	// The judge is the alternative to an executable oracle. If the prompt leaked
 	// the test suites it would become one, defeating the comparison (§5.5c).

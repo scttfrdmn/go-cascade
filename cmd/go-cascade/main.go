@@ -289,11 +289,16 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	oracle := fs.String("oracle", "execution", "acceptance oracle: execution (sound) or judge (LLM reviewer, §5.5c)")
 	compare := fs.Bool("compare", false, "profile both oracles and report certified vs realized risk for each")
 	judgeModel := fs.String("judge-model", "", "model that plays the judge oracle (default: test_model)")
+	judgeStrict := fs.String("judge-strictness", "", "judge PASS/FAIL boundary on doubt: strict|balanced|permissive (default strict)")
+	judgeSweep := fs.Bool("judge-sweep", false, "run --compare once per judge strictness level to trace the η_fa/β curve")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *oracle != "execution" && *oracle != "judge" {
 		return fmt.Errorf("unknown -oracle %q (want execution or judge)", *oracle)
+	}
+	if *judgeStrict != "" && *judgeStrict != "strict" && *judgeStrict != "balanced" && *judgeStrict != "permissive" {
+		return fmt.Errorf("unknown -judge-strictness %q (want strict, balanced, or permissive)", *judgeStrict)
 	}
 	if *bench == "" && *fromRec == "" {
 		return errors.New("one of -bench or -from-records is required")
@@ -342,15 +347,24 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	}
 	// Calibration records must come from the cache-bypass path.
 	cfg.CacheDir = ""
+	cfg.JudgeStrictness = *judgeStrict
+
+	opts := calibrate.Options{
+		Alpha: cfg.Alpha, Delta: *delta, Step: *step, Method: calibrate.Method(*method),
+	}
+
+	// Judge-sweep runs --compare once per strictness level to trace the judge
+	// oracle's η_fa/β operating curve. Only the judge arm's prompt changes; the
+	// execution arm is identical across levels, so it is reported once.
+	if *judgeSweep {
+		return runJudgeSweep(ctx, cfg, prov, probs, names, opts, *judgeModel, *recOut)
+	}
+
 	r, err := cascade.New(cfg, prov, nil)
 	if err != nil {
 		return err
 	}
 	defer r.Close() //nolint:errcheck // scratch dir
-
-	opts := calibrate.Options{
-		Alpha: cfg.Alpha, Delta: *delta, Step: *step, Method: calibrate.Method(*method),
-	}
 
 	// Compare mode profiles both oracles on the same problems and prints the
 	// certified-vs-realized risk for each. This is the §5.5c experiment in
@@ -408,6 +422,101 @@ func armRecordPath(recOut, arm string) string {
 		ext = ".json"
 	}
 	return stem + "." + arm + ext
+}
+
+// runJudgeSweep runs a paired comparison once per judge strictness level and
+// prints how the judge's false-acceptance (η_fa) and false-rejection (β) counts
+// move as the PASS/FAIL boundary shifts. The point is to test whether a
+// permissive judge trades β for η_fa — i.e. whether the §3.1 dangerous mode (a
+// judge certifying below its true risk) can be elicited by loosening the judge,
+// which the strict-prompt live runs did not exhibit.
+//
+// Each level re-samples (ProfilePaired regenerates candidates), so the levels
+// are independent paired snapshots, not a controlled A/B on identical programs.
+// The execution arm is strictness-independent by construction, so its risk is
+// reported per level only as a sanity check that the underlying difficulty is
+// stable.
+func runJudgeSweep(ctx context.Context, cfg *config.Config, prov model.Provider, probs []benchProblem, names []string, opts calibrate.Options, judgeModel, recOut string) error {
+	levels := []string{"strict", "balanced", "permissive"}
+
+	fmt.Printf("\n%-11s %-9s %-9s %-9s %-6s %-6s\n",
+		"strictness", "exec-risk", "judge-emp", "judge-real", "η_fa", "β")
+	fmt.Println("  " + strings.Repeat("-", 60))
+
+	for _, level := range levels {
+		lcfg := *cfg
+		lcfg.JudgeStrictness = level
+		r, err := cascade.New(&lcfg, prov, nil)
+		if err != nil {
+			return err
+		}
+
+		execRecs := make([]calibrate.Record, 0, len(probs))
+		judgeRecs := make([]calibrate.Record, 0, len(probs))
+		var fa, fr int
+		for i, p := range probs {
+			fmt.Fprintf(os.Stderr, "[%s %d/%d] %s\n", level, i+1, len(probs), p.ID)
+			er, jr, perr := r.ProfilePaired(ctx, p.ID, p.Problem, judgeModel)
+			if perr != nil {
+				fmt.Fprintf(os.Stderr, "  skipped: %v\n", perr)
+				continue
+			}
+			execRecs = append(execRecs, *er)
+			judgeRecs = append(judgeRecs, *jr)
+			f, b := countJudgeErrors(*er, *jr)
+			fa += f
+			fr += b
+		}
+		_ = r.Close() //nolint:errcheck // scratch dir
+
+		if recOut != "" {
+			for arm, recs := range map[string][]calibrate.Record{
+				level + ".execution": execRecs, level + ".judge": judgeRecs,
+			} {
+				if err := writeJSONFile(armRecordPath(recOut, arm), recs); err != nil {
+					return fmt.Errorf("write %s records: %w", arm, err)
+				}
+			}
+		}
+
+		execCert, err := calibrate.Calibrate(execRecs, names, opts)
+		if err != nil {
+			return fmt.Errorf("%s execution arm: %w", level, err)
+		}
+		judgeCert, err := calibrate.Calibrate(judgeRecs, names, opts)
+		if err != nil {
+			return fmt.Errorf("%s judge arm: %w", level, err)
+		}
+		fmt.Printf("%-11s %-9.4f %-9.4f %-9.4f %-6d %-6d\n",
+			level, execCert.EmpiricalRisk, judgeCert.EmpiricalRisk, judgeCert.RealizedRisk, fa, fr)
+	}
+	fmt.Println("\nη_fa = judge passed a program the tests refute (the dangerous mode).")
+	fmt.Println("β    = judge failed a program the tests accept (safe but costly).")
+	fmt.Println("If loosening strictness raises η_fa, the §3.1 danger is reachable by prompt.")
+	return nil
+}
+
+// countJudgeErrors tallies, across all tiers of one paired record, how often the
+// judge's verdict disagreed with execution truth: false acceptances (passed a
+// wrong program) and false rejections (failed a correct one).
+func countJudgeErrors(execRec, judgeRec calibrate.Record) (falseAccept, falseReject int) {
+	for i := range execRec.Tiers {
+		if i >= len(judgeRec.Tiers) {
+			break
+		}
+		truth := execRec.Tiers[i].TrueCorrect
+		if truth == nil {
+			continue
+		}
+		jc := judgeRec.Tiers[i].Correct
+		switch {
+		case jc && !*truth:
+			falseAccept++
+		case !jc && *truth:
+			falseReject++
+		}
+	}
+	return falseAccept, falseReject
 }
 
 // runCompare profiles both oracles against a single shared candidate stream and

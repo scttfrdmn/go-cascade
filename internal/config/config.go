@@ -80,6 +80,12 @@ type Config struct {
 	// "bwrap --unshare-net --ro-bind / /". Model-authored code is executed.
 	ExecWrapper []string `json:"exec_wrapper"`
 
+	// JudgeStrictness sets the judge oracle's PASS/FAIL boundary on uncertainty
+	// ("strict", "balanced", "permissive"). It only affects the judge-comparison
+	// arm and is the knob that traces the judge's false-acceptance/false-rejection
+	// operating curve. Empty means strict.
+	JudgeStrictness string `json:"judge_strictness"`
+
 	ThresholdsPath string `json:"thresholds_path"`
 }
 
