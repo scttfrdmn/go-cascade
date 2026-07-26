@@ -34,3 +34,5 @@ results/race-seeded-progress.txt
 results/race-seeded-out.txt
 results/scaled-progress.txt
 results/scaled-out.txt
+results/flat-progress.txt
+results/flat-out.txt
