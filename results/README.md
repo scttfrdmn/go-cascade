@@ -6,10 +6,13 @@ never sent a query to a real model — every number came from the deterministic
 mock. These runs replace that gap with measurements, and with an honest account
 of what they do and do not establish.
 
-**One-line summary:** across seven live experiments the executable oracle was
+**One-line summary:** across eight live experiments the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
-strictly lower risk bound than the judge oracle on identical candidates (α=0.27
-vs 0.32)** — the paper's primary §5.5 outcome, demonstrated live. The judge's
+strictly lower risk bound than the judge oracle on identical candidates, a gap
+that widened with scale (α 0.27 vs 0.32 at n=28; **0.19 vs 0.30 at n=64**)** —
+the paper's primary §5.5 outcome, demonstrated live. A deployable α (≤0.05) stays
+out of reach, and the n=64 run shows why: the ceiling is the models' ~11% error
+rate, not sample size. The judge's
 *only* confirmed dangerous failure (passing wrong code) was a **data race** it
 could not see by reading; everywhere else it erred by over-rejecting correct
 code, which is what costs it the certification race. The §3.1 danger (a judge
@@ -37,7 +40,7 @@ comparison was argued, never demonstrated. These runs demonstrate the pieces.
   floor needs n ≥ 22 even at zero errors), so the *risk numbers* are point
   estimates; the *oracle-divergence* counts are the signal.
 
-## The seven experiments
+## The eight experiments
 
 Each row links to its full write-up. "η_fa" = judge passed a program the tests
 refute (the dangerous direction). "β" = judge failed a program the tests accept.
@@ -51,7 +54,8 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 5a | [controlled sweep](sweep-controlled-2026-07-25.md) | strictness (shared stream) | knob isolated; η_fa **untestable** (all candidates correct) |
 | 5b | [seeded test](seeded-2026-07-25.md) | strictness on **known-wrong** logic defects | judge caught **all 17**; η_fa=0 at every level |
 | 6 | [race-seeded test](race-seeded-2026-07-25.md) | strictness on **seeded race** defects | judge caught **all 20** — but the operator leaves a scar (see caveat) |
-| 7 | [certification comparison](certification-comparison-2026-07-25.md) | **lowest certifiable α per oracle** (paired replay) | **execution α=0.27 < judge α=0.32** — the §5.5 primary outcome |
+| 7 | [certification comparison](certification-comparison-2026-07-25.md) | **lowest certifiable α per oracle** (paired replay, n=28) | **execution α=0.27 < judge α=0.32** — the §5.5 primary outcome |
+| 8 | [scaled certification](scaled-certification-2026-07-25.md) | same, at **n=64** | **execution α=0.19 < judge α=0.30** — gap widens; floor is model accuracy, not n |
 
 ### How each run answered the previous one's limitation
 
@@ -89,16 +93,21 @@ The value is in the chain, not any single number:
 7. **Certification comparison** replayed the paired-pilot records offline across α.
    Execution certifies down to **α=0.27**, the judge only to **α=0.32** — the
    §5.5 primary outcome, in the executable oracle's favour, on identical
-   candidates.
+   candidates. But both α were far above deployable, blamed on n=28. → scale n.
+8. **Scaled certification** at n=64 tightened execution to **α=0.19** and widened
+   the gap over the judge to **0.19 vs 0.30**. But α=0.05 stayed out of reach, and
+   the run showed why: execution's empirical risk held at ~0.11, so the ceiling is
+   **model accuracy, not sample size** — a lever the earlier runs couldn't isolate.
 
 ## What is established
 
 1. **Execution is sound in practice.** In every run the execution arm's realized
    (ground-truth) risk equalled its empirical risk. β = 0 is not just a
    construction; it held live, repeatedly.
-2. **The executable oracle certifies a lower risk bound than the judge.**
-   α=0.27 vs 0.32 (δ=0.10, n=28, identical candidates) — the paper's primary
-   comparative claim, demonstrated. The gap comes mostly from the judge's
+2. **The executable oracle certifies a lower risk bound than the judge, and the
+   gap grows with scale.** α 0.27 vs 0.32 at n=28; **0.19 vs 0.30 at n=64**
+   (δ=0.10, identical candidates) — the paper's primary comparative claim,
+   demonstrated and strengthening. The gap comes mostly from the judge's
    over-rejection (β) inflating its empirical risk, not from η_fa.
 3. **The judge's one confirmed dangerous (over-acceptance) blind spot is a
    scar-free concurrency race** — the sole live η_fa, exactly the defect class a
@@ -115,11 +124,15 @@ underweights, but one that still favours the executable oracle.
 
 ## What is NOT established (open, honest)
 
-- **No *useful-α* certification.** The comparison is done (execution 0.27 < judge
-  0.32), but both α values are far above the ≤ 0.05–0.10 range anyone would
-  deploy. That is the sample-size ceiling: at n = 28 with these error rates,
-  δ = 0.10 cannot be met at low α. Reaching α = 0.05 needs n ≥ 45 *clean*
-  records (paper eq. 7). Scaling n is the open frontier.
+- **No *useful-α* certification — and scaling n did not fix it.** At n=64
+  (experiment 8) execution certifies α=0.19 (down from 0.27 at n=28) and the gap
+  over the judge widened to 11 points, but α=0.05 stayed unreachable. The reason
+  is now *measured*, not assumed: execution's empirical risk is ~0.11 at both n,
+  and the certifiable α cannot fall below the observed error rate. So the binding
+  constraint is **model accuracy (~11% true error on this benchmark), not sample
+  size.** Reaching a deployable α needs a more accurate cascade (better
+  escalation/repair, a stronger top tier), not more calibration data. Sample size
+  gated the n=28 result; accuracy gates from here down.
 - **The scar-free-race blind spot is one data point and was not reproduced.**
   η_fa > 0 was observed exactly once (the pilot's model-authored race). The
   race-seeded test (experiment 6) caught all 20 seeded races — but only because
@@ -127,6 +140,14 @@ underweights, but one that still favours the executable oracle.
   self-consistent racy code that was actually false-accepted. A **scar-free race
   operator** (narrow a critical section, swap a goroutine capture) is needed to
   probe that class. **This is the recommended next experiment.**
+- **No cost baseline — the biggest unrun experiment.** Everything here measures
+  *which risk each oracle can certify*. None of it measures the project's actual
+  value proposition: **is the cascade cheaper than always calling the frontier
+  model, at equal correctness?** That needs a head-to-head — always-frontier over
+  the same 64 problems, comparing total cost (including the cascade's verification
+  overhead) at matched realized correctness. Per-run cost is recorded, but this
+  comparison has not been run. Until it is, "cheaper at equal correctness" remains
+  argued, not demonstrated (README "known gaps").
 - **Judge β depends on the prompt.** The judge ran with "when in doubt, FAIL";
   its false-rejection counts would move under a different operating point. The
   strictness knob exists (`--judge-strictness`) but was only exercised on small n.
@@ -163,4 +184,4 @@ AWS_PROFILE=<profile> go-cascade calibrate --provider=bedrock \
 Raw records (`*.execution.json`, `*.judge.json`, per-level and seeded JSON) are
 committed alongside each write-up so any α can be re-evaluated offline.
 
-Total live spend for all seven experiments plus diagnosis: roughly $23–27.
+Total live spend for all eight experiments plus diagnosis: roughly $29–33.
