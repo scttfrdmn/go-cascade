@@ -338,6 +338,38 @@ func TestV_Trivial(t *testing.T) {
 		strong.Score, strong.Killed, strong.Valid, weak.Score, weak.Killed, weak.Valid)
 }
 
+func TestKilledMutantsAreProvablyWrong(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and executes candidates")
+	}
+	r := newTestRunner(t)
+	ctx := context.Background()
+
+	muts, err := KilledMutants(ctx, r, goodSrc, visibleSrc, hiddenSrc, 3, 60*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(muts) == 0 {
+		t.Fatal("expected at least one killed mutant from a mutable correct solution")
+	}
+	// Each returned mutant must compile AND be refuted by the suite: re-run it to
+	// confirm the harvest only yields provably-wrong candidates.
+	for _, m := range muts {
+		ws, err := r.NewWorkspace(m.Source, visibleSrc, hiddenSrc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b := ws.run(ctx, 60*time.Second, false, "build", "./..."); b.Err != nil {
+			t.Errorf("mutant %q does not compile: %v", m.Desc, b.Err)
+		}
+		res := ws.run(ctx, 60*time.Second, true, "test", "-count=1", "./...")
+		if res.Err == nil && !res.TimedOut {
+			t.Errorf("mutant %q passed the suite; KilledMutants must return only refuted candidates", m.Desc)
+		}
+		_ = ws.Remove()
+	}
+}
+
 func TestParseAllocs(t *testing.T) {
 	out := "BenchmarkX-8   1000   1234 ns/op   56 B/op   3 allocs/op\n" +
 		"BenchmarkY-8   1000   99 ns/op   0 B/op   7 allocs/op"

@@ -292,6 +292,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	judgeModel := fs.String("judge-model", "", "model that plays the judge oracle (default: test_model)")
 	judgeStrict := fs.String("judge-strictness", "", "judge PASS/FAIL boundary on doubt: strict|balanced|permissive (default strict)")
 	judgeSweep := fs.Bool("judge-sweep", false, "judge one shared candidate stream at every strictness level to trace the η_fa/β curve")
+	judgeSeed := fs.Int("judge-seed", 0, "seeded dangerous-mode test: judge N known-wrong (killed-mutant) candidates per problem at every strictness level")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -352,6 +353,14 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 
 	opts := calibrate.Options{
 		Alpha: cfg.Alpha, Delta: *delta, Step: *step, Method: calibrate.Method(*method),
+	}
+
+	// Seeded dangerous-mode test: judge N provably-wrong candidates per problem
+	// at every strictness level. Unlike the sweeps, this does not depend on the
+	// models emitting a wrong candidate — wrong candidates are seeded, so η_fa is
+	// directly measurable.
+	if *judgeSeed > 0 {
+		return runSeededSweep(ctx, cfg, prov, probs, *judgeModel, *judgeSeed)
 	}
 
 	// Judge-sweep runs --compare once per strictness level to trace the judge
@@ -423,6 +432,63 @@ func armRecordPath(recOut, arm string) string {
 		ext = ".json"
 	}
 	return stem + "." + arm + ext
+}
+
+// runSeededSweep runs the seeded dangerous-mode test: for each problem it
+// harvests provably-wrong candidates (killed mutants) and judges each at every
+// strictness level, then reports the false-acceptance rate per level. Because
+// every judged candidate is known-wrong by execution, any PASS is an
+// unambiguous η_fa, and a rate that climbs as the judge loosens is the §3.1
+// danger demonstrated directly rather than left to chance.
+func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider, probs []benchProblem, judgeModel string, nSeed int) error {
+	levels := []prompt.JudgeStrictness{prompt.JudgeStrict, prompt.JudgeBalanced, prompt.JudgePermissive}
+	r, err := cascade.New(cfg, prov, nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close() //nolint:errcheck // scratch dir
+
+	totals := map[prompt.JudgeStrictness]*cascade.SeededJudgeResult{}
+	for _, lvl := range levels {
+		totals[lvl] = &cascade.SeededJudgeResult{Level: lvl}
+	}
+	usedProblems, totalWrong := 0, 0
+	for i, p := range probs {
+		fmt.Fprintf(os.Stderr, "[seed %d/%d] %s\n", i+1, len(probs), p.ID)
+		res, nWrong, perr := r.ProfileSeeded(ctx, p.Problem, judgeModel, nSeed, levels)
+		if perr != nil {
+			fmt.Fprintf(os.Stderr, "  skipped: %v\n", perr)
+			continue
+		}
+		if res == nil || nWrong == 0 {
+			fmt.Fprintf(os.Stderr, "  no provably-wrong candidate; skipped\n")
+			continue
+		}
+		usedProblems++
+		totalWrong += nWrong
+		for _, lvl := range levels {
+			totals[lvl].Judged += res[lvl].Judged
+			totals[lvl].FalseAccept += res[lvl].FalseAccept
+		}
+	}
+
+	fmt.Printf("\nSeeded dangerous-mode test: %d known-wrong candidates from %d problems, judged at each level.\n",
+		totalWrong, usedProblems)
+	fmt.Printf("\n%-11s %-8s %-12s %s\n", "strictness", "judged", "false-acc", "η_fa rate")
+	fmt.Println("  " + strings.Repeat("-", 44))
+	for _, lvl := range levels {
+		t := totals[lvl]
+		rate := 0.0
+		if t.Judged > 0 {
+			rate = float64(t.FalseAccept) / float64(t.Judged)
+		}
+		fmt.Printf("%-11s %-8d %-12d %.3f\n", lvl, t.Judged, t.FalseAccept, rate)
+	}
+	fmt.Println("\nEvery candidate is provably wrong (execution refutes it), so every PASS is a")
+	fmt.Println("false acceptance. If the η_fa rate rises as the judge loosens, the §3.1")
+	fmt.Println("dangerous mode is directly demonstrated: a permissive judge certifies code")
+	fmt.Println("the tests reject.")
+	return nil
 }
 
 // runJudgeSweep traces the judge oracle's false-acceptance (η_fa) /
