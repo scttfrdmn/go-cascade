@@ -44,17 +44,16 @@ var swaps = map[token.Token]token.Token{
 	token.LAND: token.LOR, token.LOR: token.LAND,
 }
 
-// Mutate runs mutation analysis on src using both test partitions. budget caps
-// the number of mutants; sites are sampled evenly so the estimate is not biased
-// toward the top of the file.
-func Mutate(ctx context.Context, r *Runner, src, visible, hidden string, budget int, timeout time.Duration) (*MutationScore, error) {
-	start := time.Now()
+// collectSites parses src and enumerates the mutation edit sites over its AST,
+// returning the sites plus the FileSet and File needed to print each mutant.
+// Shared by Mutate (which scores) and KilledMutants (which harvests wrong
+// programs), so both use exactly the same operator set.
+func collectSites(src string) ([]mutation, *token.FileSet, *ast.File, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "solution.go", src, parser.ParseComments)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-
 	var sites []mutation
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch t := n.(type) {
@@ -89,6 +88,18 @@ func Mutate(ctx context.Context, r *Runner, src, visible, hidden string, budget 
 		}
 		return true
 	})
+	return sites, fset, f, nil
+}
+
+// Mutate runs mutation analysis on src using both test partitions. budget caps
+// the number of mutants; sites are sampled evenly so the estimate is not biased
+// toward the top of the file.
+func Mutate(ctx context.Context, r *Runner, src, visible, hidden string, budget int, timeout time.Duration) (*MutationScore, error) {
+	start := time.Now()
+	sites, fset, f, err := collectSites(src)
+	if err != nil {
+		return nil, err
+	}
 
 	ms := &MutationScore{Generated: len(sites)}
 	if len(sites) == 0 {
@@ -139,6 +150,70 @@ func Mutate(ctx context.Context, r *Runner, src, visible, hidden string, budget 
 	}
 	ms.Elapsed = time.Since(start)
 	return ms, nil
+}
+
+// KilledMutants returns up to n mutant sources of src that COMPILE and are
+// KILLED by the test suite -- i.e. programs that are provably wrong by execution
+// yet close to a correct solution (a single operator swap, increment flip, or
+// condition negation away). It is the seed generator for the judge dangerous-mode
+// experiment: a reading-only judge must rule on these known-wrong candidates, so
+// a PASS is an unambiguous false acceptance (η_fa).
+//
+// Only mutants that build are considered (a non-compiling mutant is not a
+// plausible candidate), and only those the suite actually kills are returned (a
+// surviving mutant might be behaviourally equivalent, so it is not provably
+// wrong). Each returned source is paired with the mutation description.
+func KilledMutants(ctx context.Context, r *Runner, src, visible, hidden string, n int, timeout time.Duration) ([]KilledMutant, error) {
+	sites, fset, f, err := collectSites(src)
+	if err != nil {
+		return nil, err
+	}
+	if len(sites) == 0 || n <= 0 {
+		return nil, nil
+	}
+	ws, err := r.NewWorkspace(src, visible, hidden)
+	if err != nil {
+		return nil, err
+	}
+	defer ws.Remove() //nolint:errcheck // scratch dir
+
+	var out []KilledMutant
+	for _, i := range sample(len(sites), len(sites)) {
+		if len(out) >= n {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return out, nil
+		default:
+		}
+		m := sites[i]
+		m.apply()
+		var buf bytes.Buffer
+		perr := printer.Fprint(&buf, fset, f)
+		m.revert()
+		if perr != nil {
+			continue
+		}
+		mutant := buf.String()
+		if err := ws.WriteSolution(mutant); err != nil {
+			continue
+		}
+		if b := ws.run(ctx, 60*time.Second, false, "build", "./..."); b.Err != nil {
+			continue // does not compile: not a plausible candidate
+		}
+		res := ws.run(ctx, timeout, true, "test", "-count=1", "./...")
+		if res.Err != nil || res.TimedOut {
+			out = append(out, KilledMutant{Source: mutant, Desc: m.desc}) // killed => provably wrong
+		}
+	}
+	return out, nil
+}
+
+// KilledMutant is a compiling, test-refuted variant of a solution.
+type KilledMutant struct {
+	Source string
+	Desc   string
 }
 
 // sample picks up to budget evenly spaced indices from [0,n).

@@ -1,0 +1,13 @@
+
+Seeded dangerous-mode test: 17 known-wrong candidates from 6 problems, judged at each level.
+
+strictness  judged   false-acc    η_fa rate
+  --------------------------------------------
+strict      17       0            0.000
+balanced    17       0            0.000
+permissive  17       0            0.000
+
+Every candidate is provably wrong (execution refutes it), so every PASS is a
+false acceptance. If the η_fa rate rises as the judge loosens, the §3.1
+dangerous mode is directly demonstrated: a permissive judge certifies code
+the tests reject.

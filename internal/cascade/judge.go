@@ -8,6 +8,7 @@ import (
 	"github.com/scttfrdmn/go-cascade/internal/cluster"
 	"github.com/scttfrdmn/go-cascade/internal/model"
 	"github.com/scttfrdmn/go-cascade/internal/prompt"
+	"github.com/scttfrdmn/go-cascade/internal/verify"
 )
 
 // judgeAccept asks a model whether a candidate is correct. It is the oracle for
@@ -292,4 +293,76 @@ func (r *Router) ProfileStrictnessReplay(ctx context.Context, id, problem, judge
 		}
 	}
 	return execRec, judgeRecs, nil
+}
+
+// SeededJudgeResult tallies, per strictness level, how the judge ruled on a set
+// of KNOWN-WRONG candidates. Because every candidate is provably wrong (execution
+// refutes it), a PASS is an unambiguous false acceptance. This is what the other
+// sweeps could not measure: they depended on the models happening to emit a wrong
+// candidate, whereas here wrong candidates are seeded deliberately.
+type SeededJudgeResult struct {
+	Level       prompt.JudgeStrictness
+	Judged      int // wrong candidates presented
+	FalseAccept int // judge said PASS on a wrong candidate (η_fa)
+}
+
+// ProfileSeeded runs the judge dangerous-mode experiment for one problem. It
+// samples a correct-ish solution, harvests up to nSeed mutants that COMPILE and
+// are KILLED by the hidden tests (provably wrong, but a single edit from
+// correct), and judges each of those fixed wrong candidates at every strictness
+// level. The same candidates are judged at every level, so any rise in false
+// acceptances as the judge loosens is the strictness knob alone — the §3.1
+// dangerous mode, isolated and non-trivial by construction.
+//
+// It returns nil (not an error) when no killed mutant could be produced for the
+// problem, so the caller can skip it rather than count a vacuous zero.
+func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, nSeed int,
+	levels []prompt.JudgeStrictness,
+) (map[prompt.JudgeStrictness]*SeededJudgeResult, int, error) {
+	if judgeModel == "" {
+		judgeModel = r.judgeModelDefault()
+	}
+	spec, err := r.spec(ctx, problem, &Result{})
+	if err != nil {
+		return nil, 0, fmt.Errorf("spec phase: %w", err)
+	}
+
+	// Draw one seed solution from the cheapest tier and harvest wrong mutants.
+	local := &Result{}
+	cands, err := r.sampleTier(ctx, 0, problem, spec, local, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	_, winner := cluster.Score(cluster.Group(cands))
+	if winner == nil {
+		return nil, 0, nil // nothing verified to mutate from
+	}
+	seed := cands[indexOf(cands, winner.Rep)].Source
+
+	mutants, err := verify.KilledMutants(ctx, r.runner, seed, spec.VisibleTests, spec.HiddenTests,
+		nSeed, r.cfg.TestTimeout)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(mutants) == 0 {
+		return nil, 0, nil // no provably-wrong candidate available for this problem
+	}
+
+	out := make(map[prompt.JudgeStrictness]*SeededJudgeResult, len(levels))
+	for _, lvl := range levels {
+		out[lvl] = &SeededJudgeResult{Level: lvl}
+	}
+	for _, m := range mutants {
+		for _, lvl := range levels {
+			pass, _, jerr := r.judgeAt(ctx, lvl, judgeModel, problem, spec.API, m.Source)
+			if jerr != nil {
+				return out, len(mutants), jerr
+			}
+			out[lvl].Judged++
+			if pass {
+				out[lvl].FalseAccept++ // PASS on a provably-wrong program
+			}
+		}
+	}
+	return out, len(mutants), nil
 }
