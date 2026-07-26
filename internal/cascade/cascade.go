@@ -42,8 +42,20 @@ type Router struct {
 	// Observe, if set, receives a calibration record per solve.
 	Observe func(calibrate.Record)
 
+	// refs, if set, maps a problem id to an execution-validated reference
+	// solution's source. During calibration the profiler runs the reference
+	// against the freshly-generated test suite; if the reference is refuted the
+	// generated oracle is unsound (it rejects correct code, invariant #4) and the
+	// record is flagged OracleUnsound and excluded. Empty by default: reference
+	// validation is opt-in via `calibrate -refs`.
+	refs map[string]string
+
 	limit int // max concurrent verifications
 }
+
+// SetReferences installs the reference solutions used to detect an unsound
+// generated oracle during calibration. Keyed by problem id.
+func (r *Router) SetReferences(refs map[string]string) { r.refs = refs }
 
 // New builds a router. cert may be nil, in which case the run is uncertified.
 func New(cfg *config.Config, prov model.Provider, cert *calibrate.Certificate) (*Router, error) {
@@ -574,6 +586,38 @@ func (r *Router) acceptOne(ctx context.Context, src string, spec *prompt.Spec) (
 	defer ws.Remove() //nolint:errcheck // scratch dir
 	acc := r.ladder.Accept(ctx, ws, r.verifyOpts())
 	return acc, acc.CPUTime
+}
+
+// validateOracle checks whether this problem's generated test suite is a sound
+// oracle by running the known-correct reference solution through the full verify
+// ladder plus acceptance. A reference that fails means the generated tests
+// refute correct code, so the oracle is unsound on this problem (invariant #4)
+// and any label it produces is noise. Returns sound=true when no reference is
+// registered for the id (nothing to check against) so the default path is
+// unchanged. diag carries the reference's refutation output when unsound.
+//
+// Both partitions are exercised (visible via Run, hidden via Accept) because a
+// bug in either rejects correct candidates and inflates the measured risk.
+func (r *Router) validateOracle(ctx context.Context, id string, spec *prompt.Spec) (sound bool, diag string) {
+	ref, ok := r.refs[id]
+	if !ok {
+		return true, ""
+	}
+	rep, acc, _, err := r.verifyOne(ctx, ref, spec)
+	if err != nil {
+		return false, fmt.Sprintf("reference workspace error: %v", err)
+	}
+	if !rep.OK {
+		return false, fmt.Sprintf("reference refuted at visible stage %s: %s", rep.FailedAt, strings.TrimSpace(rep.Diagnostic))
+	}
+	if acc == nil || !acc.OK {
+		stage, diag := "hidden", ""
+		if acc != nil {
+			stage, diag = acc.FailedAt.String(), acc.Diagnostic
+		}
+		return false, fmt.Sprintf("reference refuted at %s stage: %s", stage, strings.TrimSpace(diag))
+	}
+	return true, ""
 }
 
 // repairLoop feeds the exact verifier diagnostic back to the same tier.

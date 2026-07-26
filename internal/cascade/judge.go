@@ -160,6 +160,14 @@ func (r *Router) ProfilePaired(ctx context.Context, id, problem, judgeModel stri
 	execRec = &calibrate.Record{ID: id, Problem: problem, Shadow: true}
 	judgeRec = &calibrate.Record{ID: id, Problem: problem, Shadow: true}
 
+	// Both arms rule on the same generated tests, so an unsound oracle taints
+	// both. Flag each; calibration excludes them (invariant #4). The execution
+	// arm's soundness check is exact here — it uses the same held-out tests.
+	if sound, diag := r.validateOracle(ctx, id, spec); !sound {
+		execRec.OracleUnsound, execRec.OracleUnsoundDiag = true, diag
+		judgeRec.OracleUnsound, judgeRec.OracleUnsoundDiag = true, diag
+	}
+
 	for k, tier := range r.cfg.Tiers {
 		if err := ctx.Err(); err != nil {
 			return execRec, judgeRec, err

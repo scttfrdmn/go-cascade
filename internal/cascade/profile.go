@@ -28,6 +28,14 @@ func (r *Router) Profile(ctx context.Context, id, problem string) (*calibrate.Re
 	}
 	rec := &calibrate.Record{ID: id, Problem: problem, Shadow: true}
 
+	// If a reference is registered, check the generated oracle is sound before
+	// trusting any label it produces (invariant #4). Tiers are still profiled so
+	// the record is complete, but an unsound oracle is excluded from calibration.
+	if sound, diag := r.validateOracle(ctx, id, spec); !sound {
+		rec.OracleUnsound = true
+		rec.OracleUnsoundDiag = diag
+	}
+
 	for k, tier := range r.cfg.Tiers {
 		if err := ctx.Err(); err != nil {
 			return rec, err

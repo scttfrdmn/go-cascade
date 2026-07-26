@@ -1,0 +1,11 @@
+{
+  "_comment": "Go-specialist bottom-tier experiment (2:1:1 fan-out). Tier 0 is Llama 4 Maverick 17B — the cheapest strong non-Claude coder on this Bedrock account (no true Go-only specialist exists there). Its prices are the REAL us-west-2 on-demand rates from the AWS Pricing API ($0.24/MTok in, $0.97/MTok out), ~4x cheaper than Haiku. Mid/large keep Claude at the same illustrative list prices every prior run used, so cross-run cost comparison holds. test_model=sonnet-4-6 differs from every tier (invariant #3). Fan-out 2:1:1 restores multi-sample behavioural clustering at the cheap tier (1:1:1 starved it) while staying far below the default 5:2:1.",
+  "test_model": "us.anthropic.claude-sonnet-4-6",
+  "test_input_usd_per_mtok": 3.0,
+  "test_output_usd_per_mtok": 15.0,
+  "tiers": [
+    {"name":"small","model_id":"us.meta.llama4-maverick-17b-instruct-v1:0","input_usd_per_mtok":0.24,"output_usd_per_mtok":0.97,"samples":2,"repair_depth":2,"temperature":0.8},
+    {"name":"mid","model_id":"us.anthropic.claude-sonnet-4-5-20250929-v1:0","input_usd_per_mtok":3.0,"output_usd_per_mtok":15.0,"samples":1,"repair_depth":2,"temperature":0.4},
+    {"name":"large","model_id":"us.anthropic.claude-opus-4-5-20251101-v1:0","input_usd_per_mtok":5.0,"output_usd_per_mtok":25.0,"samples":1,"repair_depth":2,"temperature":0.2}
+  ]
+}

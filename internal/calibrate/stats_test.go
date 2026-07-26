@@ -2,6 +2,7 @@ package calibrate
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -250,5 +251,47 @@ func TestCalibrateExcludesContaminatedRecords(t *testing.T) {
 	}
 	if cert.NExcluded != 1 || cert.N != 1 {
 		t.Errorf("want 1 excluded and n=1, got excluded=%d n=%d", cert.NExcluded, cert.N)
+	}
+}
+
+// A record whose generated tests refuted the reference solution is an unsound
+// oracle: its labels are noise and must not contribute to the risk estimate, or
+// spec-model test bugs would inflate the certified risk (see invariant #4).
+func TestCalibrateExcludesOracleUnsoundRecords(t *testing.T) {
+	// Two records both label their (wrong) candidate correct. One is flagged
+	// oracle-unsound; excluding it must leave n=1 and, critically, drop the
+	// unsound record's spurious label from the count.
+	recs := []Record{
+		{ID: "buggy-test", OracleUnsound: true, OracleUnsoundDiag: "reference refuted at test stage",
+			Tiers: []TierObs{{Tier: "a", Score: 1, Correct: true, Cost: 0.001}}},
+		{ID: "clean", Tiers: []TierObs{{Tier: "a", Score: 1, Correct: true, Cost: 0.001}}},
+	}
+	cert, err := Calibrate(recs, []string{"a"}, Options{Alpha: 0.5, Delta: 0.1, Step: 0.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cert.NOracleUnsound != 1 || cert.N != 1 {
+		t.Errorf("want 1 oracle-unsound excluded and n=1, got unsound=%d n=%d", cert.NOracleUnsound, cert.N)
+	}
+	// The contamination and oracle-unsound counts are independent tallies.
+	if cert.NExcluded != 0 {
+		t.Errorf("oracle-unsound must not be counted as contaminated: got NExcluded=%d", cert.NExcluded)
+	}
+}
+
+// When every record is oracle-unsound there is nothing sound to calibrate on,
+// and the error must name the spec-model test bug rather than silently
+// certifying against noise.
+func TestCalibrateAllOracleUnsoundErrors(t *testing.T) {
+	recs := []Record{
+		{ID: "a", OracleUnsound: true, Tiers: []TierObs{{Tier: "a", Score: 1, Correct: true, Cost: 0.001}}},
+		{ID: "b", OracleUnsound: true, Tiers: []TierObs{{Tier: "a", Score: 1, Correct: true, Cost: 0.001}}},
+	}
+	_, err := Calibrate(recs, []string{"a"}, Options{Alpha: 0.5, Delta: 0.1, Step: 0.5})
+	if err == nil {
+		t.Fatal("expected an error when all records are oracle-unsound")
+	}
+	if !strings.Contains(err.Error(), "oracle-unsound") {
+		t.Errorf("error should explain the oracle-unsound exclusion, got: %v", err)
 	}
 }

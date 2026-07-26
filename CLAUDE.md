@@ -76,7 +76,15 @@ a test, but the tests will not catch every way of violating them.
    risk budget. Any change that makes a stage probabilistic (a flaky check, a
    timeout treated as a pass, an LLM-based stage) breaks the central argument
    that verification reduces cost at fixed risk. If you add a stage, it must be
-   sound or it must be modelled as a separate risk term.
+   sound or it must be modelled as a separate risk term. *Corollary:* the oracle
+   itself must be sound — a **generated** test suite that refutes correct code is
+   an unsound oracle and its labels are noise. `calibrate -refs <dir>` runs each
+   problem's execution-validated reference through the generated tests; a refuted
+   reference flags the record `OracleUnsound` and excludes it from calibration
+   (`Router.validateOracle`, mirrored on the `Contaminated` exclusion). Without
+   `-refs` the spec model's test bugs silently inflate the measured risk — this
+   is not hypothetical, it was observed live (spec model asserting a wrong
+   expected value / a mismatched function name on trivial problems).
 
 5. **Cache hits are verified, never predicted.** A retrieved solution is
    re-executed against the *new* query's tests. Do not add a similarity

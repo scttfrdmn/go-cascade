@@ -1,0 +1,11 @@
+{
+  "_comment": "Go-specialist bottom-tier experiment (3:2:1 fan-out). Identical to config.go-specialist-211.json except the fan-out is 3:2:1 — more cheap-tier routing signal and mid-tier repair headroom, at ~50% more cheap-tier spend. Paired with the 2:1:1 config, this maps the cost/routing-signal curve between the winning-but-starved 1:1:1 and the losing default 5:2:1. Llama 4 Maverick prices are the REAL us-west-2 on-demand rates ($0.24/$0.97). test_model=sonnet-4-6 differs from every tier (invariant #3).",
+  "test_model": "us.anthropic.claude-sonnet-4-6",
+  "test_input_usd_per_mtok": 3.0,
+  "test_output_usd_per_mtok": 15.0,
+  "tiers": [
+    {"name":"small","model_id":"us.meta.llama4-maverick-17b-instruct-v1:0","input_usd_per_mtok":0.24,"output_usd_per_mtok":0.97,"samples":3,"repair_depth":2,"temperature":0.8},
+    {"name":"mid","model_id":"us.anthropic.claude-sonnet-4-5-20250929-v1:0","input_usd_per_mtok":3.0,"output_usd_per_mtok":15.0,"samples":2,"repair_depth":2,"temperature":0.4},
+    {"name":"large","model_id":"us.anthropic.claude-opus-4-5-20251101-v1:0","input_usd_per_mtok":5.0,"output_usd_per_mtok":25.0,"samples":1,"repair_depth":2,"temperature":0.2}
+  ]
+}

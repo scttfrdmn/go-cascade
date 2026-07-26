@@ -9,6 +9,7 @@ import (
 	"github.com/scttfrdmn/go-cascade/internal/calibrate"
 	"github.com/scttfrdmn/go-cascade/internal/config"
 	"github.com/scttfrdmn/go-cascade/internal/model"
+	"github.com/scttfrdmn/go-cascade/internal/prompt"
 )
 
 func testConfig(t *testing.T) *config.Config {
@@ -66,6 +67,64 @@ func TestSolveEndToEnd(t *testing.T) {
 	}
 	if res.API == "" || res.VisibleTests == "" || res.HiddenTests == "" {
 		t.Error("the contract or one of the test partitions is missing")
+	}
+}
+
+// validateOracle must accept a spec whose tests pass the reference and reject a
+// spec whose tests refute it. This is the mechanism that turns a spec-model test
+// bug into a skipped problem instead of a spurious model error (invariant #4).
+func TestValidateOracleDetectsUnsoundTests(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs the reference against generated tests")
+	}
+	r := newRouter(t, testConfig(t), nil)
+	ctx := context.Background()
+
+	const ref = `package solution
+
+// Double returns n*2.
+func Double(n int) int { return n * 2 }
+`
+	const api = `package solution
+
+// Double returns n*2.
+func Double(n int) int { panic("not implemented") }
+`
+	soundSpec := &prompt.Spec{
+		API: api,
+		VisibleTests: `package solution
+import "testing"
+func TestVDouble(t *testing.T) { if Double(3) != 6 { t.Fatal("want 6") } }`,
+		HiddenTests: `package solution
+import "testing"
+func TestHDoubleZero(t *testing.T) { if Double(0) != 0 { t.Fatal("want 0") } }`,
+	}
+	r.SetReferences(map[string]string{"dbl": ref})
+	if ok, diag := r.validateOracle(ctx, "dbl", soundSpec); !ok {
+		t.Errorf("sound generated tests were flagged unsound: %s", diag)
+	}
+
+	// An id with no registered reference is unchecked: the default path is
+	// unchanged for benchmarks that ship no reference.
+	if ok, _ := r.validateOracle(ctx, "no-ref", soundSpec); !ok {
+		t.Error("a problem with no reference must pass the check unchanged")
+	}
+
+	// A hidden test asserting the wrong expected value refutes the correct
+	// reference — exactly the scale_two_sum failure mode observed live.
+	buggySpec := &prompt.Spec{
+		API:          api,
+		VisibleTests: soundSpec.VisibleTests,
+		HiddenTests: `package solution
+import "testing"
+func TestHDoubleWrong(t *testing.T) { if Double(2) != 5 { t.Fatal("test asserts a wrong answer") } }`,
+	}
+	ok, diag := r.validateOracle(ctx, "dbl", buggySpec)
+	if ok {
+		t.Error("a test that refutes the correct reference must be flagged unsound")
+	}
+	if !strings.Contains(diag, "reference refuted") {
+		t.Errorf("diagnostic should explain the refutation, got: %q", diag)
 	}
 }
 
