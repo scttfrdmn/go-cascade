@@ -272,12 +272,18 @@ func collectRaceSites(src string) ([]mutation, *token.FileSet, *ast.File, error)
 
 // RaceKilledMutants returns up to n mutant sources that COMPILE and are refuted
 // by the race detector (`go test -race`). Each deletes one synchronization
-// statement, producing a genuine data race a reader is unlikely to catch — the
-// seed set for probing the judge's one observed blind spot (paper §3.1;
-// results/seeded-2026-07-25.md found η_fa=0 on logic defects but the sole live
-// η_fa was a race). Whether the mutant also flakes without -race is not a
-// filter: the reader-invisibility is intrinsic to the defect (a missing lock
-// reads as fine), and flakiness is precisely what a reader cannot rely on.
+// statement, producing a genuine data race — the seed set for probing the
+// judge's one observed blind spot (paper §3.1; the sole live η_fa in the study
+// was a race). Whether the mutant also flakes without -race is not a filter:
+// flakiness is precisely what a reader cannot rely on.
+//
+// CAVEAT (see results/race-seeded-2026-07-25.md): deletion leaves a visible
+// scar — a WaitGroup with Add/Done but no Wait, or a Lock with no Unlock — which
+// a competent reviewer catches by imbalance, not by reasoning about the race. So
+// these mutants test races-with-a-structural-tell, NOT the scar-free,
+// self-consistent racy code that was actually false-accepted live. A scar-free
+// operator (narrow a critical section, swap a goroutine capture) would be needed
+// for that class; sync-deletion is not it.
 func RaceKilledMutants(ctx context.Context, r *Runner, src, visible, hidden string, n, raceCount int, timeout time.Duration) ([]KilledMutant, error) {
 	sites, fset, f, err := collectRaceSites(src)
 	if err != nil {
