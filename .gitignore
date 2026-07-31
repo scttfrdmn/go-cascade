@@ -36,3 +36,7 @@ results/scaled-progress.txt
 results/scaled-out.txt
 results/flat-progress.txt
 results/flat-out.txt
+# Go-specialist experiment scratch (progress/stdout + interrupted partial re-run)
+results/gs*-progress.txt
+results/gs*-out.txt
+results/go-specialist-211-refs2.*.json

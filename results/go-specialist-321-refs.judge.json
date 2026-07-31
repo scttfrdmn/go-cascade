@@ -1,0 +1,2109 @@
+[
+  {
+    "id": "seq_longest_run",
+    "problem": "Return the length of the longest strictly increasing contiguous run in a slice of integers. Return 0 for an empty slice.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0058315957712069995
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0085592229147508
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0074453598744547
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "str_reverse_words",
+    "problem": "Given a string of words separated by single spaces, return the words in reverse order, joined by single spaces. There is no leading or trailing whitespace. Return the empty string unchanged.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0018567617422414
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.008054063403623399
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0064977692711578
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "str_anagram",
+    "problem": "Report whether two strings are anagrams of each other, comparing case-insensitively and ignoring spaces. All other characters are significant.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": false,
+        "cost_usd": 0.0023806221803844
+      },
+      {
+        "tier": "mid",
+        "score": 0.12085198061245214,
+        "correct": true,
+        "true_correct": false,
+        "cost_usd": 0.011361793601273401
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": false,
+        "cost_usd": 0.0078573875816797
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:9:6: undefined: IsAnagram",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "str_rle",
+    "problem": "Run-length encode a string: replace each maximal run of a repeated byte with the byte followed by the decimal count, e.g. \"aaabbc\" becomes \"a3b2c1\". The empty string encodes to the empty string.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0026092708164164
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.011454696301650798
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.011357629262616398
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "num_isqrt",
+    "problem": "Return the integer square root (the floor of the real square root) of a non-negative integer, without using floating-point arithmetic. Return 0 for input 0.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0005996875459304
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.015228718416103102
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0115775696342609
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:63:18: cannot use c.n (variable of type int) as uint64 value in argument to IntSqrt",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "num_gcd_slice",
+    "problem": "Return the greatest common divisor of all integers in a non-empty slice of positive integers.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0025464455359578
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.007172214102625001
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0062251993645086
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:7:12: undefined: GCD",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "num_is_prime",
+    "problem": "Report whether a given integer is prime. Integers less than 2 are not prime.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0015147747031883
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0081214510611922
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.006233164076257
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "num_digital_root",
+    "problem": "Repeatedly sum the decimal digits of a non-negative integer until a single digit remains, and return it. The digital root of 0 is 0.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0018601093869930001
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0059784424203438
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0067411300620656
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:8:25: cannot use n (variable of type int) as uint64 value in argument to DigitalRoot",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "search_insertion_index",
+    "problem": "Given a slice of integers sorted in ascending order and a target, return the leftmost index at which the target could be inserted to keep the slice sorted.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0019383351298711
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0073977155169578
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0062691733895953
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:7:9: undefined: SearchInsertPosition",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "slice_rotate_left",
+    "problem": "Return a new slice equal to the input rotated left by k positions, where k may exceed the length or be zero. The input slice must not be modified. An empty slice rotates to an empty slice.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0057593243127399
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0122492699008578
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0114792937501664
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "slice_most_frequent",
+    "problem": "Return the most frequently occurring integer in a non-empty slice. If several values tie for the highest count, return the smallest of them.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0024341199866914002
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0116401852086789
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0087004403525828
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:6:12: assignment mismatch: 1 variable but MostFrequent returns 2 values",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "str_balanced_brackets",
+    "problem": "Report whether a string of brackets is balanced, considering the three pairs (), [] and {}. Any other character makes the string invalid and the answer false. The empty string is balanced.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.002583587781175
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.012817639129125001
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0110412038421797
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "slice_merge_sorted",
+    "problem": "Merge two slices, each already sorted in ascending order, into a single ascending slice containing every element of both, including duplicates.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0020758758242672
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.014119832454599999
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0075092708929992
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "num_roman_to_int",
+    "problem": "Convert a valid Roman numeral string (uppercase, using I, V, X, L, C, D, M and standard subtractive notation) to its integer value.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0039915519375539
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.011835473011698402
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0093174124798117
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:22:10: undefined: FromRoman",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "num_popcount",
+    "problem": "Return the number of set bits (ones) in the binary representation of a non-negative integer.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0026487412128328
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0050864613359117
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.004405575451375
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:9:13: undefined: CountSetBits",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "str_longest_common_prefix",
+    "problem": "Return the longest common prefix of a slice of strings. If the slice is empty or the strings share no common prefix, return the empty string.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.07825661547924026,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0040441376253758
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.012771005592165601
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0086540142084
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "str_valid_ipv4",
+    "problem": "Report whether a string is a valid dotted-decimal IPv4 address: exactly four decimal octets separated by dots, each from 0 to 255, with no leading zeros (except the single digit 0) and no extra characters.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0062878568771172
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0141557828965922
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0217574194074625
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "slice_max_window_sum",
+    "problem": "Given a slice of integers and a window size k with 1 \u003c= k \u003c= len(xs), return the maximum sum of any k consecutive elements.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0019393966502616999
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0092255131195375
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0076411381878203006
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "str_first_unique",
+    "problem": "Return the index of the first byte in a string that appears exactly once. If every byte repeats or the string is empty, return -1.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0005216249552890999
+      },
+      {
+        "tier": "mid",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.006964122075925
+      },
+      {
+        "tier": "large",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.005961083797959401
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:10:9: undefined: FirstUniqueByteIndex",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "num_collatz_steps",
+    "problem": "Return the number of Collatz steps to reach 1 from a positive integer n, where each step maps even n to n/2 and odd n to 3n+1. The count for n=1 is 0.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0022863272075203
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0088079140732164
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0075976497856335996
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:42:26: cannot use tc.n (variable of type int) as uint64 value in argument to CollatzSteps",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "conc_parallel_map",
+    "problem": "Apply f to every element of a slice using at most workers goroutines, returning the results in input order. A workers value of zero or less means one worker per element. An empty input yields an empty result.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.2535099661042376,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0068300868461055
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.013262006097842997
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.012384272275500001
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "conc_parallel_sum",
+    "problem": "Compute the sum of a slice of integers using up to workers goroutines to add disjoint partitions concurrently. The result must equal the sequential sum for any partitioning. An empty slice sums to 0.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.07825661547924026,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0068543707879726995
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0156624840287781
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.011435917215375
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "conc_safe_counter",
+    "problem": "Given a number of goroutines and a per-goroutine increment count, start that many goroutines, have each increment a shared counter that many times, wait for all to finish, and return the final total. Access to the counter must be free of data races.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0025130276139328
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.01054074781025
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.009020873141769501
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:10:12: undefined: ConcurrentCounter",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "conc_parallel_filter",
+    "problem": "Return the elements of a slice for which keep returns true, in input order, evaluating keep on up to workers goroutines concurrently. An empty input yields an empty result.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0060773601576382995
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0203191546885695
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0162114676114695
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:10:30: cannot use (func(x int) bool literal) (value of type func(x int) bool) as int value in argument to ParallelFilter",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "conc_fan_in_merge",
+    "problem": "Given several receive-only channels each yielding integers in ascending order and then closing, return a single ascending slice of all their values. Drain the channels concurrently.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0014608066780570001
+      },
+      {
+        "tier": "mid",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0197882354455406
+      },
+      {
+        "tier": "large",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0192016864316742
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:32:9: undefined: MergeChannels",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "conc_first_success",
+    "problem": "Given a slice of functions each returning (int, error), run them concurrently and return the result of the first one to succeed with a nil error, cancelling the rest via the provided context. If all fail, return the last error observed.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.006556948669448499
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0210442997709891
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0174895045625586
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:13:14: undefined: Race",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "conc_parallel_histogram",
+    "problem": "Count the occurrences of each integer in a slice, sharding the work across up to workers goroutines and merging the partial counts into one map. The result must equal a sequential tally. Access to shared state must be race-free.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.07825661547924026,
+        "correct": false,
+        "true_correct": false,
+        "cost_usd": 0.0073708783613844
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.02005903653835
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0160004431378469
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:30:9: undefined: CountOccurrences",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "conc_bounded_pipeline",
+    "problem": "Given a slice, apply stage1 then stage2 to each element, where the two stages run as concurrent pipeline steps connected by a channel, and return the results in input order. An empty input yields an empty result.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.001340808250118
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0221138886029953
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0160161643747945
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_conc_rate_limiter",
+    "problem": "Implement a token-bucket rate limiter with capacity and refill count. Allow(n) atomically consumes n tokens if at least n are available and reports whether it succeeded; refill adds up to capacity. It must be safe for concurrent callers, and the total number of tokens ever granted must never exceed what the bucket could supply. Model the interface so correctness under concurrency is testable.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0060238900657562005
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.028015737987545298
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.024196512883046903
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:16:2: undefined: NewTokenBucket",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "hard_conc_once_init",
+    "problem": "Provide a lazily-initialised cache: the first call to Get(key, compute) for a key runs compute exactly once even under concurrent callers, and every caller for that key observes the same value. compute is expensive and must never run twice for the same key.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.07825661547924026,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0071160530632202994
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.022839567805372697
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0106802624600867
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:12:8: undefined: Cache",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "hard_conc_ordered_fanout",
+    "problem": "Process a slice concurrently with up to workers goroutines and return results in input order, but each result also carries the index; the shared progress counter reporting how many items are done must be readable concurrently and equal len(input) at the end. Results must be exactly one per input.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.2535099661042376,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0033593226289352
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.023498898578685902
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0241444490579828
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:12:2: undefined: ResetProgress",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "hard_num_mean_overflow",
+    "problem": "Return the integer mean (floor of the average) of a non-empty slice of int64 values. The result must be correct even when the sum of the values would overflow int64.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0005556670996179999
+      },
+      {
+        "tier": "mid",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.019204336316043
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.025922207314583598
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:13:9: undefined: Mean",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "hard_num_midpoint",
+    "problem": "Return the index midpoint (low+high)/2 rounding down, given two non-negative int indices low \u003c= high that may both be near the maximum int value. The computation must not overflow.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0016363879305219
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0055158724332562
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0047891765760758
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_num_pow_mod",
+    "problem": "Compute (base^exp) mod m for non-negative int64 base, exp and positive m, returning a value in [0, m). It must be correct for large base and m where intermediate products would overflow int64 if multiplied naively.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": false,
+        "true_correct": false,
+        "cost_usd": 0.0058680205668719
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0222963668217453
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0212371348938359
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:14:10: undefined: ModPow",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "hard_slice_dedup_inplace",
+    "problem": "Given a slice sorted in ascending order, remove consecutive duplicates in place and return the prefix length k such that the first k elements are the distinct values in order. The caller reuses the original backing array, so elements beyond k may be anything but the first k must be correct.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0021584307556305003
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0106773926575539
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0072130887251203
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:7:7: undefined: RemoveDuplicates",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "hard_slice_no_mutate_reverse",
+    "problem": "Return a new slice containing the elements of the input in reverse order. The input slice must not be modified in any way, including its backing array.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0015997000798367
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0067074476871867
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.005197630382050801
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:18:6: undefined: Reverse",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "hard_slice_partition_stable",
+    "problem": "Partition a slice into elements satisfying a predicate followed by those that do not, preserving the original relative order within each group (a stable partition). Return the new slice; do not modify the input.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.2535099661042376,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0021992463416024
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0106999509442734
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0098375969918422
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:112:25: cannot use input (variable of type []item) as []int value in argument to StablePartition",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "hard_str_utf8_reverse",
+    "problem": "Reverse a UTF-8 string by Unicode code point (rune), not by byte, so multi-byte characters are preserved intact. The empty string reverses to the empty string.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.00051851805855
+      },
+      {
+        "tier": "mid",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.006223154585540599
+      },
+      {
+        "tier": "large",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0050813059816281
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:21:10: undefined: ReverseString",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "hard_str_word_count",
+    "problem": "Count words in a string, where a word is a maximal run of non-whitespace characters and whitespace is any Unicode space. Leading, trailing, and repeated separators must not create empty words; a string that is empty or all whitespace has zero words.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0021637675078797
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0083548732937406
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0072329341614047
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_map_group_stable",
+    "problem": "Given a slice of (key,value) pairs, return a map from key to the slice of its values in first-seen order. Iterating the input once, values for each key must appear in the order they occurred in the input.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0019731920252914
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0075465362935117
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0064050973069719
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:15:9: undefined: GroupByKey",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_sum_digits",
+    "problem": "Return the sum of the decimal digits of a non-negative integer. The sum for 0 is 0.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0016289759287133002
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0058779213697437
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0050849124873789
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:7:12: undefined: DigitSum",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_count_vowels",
+    "problem": "Count the number of ASCII vowels (a, e, i, o, u, case-insensitive) in a string.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0017655040222086
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0082322729775867
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0071930343021054995
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_fizzbuzz",
+    "problem": "Given a positive integer n, return a slice of n strings where position i (1-based) is \"Fizz\" if i is divisible by 3, \"Buzz\" if divisible by 5, \"FizzBuzz\" if divisible by both, and the decimal string of i otherwise.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0007755080160297
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.012061431314526602
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0101892109510031
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_factorial",
+    "problem": "Return n! (factorial) as a uint64 for 0 \u003c= n \u003c= 20. The factorial of 0 is 1.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0021094951415469004
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.006367424037192201
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0055009541679031
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:31:23: cannot use uint64(n) (value of type uint64) as int value in argument to Factorial",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_reverse_int",
+    "problem": "Reverse the decimal digits of a 32-bit signed integer, preserving sign. If the reversed value overflows int32, return 0. For example 123 becomes 321 and -120 becomes -21.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.005836633934610099
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.014410510592937499
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0142810038251289
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:10:12: undefined: ReverseInt32",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_is_palindrome",
+    "problem": "Report whether a string is a palindrome considering only ASCII alphanumeric characters and ignoring case. The empty string is a palindrome.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0026003681544164
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.014277800379547598
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0112056172887328
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_fibonacci",
+    "problem": "Return the nth Fibonacci number as a uint64, where fib(0)=0, fib(1)=1, for 0 \u003c= n \u003c= 93.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": false,
+        "cost_usd": 0.0054998941185274005
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": false,
+        "cost_usd": 0.008886597530767199
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": false,
+        "cost_usd": 0.0075727688330016005
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:7:12: undefined: Fib",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_max_subarray",
+    "problem": "Return the maximum sum of any non-empty contiguous subarray of a non-empty slice of integers (Kadane's algorithm).",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0019814327145516
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0079933478519297
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0084768816668234
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_two_sum",
+    "problem": "Given a slice of integers and a target, return the indices of the two distinct elements that sum to the target, smallest index first. Exactly one such pair exists. Return them as a two-element array.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": false,
+        "cost_usd": 0.0032457723237094
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": false,
+        "cost_usd": 0.008418421192241399
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": false,
+        "cost_usd": 0.0075619991230336005
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound": true,
+    "oracle_unsound_diag": "reference refuted at VA:accept stage: hidden_test.go:85: TwoSum([1,2,10,4,5,-3], 7) = [1 4], want [2 5]\n--- FAIL: TestHResultIsOrdered (0.00s)\nFAIL\nFAIL\tgocascade/candidate\t0.110s",
+    "shadow": true
+  },
+  {
+    "id": "scale_title_case",
+    "problem": "Capitalize the first ASCII letter of each space-separated word in a string and lowercase the rest of each word. Words are separated by single spaces with no leading or trailing whitespace.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": false,
+        "true_correct": false,
+        "cost_usd": 0.0058277304214399
+      },
+      {
+        "tier": "mid",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0120480367323789
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0168943303454805
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound": true,
+    "oracle_unsound_diag": "reference refuted at VA:accept stage: hidden_test.go:47: TitleCase(\"1abc\") = \"1abc\"; want \"1Abc\"\n--- FAIL: TestHDigitLeadingWord (0.00s)\n    hidden_test.go:98: TitleCase(\"!hello\") = \"!hello\"; want \"!Hello\"\n--- FAIL: TestHPunctuationLeadingWord (0.00s)\nFAIL\nFAIL\tgocascade/candidate\t0.112s",
+    "shadow": true
+  },
+  {
+    "id": "scale_count_bits_set",
+    "problem": "Given a non-negative integer n, return a slice of length n+1 where element i is the number of set bits in i.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0016671314501343001
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.006051813511116401
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.007388985921121099
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_gcd_pair",
+    "problem": "Return the greatest common divisor of two non-negative integers, not both zero. gcd(0, x) is x.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0017253676328383002
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.006205119387977401
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.005368881654653901
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_flatten",
+    "problem": "Flatten a slice of int slices into a single slice, preserving order. Nil or empty inner slices contribute nothing. The result for an empty outer slice is a non-nil empty slice.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0019044955974960999
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.008426283961364099
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0072570338443594005
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_chunk",
+    "problem": "Split a slice of integers into consecutive chunks of at most size n (n \u003e= 1), preserving order; the final chunk may be shorter. An empty input yields a non-nil empty slice of chunks.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0025669447104601003
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0100982364059649
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.008765774722482
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_unique_sorted",
+    "problem": "Return the distinct integers of a slice, sorted ascending. An empty input yields a non-nil empty slice.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.07825661547924026,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0018758030014922001
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.008142692226291399
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.006957654233924999
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:9:9: undefined: Distinct",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_count_words",
+    "problem": "Count space-separated words in a string, where words are maximal runs of non-space characters. Leading, trailing, and repeated spaces do not create empty words; the empty or all-space string has zero words. Only the ASCII space character separates words.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0022025545083178997
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0087387072355133
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.007421642106532799
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_clamp",
+    "problem": "Clamp an integer x to the inclusive range [lo, hi] where lo \u003c= hi: return lo if x \u003c lo, hi if x \u003e hi, else x.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0017303557707156
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.006111359332767999
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0052936862780539
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_running_max",
+    "problem": "Given a slice of integers, return a slice of the same length where element i is the maximum of the input elements from 0 through i. An empty input yields a non-nil empty slice.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0005876016103383
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.008833370622633601
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.006649653310678901
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "scale_caesar",
+    "problem": "Apply a Caesar cipher to a string: shift each ASCII letter by k positions within its case (wrapping a-z and A-Z), leaving all other bytes unchanged. k may be any integer, including negative or larger than 26.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.0065889789342070005
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.017568217010668
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.011553908557070301
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:7:9: undefined: CaesarCipher",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_intersection",
+    "problem": "Return the distinct integers present in both of two slices, sorted ascending. The result for no overlap is a non-nil empty slice.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0006435651751578
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.011478912844457
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.010229834591341401
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:10:9: undefined: Intersect",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_binary_to_int",
+    "problem": "Parse a non-empty string of '0' and '1' characters as an unsigned binary number and return its value as a uint64. Any other character makes the input invalid; report validity with a second boolean return.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0047579139885687
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": true,
+        "cost_usd": 0.014619946907868699
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.008584997585779701
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:8:11: undefined: ParseBinary",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_move_zeros",
+    "problem": "Return a new slice with all zero elements moved to the end, preserving the relative order of the non-zero elements. The input must not be modified.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0027705116587585996
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.009605298778654698
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0073650178610977
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:9:9: undefined: MoveZerosToEnd",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_average",
+    "problem": "Return the arithmetic mean of a non-empty slice of float64 values as a float64.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.001381341988357
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0046623755809125
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.003989263922682
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:9:9: undefined: Mean",
+    "oracle_inconclusive": true,
+    "shadow": true
+  },
+  {
+    "id": "scale_hamming",
+    "problem": "Return the Hamming distance between two equal-length byte strings: the number of positions at which the bytes differ. If the lengths differ, report an error.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.5257600518749918,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0022409078181625
+      },
+      {
+        "tier": "mid",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0092626019025211
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.007806032554114101
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound_diag": "reference does not fit generated API (V3:vet): # gocascade/candidate\n# [gocascade/candidate]\nvet: ./hidden_test.go:6:15: undefined: HammingDistance",
+    "oracle_inconclusive": true,
+    "shadow": true
+  }
+]

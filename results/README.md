@@ -6,19 +6,24 @@ never sent a query to a real model — every number came from the deterministic
 mock. These runs replace that gap with measurements, and with an honest account
 of what they do and do not establish.
 
-**One-line summary:** across ten live experiments the executable oracle was
+**One-line summary:** across eleven live experiments the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
 that widened with scale (α 0.27 vs 0.32 at n=28; **0.19 vs 0.30 at n=64**)** —
-the paper's primary §5.5 outcome, demonstrated live. A deployable α (≤0.05) stays
-out of reach, and the n=64 run shows why: the ceiling is the models' ~11% error
-rate, not sample size. The judge's
+the paper's primary §5.5 outcome, demonstrated live. The judge's
 *only* confirmed dangerous failure (passing wrong code) was a **data race** it
 could not see by reading; everywhere else it erred by over-rejecting correct
 code, which is what costs it the certification race. The §3.1 danger (a judge
 certifying below its true risk) is **real but narrow** — it lives in
 reading-invisible defects — but the judge loses to the executable oracle on
-certification mainly by over-rejection, not over-acceptance.
+certification mainly by over-rejection, not over-acceptance. Two later
+experiments moved the value story: a cheap non-Claude **bottom tier** at an
+intermediate fan-out makes the **cascade beat always-frontier on cost by
+3.2–3.4×** with the routing signal intact; and a **reference-validation gate**
+showed the earlier "~11% accuracy floor" was **partly spec-model test noise** —
+excluding tests that refute a known-correct reference **certifies α=0.19** where
+the untriaged runs could not (though the gate adjudicates only ~40% of the
+benchmark, so a deployable α still needs the benchmark's APIs pinned).
 
 ## The central question
 
@@ -40,7 +45,7 @@ comparison was argued, never demonstrated. These runs demonstrate the pieces.
   floor needs n ≥ 22 even at zero errors), so the *risk numbers* are point
   estimates; the *oracle-divergence* counts are the signal.
 
-## The ten experiments
+## The eleven experiments
 
 Each row links to its full write-up. "η_fa" = judge passed a program the tests
 refute (the dangerous direction). "β" = judge failed a program the tests accept.
@@ -58,6 +63,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 8 | [scaled certification](scaled-certification-2026-07-25.md) | same, at **n=64** | **execution α=0.19 < judge α=0.30** — gap widens; floor is model accuracy, not n |
 | 9 | [cost baseline](cost-baseline-2026-07-25.md) | **cascade vs single-model policies** (cost + truth) | at default 5:2:1, **always-frontier wins** — cascade is priciest; the fan-out erases the cheap tier's edge |
 | 10 | [fan-out test](fanout-2026-07-25.md) | same, at **1:1:1** fan-out | **cascade wins on cost — 2.75× cheaper than frontier** — confirming the fan-out was the culprit (risk noisy) |
+| 11 | [Go-specialist tier + oracle noise](go-specialist-2026-07-25.md) | cheap **non-Claude bottom tier** (Llama 4 Maverick) at **2:1:1 / 3:2:1** | **cascade beats frontier on cost 3.2–3.4× with sample count intact**; and the reference gate shows the "floor" was **partly spec-model test noise** — excluding unsound tests **certifies α=0.19** where the untriaged run could not |
 
 ### How each run answered the previous one's limitation
 
@@ -108,12 +114,25 @@ The value is in the chain, not any single number:
    cheaper than always-frontier** at no worse risk. The cost disadvantage was a
    tuning artifact — the fan-out is the dominant cost lever. (Risk noisy at n=64;
    1:1:1 also starves the routing signal, so the sweet spot is intermediate.)
+11. **Go-specialist tier** put Llama 4 Maverick (a cheap non-Claude coder, real
+   Bedrock price $0.24/$0.97) in tier 0 at **2:1:1 and 3:2:1** — the intermediate
+   fan-outs 1:1:1 skipped. The cascade **beat always-frontier on cost by 3.2–3.4×
+   with the sample count intact** (no starved clustering). Chasing why trivial
+   problems "failed at every tier" then exposed a confound behind *every* prior
+   risk number: the oracle runs the **spec model's generated tests**, which can
+   assert wrong values or wrong function names — labelling correct code as wrong.
+   A new **reference-validation gate** (`calibrate -refs`) excludes problems whose
+   tests refute a known-correct reference; doing so **certified α=0.19** on both
+   configs where the untriaged runs could not. The floor was **partly test noise,
+   not model accuracy** — though the gate can only adjudicate ~40% of the
+   benchmark (a reference/spec API-name mismatch leaves the rest inconclusive).
 
-### Two candidate levers raised during this work (not yet run)
+### Two candidate levers — one now run, one still open
 
-- **A cheaper/more-accurate bottom tier** (e.g. a Go-specialist small model)
-  attacks both losing terms at once: fewer escalations *and* cheaper cheap-tier
-  samples, and — if more accurate — a lower risk floor (the α=0.05 blocker).
+- **A cheaper/more-accurate bottom tier** (e.g. a Go-specialist small model):
+  **run** (experiment 11). It delivered the cost win but *not* a lower floor — the
+  floor is a top-tier property under a sound oracle, and the apparent excess was
+  spec-model test noise, not the bottom tier.
 - **A generalist-instructs-specialist arm**: a strong general model rewrites the
   problem into a precise spec/plan that a narrow code model executes. Testable in
   this harness as a two-stage tier. Both are config/prompt-level experiments the
@@ -160,20 +179,32 @@ underweights, but one that still favours the executable oracle.
   self-consistent racy code that was actually false-accepted. A **scar-free race
   operator** (narrow a critical section, swap a goroutine capture) is needed to
   probe that class. **This is the recommended next experiment.**
-- **Cost baseline: RUN (experiments 9–10) — cascade loses at default config,
-  wins when tuned.** At the default **5:2:1** fan-out, always-frontier beat the
-  cascade (same risk, lower cost) — the cascade was priciest
-  ([`cost-baseline`](cost-baseline-2026-07-25.md)). Flattening to **1:1:1**
-  flipped it: the cascade came in **2.75× cheaper than always-frontier**
-  ($0.0029 vs $0.0080) at no worse risk ([`fan-out test`](fanout-2026-07-25.md)).
-  So the cost disadvantage was a **tuning artifact**, not fundamental — the sample
-  fan-out is the dominant cost lever, exactly as predicted. **Caveats:** the risk
-  column is noisy at n=64 (always-frontier's own risk moved 0.094→0.141 between
-  runs from sampling variance — do not compare risk across runs), and 1:1:1
-  starves the behavioural-clustering signal the routing score needs, so the sweet
-  spot is likely intermediate. The solid, structural claim is the cost win; a
-  confident "cheaper at equal correctness" still wants larger n and a
-  signal-preserving fan-out.
+- **Cost baseline: RUN (experiments 9–11) — cascade loses at default config,
+  wins when tuned, and wins with a cheap bottom tier at a signal-preserving
+  fan-out.** At the default **5:2:1** fan-out, always-frontier beat the cascade
+  (same risk, lower cost) — the cascade was priciest
+  ([`cost-baseline`](cost-baseline-2026-07-25.md)). Flattening to **1:1:1** flipped
+  it (2.75× cheaper, [`fan-out test`](fanout-2026-07-25.md)) but starved the
+  routing signal. A **cheap non-Claude bottom tier (Llama 4 Maverick) at 2:1:1 /
+  3:2:1** got the best of both: **3.2–3.4× cheaper than always-frontier with the
+  sample count intact** ([`Go-specialist`](go-specialist-2026-07-25.md)). So the
+  cost disadvantage was a **tuning artifact** — the sample fan-out is the dominant
+  lever. **Caveat that persists:** the *risk* column is sampling-noisy at n=64
+  (frontier's own risk moved 0.094→0.172 across fresh draws — never compare risk
+  across runs). The robust claim is **"much cheaper (1.4–5.3× across runs) at no
+  systematically worse risk"**, not "strictly lower risk."
+- **The measured risk floor was partly spec-model test noise (experiment 11).**
+  The calibration oracle runs the *generated* tests; when the spec model asserts a
+  wrong value or a mismatched function name it labels correct code as wrong. A new
+  `calibrate -refs` gate validates the generated tests against an execution-checked
+  reference and excludes the unsound ones — enough to **certify α=0.19 on both
+  Go-specialist configs** where the untriaged runs could not. **But** the gate
+  adjudicates only ~40% of the benchmark (references use canonical API names, the
+  spec model invents its own, so most references cannot compile against the
+  generated tests → inconclusive). So the floor is now *bracketed* rather than
+  measured, and a clean deployable-α claim still needs the benchmark to **pin each
+  problem's API signature**. This reframes the earlier "the floor is model
+  accuracy" conclusion (experiment 8): part of that floor was never model error.
 - **Judge β depends on the prompt.** The judge ran with "when in doubt, FAIL";
   its false-rejection counts would move under a different operating point. The
   strictness knob exists (`--judge-strictness`) but was only exercised on small n.
@@ -210,4 +241,4 @@ AWS_PROFILE=<profile> go-cascade calibrate --provider=bedrock \
 Raw records (`*.execution.json`, `*.judge.json`, per-level and seeded JSON) are
 committed alongside each write-up so any α can be re-evaluated offline.
 
-Total live spend for all ten experiments plus diagnosis: roughly $33–37.
+Total live spend for all eleven experiments plus diagnosis: roughly $59–63.
