@@ -129,6 +129,12 @@ a test, but the tests will not catch every way of violating them.
   Do not ungate it.
 - **Bedrock model IDs churn.** They are configuration, never constants. Use
   `go-cascade models` (calls `ListInferenceProfiles`) to discover real ones.
+- **Long `calibrate` runs checkpoint and resume.** A paired run over n=64 takes
+  ~60–90 min and can be SIGTERM'd externally (issue #21). The loop writes records
+  after *every* problem, treats a cancelled context as a clean stop (not a
+  per-problem "skip"), and prints an INTERRUPTED hint. Re-run the identical command
+  with `-resume` to skip already-recorded ids and finish the rest. Do not revert to
+  writing records only at the end — a kill then discards the whole run.
 
 ## Testing conventions
 
