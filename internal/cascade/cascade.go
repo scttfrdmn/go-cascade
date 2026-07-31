@@ -50,12 +50,24 @@ type Router struct {
 	// validation is opt-in via `calibrate -refs`.
 	refs map[string]string
 
+	// pinnedAPI, if set, maps a problem id to the exact API block the spec model
+	// must write its tests against (extracted from the reference). It removes the
+	// name/signature mismatch that otherwise leaves the reference unable to compile
+	// against the generated tests, so the -refs gate can reach a verdict on the
+	// whole benchmark instead of ~40% of it. Empty by default; opt-in via
+	// `calibrate -pin-api` (which implies -refs). Read-only after construction.
+	pinnedAPI map[string]string
+
 	limit int // max concurrent verifications
 }
 
 // SetReferences installs the reference solutions used to detect an unsound
 // generated oracle during calibration. Keyed by problem id.
 func (r *Router) SetReferences(refs map[string]string) { r.refs = refs }
+
+// SetPinnedAPIs installs the per-problem API contracts the spec model must write
+// its tests against. Keyed by problem id. See the pinnedAPI field.
+func (r *Router) SetPinnedAPIs(apis map[string]string) { r.pinnedAPI = apis }
 
 // New builds a router. cert may be nil, in which case the run is uncertified.
 func New(cfg *config.Config, prov model.Provider, cert *calibrate.Certificate) (*Router, error) {
@@ -139,7 +151,7 @@ func (r *Router) Solve(ctx context.Context, problem string) (*Result, error) {
 
 	// Phase 1: the contract. Tests are written before any solution exists and
 	// by a different model, which is what keeps the oracle independent.
-	spec, err := r.spec(ctx, problem, res)
+	spec, err := r.spec(ctx, problem, "", res)
 	if err != nil {
 		return res, fmt.Errorf("spec phase: %w", err)
 	}
@@ -229,8 +241,14 @@ func (r *Router) record(res *Result) calibrate.Record {
 }
 
 // spec derives or retrieves the API contract and both test partitions.
-func (r *Router) spec(ctx context.Context, problem string, res *Result) (*prompt.Spec, error) {
+func (r *Router) spec(ctx context.Context, problem, pinnedAPI string, res *Result) (*prompt.Spec, error) {
+	// A pinned spec is a different oracle than an unpinned one for the same
+	// problem (its tests are written against a fixed API), so it must not collide
+	// with an unpinned cache entry. Salt the cache key with the pinned API.
 	ph := cache.ProblemHash(problem)
+	if pinnedAPI != "" {
+		ph = cache.ProblemHash(problem + "\x00pinned\x00" + pinnedAPI)
+	}
 	if s, ok := r.cache.GetSpec(ph); ok {
 		res.Trace = append(res.Trace, Step{
 			Stage: "spec", Action: ActAccept, Reason: "test cache hit: oracle reused at zero model cost",
@@ -238,11 +256,15 @@ func (r *Router) spec(ctx context.Context, problem string, res *Result) (*prompt
 		return &prompt.Spec{API: s.API, VisibleTests: s.VisibleTests, HiddenTests: s.HiddenTests}, nil
 	}
 
+	sys, user := prompt.SpecSystem(), prompt.SpecUser(problem)
+	if pinnedAPI != "" {
+		sys, user = prompt.SpecSystemPinned(), prompt.SpecUserPinned(problem, pinnedAPI)
+	}
 	t0 := time.Now()
 	resp, err := r.prov.Generate(ctx, model.Request{
 		ModelID: r.cfg.TestModel, Purpose: model.PurposeSpec,
-		System:    prompt.SpecSystem(),
-		Messages:  []model.Message{{Role: model.RoleUser, Text: prompt.SpecUser(problem)}},
+		System:    sys,
+		Messages:  []model.Message{{Role: model.RoleUser, Text: user}},
 		MaxTokens: 8000, Temperature: 0.3,
 	})
 	if err != nil {

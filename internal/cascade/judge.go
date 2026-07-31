@@ -71,7 +71,7 @@ func (r *Router) ProfileJudge(ctx context.Context, id, problem, judgeModel strin
 	if judgeModel == "" {
 		judgeModel = r.judgeModelDefault()
 	}
-	spec, err := r.spec(ctx, problem, &Result{})
+	spec, err := r.spec(ctx, problem, "", &Result{})
 	if err != nil {
 		return nil, fmt.Errorf("spec phase: %w", err)
 	}
@@ -153,7 +153,7 @@ func (r *Router) ProfilePaired(ctx context.Context, id, problem, judgeModel stri
 	if judgeModel == "" {
 		judgeModel = r.judgeModelDefault()
 	}
-	spec, err := r.spec(ctx, problem, &Result{})
+	spec, err := r.spec(ctx, problem, r.pinnedAPI[id], &Result{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("spec phase: %w", err)
 	}
@@ -246,7 +246,7 @@ func (r *Router) ProfileStrictnessReplay(ctx context.Context, id, problem, judge
 	if judgeModel == "" {
 		judgeModel = r.judgeModelDefault()
 	}
-	spec, err := r.spec(ctx, problem, &Result{})
+	spec, err := r.spec(ctx, problem, "", &Result{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("spec phase: %w", err)
 	}
@@ -350,7 +350,7 @@ func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, 
 	if judgeModel == "" {
 		judgeModel = r.judgeModelDefault()
 	}
-	spec, err := r.spec(ctx, problem, &Result{})
+	spec, err := r.spec(ctx, problem, "", &Result{})
 	if err != nil {
 		return nil, 0, fmt.Errorf("spec phase: %w", err)
 	}

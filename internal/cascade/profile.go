@@ -22,7 +22,7 @@ import (
 // distribution of cache misses; calibrating behind the cache silently breaks
 // exchangeability and voids the bound.
 func (r *Router) Profile(ctx context.Context, id, problem string) (*calibrate.Record, error) {
-	spec, err := r.spec(ctx, problem, &Result{})
+	spec, err := r.spec(ctx, problem, r.pinnedAPI[id], &Result{})
 	if err != nil {
 		return nil, fmt.Errorf("spec phase: %w", err)
 	}
