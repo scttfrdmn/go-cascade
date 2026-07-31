@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/scttfrdmn/go-cascade/internal/calibrate"
@@ -48,5 +50,42 @@ func TestArmRecordPath(t *testing.T) {
 		if got := armRecordPath(c.recOut, c.arm); got != c.want {
 			t.Errorf("armRecordPath(%q, %q) = %q, want %q", c.recOut, c.arm, got, c.want)
 		}
+	}
+}
+
+// loadRecords is the read side of -resume: a missing file is not an error
+// (nothing recorded yet), a written file round-trips, and a malformed one errors
+// rather than silently discarding a partial run's expensive records. See #21.
+func TestLoadRecordsRoundTripAndMissing(t *testing.T) {
+	dir := t.TempDir()
+
+	// Missing file: no error, no records (the fresh-start case).
+	if recs, err := loadRecords(filepath.Join(dir, "absent.json")); err != nil || recs != nil {
+		t.Errorf("missing file: got (%v, %v), want (nil, nil)", recs, err)
+	}
+
+	// Round-trip: what a checkpoint wrote is what resume reads back, so the
+	// done-set is reconstructed correctly.
+	path := filepath.Join(dir, "recs.json")
+	want := []calibrate.Record{{ID: "a"}, {ID: "b", OracleUnsound: true}}
+	if err := writeJSONFile(path, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadRecords(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "b" || !got[1].OracleUnsound {
+		t.Errorf("round-trip mismatch: got %+v", got)
+	}
+
+	// Malformed file: an error, so a resume never silently starts from scratch and
+	// overwrites a partial run.
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte("{ not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadRecords(bad); err == nil {
+		t.Error("malformed records file must error, not silently return empty")
 	}
 }

@@ -289,6 +289,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	fromRec := fs.String("from-records", "", "replay calibration from saved records instead of profiling again")
 	refsDir := fs.String("refs", "", "directory of execution-validated reference solutions (id/solution.go under any subtree); a generated test suite that refutes its reference is flagged oracle-unsound and excluded from calibration")
 	pinAPI := fs.Bool("pin-api", false, "pin each problem's API to its reference's exported signatures so the spec model writes tests against the same contract the reference implements (removes the reference/spec name mismatch that leaves -refs inconclusive); implies -refs")
+	resume := fs.Bool("resume", false, "skip problems already present in the -records files and append to them; lets an interrupted run continue instead of re-profiling from scratch (records are checkpointed after every problem)")
 	baselines := fs.Bool("baselines", false, "also report cascade vs always-cheapest vs always-frontier (cost and ground-truth risk)")
 	oracle := fs.String("oracle", "execution", "acceptance oracle: execution (sound) or judge (LLM reviewer, §5.5c)")
 	compare := fs.Bool("compare", false, "profile both oracles and report certified vs realized risk for each")
@@ -440,23 +441,59 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	// miniature: the execution arm's realized risk should match its certified
 	// alpha, while the judge arm's realized risk can exceed it.
 	if *compare {
-		return runCompare(ctx, r, probs, names, opts, *judgeModel, *recOut)
+		return runCompare(ctx, r, probs, names, opts, *judgeModel, *recOut, *resume)
 	}
 
 	recs := make([]calibrate.Record, 0, len(probs))
+	done := map[string]bool{}
+	if *resume && *recOut != "" {
+		prior, _ := loadRecords(*recOut)
+		recs = prior
+		for _, rec := range prior {
+			done[rec.ID] = true
+		}
+		if len(done) > 0 {
+			fmt.Fprintf(os.Stderr, "resuming: %d problems already recorded, skipping them\n", len(done))
+		}
+	}
+	checkpoint := func() error {
+		if *recOut == "" {
+			return nil
+		}
+		return writeJSONFile(*recOut, recs)
+	}
+	interrupted := false
 	for i, p := range probs {
+		if done[p.ID] {
+			continue
+		}
+		if ctx.Err() != nil {
+			interrupted = true
+			break
+		}
 		fmt.Fprintf(os.Stderr, "[%d/%d] %s (oracle=%s)\n", i+1, len(probs), p.ID, *oracle)
 		rec, perr := profileOne(ctx, r, p, *oracle, *judgeModel)
 		if perr != nil {
+			// A cancelled context is an external stop, not a per-problem failure:
+			// keep the records collected so far and stop cleanly.
+			if ctx.Err() != nil {
+				interrupted = true
+				break
+			}
 			fmt.Fprintf(os.Stderr, "  skipped: %v\n", perr)
 			continue
 		}
 		recs = append(recs, *rec)
-	}
-	if *recOut != "" {
-		if err := writeJSONFile(*recOut, recs); err != nil {
+		if err := checkpoint(); err != nil {
 			return err
 		}
+	}
+	if err := checkpoint(); err != nil {
+		return err
+	}
+	if interrupted {
+		fmt.Fprintf(os.Stderr, "INTERRUPTED at %d/%d problems (context cancelled). "+
+			"Records checkpointed; re-run with -resume to finish the rest.\n", len(recs), len(probs))
 	}
 
 	cert, err := calibrate.Calibrate(recs, names, opts)
@@ -653,28 +690,83 @@ func countJudgeErrors(execRec, judgeRec calibrate.Record) (falseAccept, falseRej
 // independent sampling variance. When recOut is set, each arm's raw records are
 // written to <recOut-stem>.<arm>.json so a live run can be replayed offline at
 // any alpha rather than thrown away.
-func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, names []string, opts calibrate.Options, judgeModel, recOut string) error {
-	execRecs := make([]calibrate.Record, 0, len(probs))
-	judgeRecs := make([]calibrate.Record, 0, len(probs))
+func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, names []string, opts calibrate.Options, judgeModel, recOut string, resume bool) error {
+	execPath, judgePath := armRecordPath(recOut, "execution"), armRecordPath(recOut, "judge")
+
+	// Resume: reload records from a prior (possibly interrupted) run and skip the
+	// problems they already cover. A long paired run costs real money and is
+	// vulnerable to an external SIGTERM (see issue #21); resuming lets it continue
+	// instead of re-profiling from scratch.
+	var execRecs, judgeRecs []calibrate.Record
+	done := map[string]bool{}
+	if resume && recOut != "" {
+		execRecs, _ = loadRecords(execPath)
+		judgeRecs, _ = loadRecords(judgePath)
+		for _, rec := range execRecs {
+			done[rec.ID] = true
+		}
+		if len(done) > 0 {
+			fmt.Fprintf(os.Stderr, "resuming: %d problems already recorded, skipping them\n", len(done))
+		}
+	}
+
+	// checkpoint flushes both arms' records to disk. Called after every problem so
+	// an external kill never discards completed, expensive work.
+	checkpoint := func() error {
+		if recOut == "" {
+			return nil
+		}
+		if err := writeJSONFile(execPath, execRecs); err != nil {
+			return fmt.Errorf("write execution records: %w", err)
+		}
+		if err := writeJSONFile(judgePath, judgeRecs); err != nil {
+			return fmt.Errorf("write judge records: %w", err)
+		}
+		return nil
+	}
+
+	interrupted := false
 	for i, p := range probs {
+		if done[p.ID] {
+			continue
+		}
+		// Stop cleanly on cancellation rather than racing through the remaining
+		// problems printing "skipped" for each: a cancelled context is a stop
+		// signal, not a per-problem failure, and the collected records are intact.
+		if ctx.Err() != nil {
+			interrupted = true
+			break
+		}
 		fmt.Fprintf(os.Stderr, "[paired %d/%d] %s\n", i+1, len(probs), p.ID)
 		er, jr, err := r.ProfilePaired(ctx, p.ID, p.Problem, judgeModel)
 		if err != nil {
+			// Distinguish a cancelled context (external stop) from a genuine
+			// per-problem error. On cancel, keep what we have and stop.
+			if ctx.Err() != nil {
+				interrupted = true
+				break
+			}
 			fmt.Fprintf(os.Stderr, "  skipped: %v\n", err)
 			continue
 		}
 		execRecs = append(execRecs, *er)
 		judgeRecs = append(judgeRecs, *jr)
+		if err := checkpoint(); err != nil {
+			return err
+		}
 	}
 
 	if recOut != "" {
-		for name, recs := range map[string][]calibrate.Record{"execution": execRecs, "judge": judgeRecs} {
-			path := armRecordPath(recOut, name)
-			if err := writeJSONFile(path, recs); err != nil {
-				return fmt.Errorf("write %s records: %w", name, err)
-			}
-			fmt.Fprintf(os.Stderr, "wrote %d %s records to %s\n", len(recs), name, path)
+		if err := checkpoint(); err != nil {
+			return err
 		}
+		fmt.Fprintf(os.Stderr, "wrote %d execution / %d judge records to %s, %s\n",
+			len(execRecs), len(judgeRecs), execPath, judgePath)
+	}
+	if interrupted {
+		fmt.Fprintf(os.Stderr, "INTERRUPTED at %d/%d problems (context cancelled). "+
+			"Records checkpointed; re-run the same command with -resume to finish the rest.\n",
+			len(execRecs), len(probs))
 	}
 
 	fmt.Printf("\n%-11s %-6s %-9s %-9s %-9s %s\n",
@@ -897,6 +989,23 @@ func writeJSONFile(path string, v any) error {
 		return err
 	}
 	return os.WriteFile(path, b, 0o644)
+}
+
+// loadRecords reads a records file written by a prior run, for -resume. A missing
+// file is not an error (nothing to resume from yet); a malformed one is.
+func loadRecords(path string) ([]calibrate.Record, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var recs []calibrate.Record
+	if err := json.Unmarshal(b, &recs); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return recs, nil
 }
 
 func firstLine(s string) string {
