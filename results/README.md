@@ -19,11 +19,12 @@ reading-invisible defects — but the judge loses to the executable oracle on
 certification mainly by over-rejection, not over-acceptance. Two later
 experiments moved the value story: a cheap non-Claude **bottom tier** at an
 intermediate fan-out makes the **cascade beat always-frontier on cost by
-3.2–3.4×** with the routing signal intact; and a **reference-validation gate**
-showed the earlier "~11% accuracy floor" was **partly spec-model test noise** —
-excluding tests that refute a known-correct reference **certifies α=0.19** where
-the untriaged runs could not (though the gate adjudicates only ~40% of the
-benchmark, so a deployable α still needs the benchmark's APIs pinned).
+3.2–3.4×** with the routing signal intact; and a **reference-validation gate**,
+completed by **pinning the API** so it reaches every problem, showed the earlier
+"~11% accuracy floor" was **~93% spec-model test noise** — the true model-error
+rate is **~0.025 (1 in 40)**. That overturns the "floor is model accuracy"
+reading and **relocates the deployable-α blocker back to sample size** (α=0.05
+needs n≥45; the interrupted pinned run reached 40).
 
 ## The central question
 
@@ -63,7 +64,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 8 | [scaled certification](scaled-certification-2026-07-25.md) | same, at **n=64** | **execution α=0.19 < judge α=0.30** — gap widens; floor is model accuracy, not n |
 | 9 | [cost baseline](cost-baseline-2026-07-25.md) | **cascade vs single-model policies** (cost + truth) | at default 5:2:1, **always-frontier wins** — cascade is priciest; the fan-out erases the cheap tier's edge |
 | 10 | [fan-out test](fanout-2026-07-25.md) | same, at **1:1:1** fan-out | **cascade wins on cost — 2.75× cheaper than frontier** — confirming the fan-out was the culprit (risk noisy) |
-| 11 | [Go-specialist tier + oracle noise](go-specialist-2026-07-25.md) | cheap **non-Claude bottom tier** (Llama 4 Maverick) at **2:1:1 / 3:2:1** | **cascade beats frontier on cost 3.2–3.4× with sample count intact**; and the reference gate shows the "floor" was **partly spec-model test noise** — excluding unsound tests **certifies α=0.19** where the untriaged run could not |
+| 11 | [Go-specialist tier + oracle noise](go-specialist-2026-07-25.md) | cheap **non-Claude bottom tier** (Llama 4 Maverick) at **2:1:1 / 3:2:1**, then **API pinning** to close the oracle gate | **cascade beats frontier on cost 3.2–3.4× with sample count intact**; and pinning the API so the reference gate reaches every problem shows the "~11% floor" was **~93% spec-model test noise** — true model-error rate **~0.025 (1 in 40)**, relocating the deployable-α blocker back to sample size |
 
 ### How each run answered the previous one's limitation
 
@@ -123,9 +124,15 @@ The value is in the chain, not any single number:
    assert wrong values or wrong function names — labelling correct code as wrong.
    A new **reference-validation gate** (`calibrate -refs`) excludes problems whose
    tests refute a known-correct reference; doing so **certified α=0.19** on both
-   configs where the untriaged runs could not. The floor was **partly test noise,
-   not model accuracy** — though the gate can only adjudicate ~40% of the
-   benchmark (a reference/spec API-name mismatch leaves the rest inconclusive).
+   configs where the untriaged runs could not — but adjudicated only ~40% (a
+   reference/spec API-name mismatch left the rest inconclusive). → pin the API.
+   **API pinning** (`-pin-api`) then fed each reference's exact signatures to the
+   spec model, collapsing inconclusive to ~0 and letting the gate reach a verdict
+   on the whole benchmark. It exposed a third noise class (tests missing an import)
+   and revealed the true model-error rate is **~0.025 (1 in 40)** — the "~11%
+   floor" was **~93% spec-model test noise**. That **relocates the deployable-α
+   blocker back to sample size** (α=0.05 needs n≥45; the interrupted pinned run
+   left 40), overturning experiment 8's "the floor is model accuracy."
 
 ### Two candidate levers — one now run, one still open
 
@@ -193,18 +200,20 @@ underweights, but one that still favours the executable oracle.
   (frontier's own risk moved 0.094→0.172 across fresh draws — never compare risk
   across runs). The robust claim is **"much cheaper (1.4–5.3× across runs) at no
   systematically worse risk"**, not "strictly lower risk."
-- **The measured risk floor was partly spec-model test noise (experiment 11).**
-  The calibration oracle runs the *generated* tests; when the spec model asserts a
-  wrong value or a mismatched function name it labels correct code as wrong. A new
-  `calibrate -refs` gate validates the generated tests against an execution-checked
-  reference and excludes the unsound ones — enough to **certify α=0.19 on both
-  Go-specialist configs** where the untriaged runs could not. **But** the gate
-  adjudicates only ~40% of the benchmark (references use canonical API names, the
-  spec model invents its own, so most references cannot compile against the
-  generated tests → inconclusive). So the floor is now *bracketed* rather than
-  measured, and a clean deployable-α claim still needs the benchmark to **pin each
-  problem's API signature**. This reframes the earlier "the floor is model
-  accuracy" conclusion (experiment 8): part of that floor was never model error.
+- **The measured risk floor was overwhelmingly spec-model test noise, not model
+  accuracy (experiment 11).** The calibration oracle runs the *generated* tests;
+  when the spec model asserts a wrong value, a mismatched function name, or a
+  missing import it labels correct code as wrong. The `calibrate -refs` gate
+  validates the generated tests against an execution-checked reference, and
+  `-pin-api` feeds each reference's exact signatures to the spec model so the gate
+  reaches a verdict on the whole benchmark (inconclusive fell ~57%→~0). The result:
+  the true model-error rate is **~0.025 (1 in 40)**, versus a raw measured ~0.15
+  and experiment 8's cited ~0.11. **This overturns experiment 8's "the floor is
+  model accuracy" conclusion** — the floor was oracle noise, and with it removed
+  the certifiable α is once again gated by **sample size** (α=0.05 needs n≥45; the
+  interrupted pinned run reached 40). **Remaining caveat:** the clean floor rests
+  on n=40 from an externally-interrupted run; a completed n=64 pinned run is the
+  open step (and needs whatever keeps killing long jobs resolved).
 - **Judge β depends on the prompt.** The judge ran with "when in doubt, FAIL";
   its false-rejection counts would move under a different operating point. The
   strictness knob exists (`--judge-strictness`) but was only exercised on small n.
@@ -241,4 +250,4 @@ AWS_PROFILE=<profile> go-cascade calibrate --provider=bedrock \
 Raw records (`*.execution.json`, `*.judge.json`, per-level and seeded JSON) are
 committed alongside each write-up so any α can be re-evaluated offline.
 
-Total live spend for all eleven experiments plus diagnosis: roughly $59–63.
+Total live spend for all eleven experiments plus diagnosis: roughly $65–69.
