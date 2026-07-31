@@ -1,0 +1,27 @@
+{
+  "valid": true,
+  "alpha": 0.05,
+  "delta": 0.1,
+  "n_calibration": 52,
+  "n_shadow": 52,
+  "n_excluded_contaminated": 0,
+  "n_excluded_oracle_unsound": 12,
+  "method": "fixed-sequence",
+  "grid_size": 121,
+  "tiers": [
+    "small",
+    "mid",
+    "large"
+  ],
+  "thresholds": [
+    1,
+    1
+  ],
+  "empirical_risk": 0,
+  "realized_risk": 0,
+  "p_value": 0.06944284018723397,
+  "expected_cost_usd": 0.013131314978681809,
+  "mutation_score_mean": 0,
+  "note": "calibrated on the cache-bypass shadow stream",
+  "created_at": "2026-07-31T04:15:13.655115Z"
+}
