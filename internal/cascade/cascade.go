@@ -50,12 +50,24 @@ type Router struct {
 	// validation is opt-in via `calibrate -refs`.
 	refs map[string]string
 
+	// pinnedAPI, if set, maps a problem id to the exact API block the spec model
+	// must write its tests against (extracted from the reference). It removes the
+	// name/signature mismatch that otherwise leaves the reference unable to compile
+	// against the generated tests, so the -refs gate can reach a verdict on the
+	// whole benchmark instead of ~40% of it. Empty by default; opt-in via
+	// `calibrate -pin-api` (which implies -refs). Read-only after construction.
+	pinnedAPI map[string]string
+
 	limit int // max concurrent verifications
 }
 
 // SetReferences installs the reference solutions used to detect an unsound
 // generated oracle during calibration. Keyed by problem id.
 func (r *Router) SetReferences(refs map[string]string) { r.refs = refs }
+
+// SetPinnedAPIs installs the per-problem API contracts the spec model must write
+// its tests against. Keyed by problem id. See the pinnedAPI field.
+func (r *Router) SetPinnedAPIs(apis map[string]string) { r.pinnedAPI = apis }
 
 // New builds a router. cert may be nil, in which case the run is uncertified.
 func New(cfg *config.Config, prov model.Provider, cert *calibrate.Certificate) (*Router, error) {
@@ -139,7 +151,7 @@ func (r *Router) Solve(ctx context.Context, problem string) (*Result, error) {
 
 	// Phase 1: the contract. Tests are written before any solution exists and
 	// by a different model, which is what keeps the oracle independent.
-	spec, err := r.spec(ctx, problem, res)
+	spec, err := r.spec(ctx, problem, "", res)
 	if err != nil {
 		return res, fmt.Errorf("spec phase: %w", err)
 	}
@@ -229,8 +241,14 @@ func (r *Router) record(res *Result) calibrate.Record {
 }
 
 // spec derives or retrieves the API contract and both test partitions.
-func (r *Router) spec(ctx context.Context, problem string, res *Result) (*prompt.Spec, error) {
+func (r *Router) spec(ctx context.Context, problem, pinnedAPI string, res *Result) (*prompt.Spec, error) {
+	// A pinned spec is a different oracle than an unpinned one for the same
+	// problem (its tests are written against a fixed API), so it must not collide
+	// with an unpinned cache entry. Salt the cache key with the pinned API.
 	ph := cache.ProblemHash(problem)
+	if pinnedAPI != "" {
+		ph = cache.ProblemHash(problem + "\x00pinned\x00" + pinnedAPI)
+	}
 	if s, ok := r.cache.GetSpec(ph); ok {
 		res.Trace = append(res.Trace, Step{
 			Stage: "spec", Action: ActAccept, Reason: "test cache hit: oracle reused at zero model cost",
@@ -238,11 +256,15 @@ func (r *Router) spec(ctx context.Context, problem string, res *Result) (*prompt
 		return &prompt.Spec{API: s.API, VisibleTests: s.VisibleTests, HiddenTests: s.HiddenTests}, nil
 	}
 
+	sys, user := prompt.SpecSystem(), prompt.SpecUser(problem)
+	if pinnedAPI != "" {
+		sys, user = prompt.SpecSystemPinned(), prompt.SpecUserPinned(problem, pinnedAPI)
+	}
 	t0 := time.Now()
 	resp, err := r.prov.Generate(ctx, model.Request{
 		ModelID: r.cfg.TestModel, Purpose: model.PurposeSpec,
-		System:    prompt.SpecSystem(),
-		Messages:  []model.Message{{Role: model.RoleUser, Text: prompt.SpecUser(problem)}},
+		System:    sys,
+		Messages:  []model.Message{{Role: model.RoleUser, Text: user}},
 		MaxTokens: 8000, Temperature: 0.3,
 	})
 	if err != nil {
@@ -601,13 +623,14 @@ const (
 	// refuted it (test/race/accept stage). The tests reject correct code, so the
 	// oracle is unsound (invariant #4) and its labels on this problem are noise.
 	OracleUnsoundVerdict
-	// OracleInconclusive: the reference did not even compile against the
-	// generated tests — a parse/type/build/vet failure. This means the spec model
-	// invented an API name or signature that differs from the reference's
-	// canonical one, so the reference simply does not fit *this* run's contract.
-	// It is NOT evidence that the tests are wrong (a candidate written against the
-	// generated API could still be judged soundly), so the record is kept. Only a
-	// behavioural refutation of a compiling reference proves unsoundness.
+	// OracleInconclusive: the reference did not compile against the generated
+	// tests, BUT the tests do compile against their own generated API stub — so
+	// the spec model invented an API name/signature that differs from the
+	// reference's canonical one. The reference does not fit *this* run's contract,
+	// which says nothing about whether the tests are correct for a candidate that
+	// does fit it, so the record is kept. Only a behavioural refutation of a
+	// compiling reference, or a test that will not compile against its own API,
+	// proves unsoundness.
 	OracleInconclusive
 )
 
@@ -638,10 +661,24 @@ func (r *Router) validateOracle(ctx context.Context, id string, spec *prompt.Spe
 	}
 	if !rep.OK {
 		// StageTest is the first stage that runs the reference rather than just
-		// compiling/vetting it. A failure at or after it is behavioural; anything
-		// earlier is an API/compile mismatch and is inconclusive.
+		// compiling/vetting it. A failure at or after it is behavioural; the tests
+		// ran and rejected correct code, so the oracle is unsound.
 		if rep.FailedAt >= verify.StageTest {
 			return OracleUnsoundVerdict, fmt.Sprintf("reference refuted at %s: %s", rep.FailedAt, strings.TrimSpace(rep.Diagnostic))
+		}
+		// A compile-stage failure is ambiguous. Two sub-cases, and they get
+		// opposite verdicts. Disambiguate by compiling the generated tests against
+		// their OWN generated API stub (spec.API, whose bodies already panic):
+		//   - If the tests do not compile even against their own API, the test
+		//     suite is malformed (e.g. it uses a stdlib package it forgot to
+		//     import). It refutes EVERY candidate, not just the reference, so it is
+		//     a broken/unsound oracle — no code can pass it.
+		//   - If the tests do compile against their own API, then only the
+		//     reference does not fit that API: a name/signature mismatch, which is
+		//     inconclusive (a candidate written to the generated API could still be
+		//     judged soundly).
+		if selfOK, selfDiag := r.testsCompileAgainstOwnAPI(ctx, spec); !selfOK {
+			return OracleUnsoundVerdict, fmt.Sprintf("generated tests do not compile against their own API (%s): %s", rep.FailedAt, strings.TrimSpace(selfDiag))
 		}
 		return OracleInconclusive, fmt.Sprintf("reference does not fit generated API (%s): %s", rep.FailedAt, strings.TrimSpace(rep.Diagnostic))
 	}
@@ -655,6 +692,28 @@ func (r *Router) validateOracle(ctx context.Context, id string, spec *prompt.Spe
 		return OracleUnsoundVerdict, fmt.Sprintf("reference refuted at %s stage: %s", stage, strings.TrimSpace(d))
 	}
 	return OracleSound, ""
+}
+
+// testsCompileAgainstOwnAPI reports whether the generated test files compile
+// against the generated API stub alone (spec.API, bodies already panicking).
+// It runs the verify ladder on the stub: a failure BEFORE StageTest is a compile
+// error (the tests reference something the API does not declare — most often a
+// stdlib package the test forgot to import), so the test suite is malformed. A
+// failure AT or AFTER StageTest just means the panic stub cannot pass the tests,
+// which is expected and proves the suite compiles. This check involves no model
+// candidate, so it is independent of any tier's output (invariant #2 is not at
+// risk: nothing is being selected against the holdout).
+func (r *Router) testsCompileAgainstOwnAPI(ctx context.Context, spec *prompt.Spec) (ok bool, diag string) {
+	ws, err := r.runner.NewWorkspace(spec.API, spec.VisibleTests, spec.HiddenTests)
+	if err != nil {
+		return false, fmt.Sprintf("workspace: %v", err)
+	}
+	defer ws.Remove() //nolint:errcheck // scratch dir
+	rep := r.ladder.Run(ctx, ws, spec.API, r.verifyOpts())
+	if rep.OK || rep.FailedAt >= verify.StageTest {
+		return true, ""
+	}
+	return false, fmt.Sprintf("%s: %s", rep.FailedAt, rep.Diagnostic)
 }
 
 // repairLoop feeds the exact verifier diagnostic back to the same tier.

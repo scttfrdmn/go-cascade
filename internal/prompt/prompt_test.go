@@ -1,6 +1,105 @@
 package prompt
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestExtractAPIBlanksBodiesKeepsSignatures(t *testing.T) {
+	src := `package solution
+
+import "context"
+
+// Fibonacci returns the nth Fibonacci number.
+func Fibonacci(n int) uint64 {
+	var a, b uint64 = 0, 1
+	for range n {
+		a, b = b, a+b
+	}
+	return a
+}
+
+// helper is unexported and must be dropped.
+func helper() int { return 42 }
+`
+	api, err := ExtractAPI(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(api, "func Fibonacci(n int) uint64") {
+		t.Errorf("exported signature missing:\n%s", api)
+	}
+	if !strings.Contains(api, `panic("not implemented")`) {
+		t.Errorf("body was not blanked to panic:\n%s", api)
+	}
+	if strings.Contains(api, "a, b = b, a+b") {
+		t.Errorf("original body leaked into the API block:\n%s", api)
+	}
+	if strings.Contains(api, "helper") {
+		t.Errorf("unexported func must be dropped:\n%s", api)
+	}
+	// A kept declaration's own doc comment must survive — it is useful context
+	// for the spec model — even though orphaned comments of dropped decls are cut.
+	if !strings.Contains(api, "Fibonacci returns the nth") {
+		t.Errorf("kept declaration lost its doc comment:\n%s", api)
+	}
+	// The import must survive because a signature could reference it.
+	if !strings.Contains(api, `"context"`) {
+		t.Errorf("import was dropped:\n%s", api)
+	}
+}
+
+// A struct type plus its methods (an exported receiver) must be preserved in
+// full, because the tests are written against that public surface.
+func TestExtractAPIKeepsTypesAndMethods(t *testing.T) {
+	src := `package solution
+
+import "sync"
+
+// RateLimiter is a token bucket.
+type RateLimiter struct {
+	mu     sync.Mutex
+	tokens int64
+}
+
+// NewRateLimiter builds one.
+func NewRateLimiter(capacity int64) *RateLimiter {
+	return &RateLimiter{tokens: capacity}
+}
+
+// Allow consumes n tokens.
+func (r *RateLimiter) Allow(n int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return true
+}
+`
+	api, err := ExtractAPI(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"type RateLimiter struct", "func NewRateLimiter(capacity int64) *RateLimiter", "func (r *RateLimiter) Allow(n int64) bool"} {
+		if !strings.Contains(api, want) {
+			t.Errorf("API block missing %q:\n%s", want, api)
+		}
+	}
+	if strings.Contains(api, "r.mu.Lock()") {
+		t.Errorf("method body leaked:\n%s", api)
+	}
+}
+
+// The pinned spec user prompt must carry the API verbatim so the model writes
+// tests against exactly those names.
+func TestSpecUserPinnedIncludesAPI(t *testing.T) {
+	api := "package solution\n\nfunc TwoSum(nums []int, target int) [2]int { panic(\"not implemented\") }"
+	got := SpecUserPinned("Return the indices...", api)
+	if !strings.Contains(got, "func TwoSum(nums []int, target int) [2]int") {
+		t.Errorf("pinned user prompt dropped the API:\n%s", got)
+	}
+	if !strings.Contains(got, "do not rename") {
+		t.Errorf("pinned user prompt should instruct against renaming:\n%s", got)
+	}
+}
 
 func TestParseSpec(t *testing.T) {
 	reply := "Here you go.\n\n" +

@@ -288,6 +288,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	recOut := fs.String("records", "", "also write the raw calibration records here")
 	fromRec := fs.String("from-records", "", "replay calibration from saved records instead of profiling again")
 	refsDir := fs.String("refs", "", "directory of execution-validated reference solutions (id/solution.go under any subtree); a generated test suite that refutes its reference is flagged oracle-unsound and excluded from calibration")
+	pinAPI := fs.Bool("pin-api", false, "pin each problem's API to its reference's exported signatures so the spec model writes tests against the same contract the reference implements (removes the reference/spec name mismatch that leaves -refs inconclusive); implies -refs")
 	baselines := fs.Bool("baselines", false, "also report cascade vs always-cheapest vs always-frontier (cost and ground-truth risk)")
 	oracle := fs.String("oracle", "execution", "acceptance oracle: execution (sound) or judge (LLM reviewer, §5.5c)")
 	compare := fs.Bool("compare", false, "profile both oracles and report certified vs realized risk for each")
@@ -396,15 +397,42 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	// Reference solutions let the profiler detect an unsound generated oracle: a
 	// test suite that refutes known-correct code cannot soundly label candidates
 	// (invariant #4), so such problems are excluded from calibration rather than
-	// counted as model errors.
-	if *refsDir != "" {
-		refs, ferr := loadReferences(*refsDir, probs)
+	// counted as model errors. -pin-api implies -refs (it needs the references),
+	// so default the refs directory to it when only -pin-api is given.
+	dir := *refsDir
+	if *pinAPI && dir == "" {
+		return errors.New("-pin-api needs -refs <dir> to locate the reference solutions")
+	}
+	if dir != "" {
+		refs, ferr := loadReferences(dir, probs)
 		if ferr != nil {
 			return ferr
 		}
 		fmt.Fprintf(os.Stderr, "loaded %d/%d reference solutions from %s for oracle-soundness checks\n",
-			len(refs), len(probs), *refsDir)
+			len(refs), len(probs), dir)
 		r.SetReferences(refs)
+
+		// Pinning turns each reference into the API contract the spec model must
+		// write its tests against, so the reference compiles against the generated
+		// tests and the -refs gate can reach a verdict instead of an API mismatch.
+		if *pinAPI {
+			apis := make(map[string]string, len(refs))
+			var failed []string
+			for id, src := range refs {
+				api, aerr := prompt.ExtractAPI(src)
+				if aerr != nil {
+					failed = append(failed, id)
+					continue
+				}
+				apis[id] = api
+			}
+			fmt.Fprintf(os.Stderr, "pinned %d/%d APIs from references (spec model writes tests against them)\n",
+				len(apis), len(refs))
+			if len(failed) > 0 {
+				fmt.Fprintf(os.Stderr, "  could not extract an API for %d: %s\n", len(failed), strings.Join(failed, ", "))
+			}
+			r.SetPinnedAPIs(apis)
+		}
 	}
 
 	// Compare mode profiles both oracles on the same problems and prints the

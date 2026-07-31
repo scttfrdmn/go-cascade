@@ -123,23 +123,67 @@ gate's own verdicts. (The 2:1:1 figure is from the completed run
 native re-runs were interrupted externally; 3:2:1 carries native flags. Both
 agree with independent partial runs.)
 
+## Result 3 — pinning the API: the floor was ~93% test noise
+
+The `-refs` gate above could only adjudicate ~40% of the benchmark: references
+use canonical names (`Fibonacci`, `GCD`) while the spec model invents its own
+each run, so most references could not compile against the generated tests
+(inconclusive). To close that, `calibrate -pin-api` extracts each reference's
+exported signatures (`prompt.ExtractAPI`, via `go/ast`: bodies blanked to
+`panic`, types/methods/generics/doc-comments preserved) and feeds them to the
+spec model as a fixed contract, so it writes tests against exactly the names the
+reference implements.
+
+**Pinning collapsed the inconclusive rate from ~57% to 13%** (2:1:1, n=47 —
+another externally-interrupted run, see limitations). Investigating the 13%
+residual surfaced a *third* spec-model noise class: a generated test that uses a
+stdlib package it forgot to import (`undefined: sync`/`strings`/`unicode` in a
+`_test.go`). Such a test compiles against **nothing** — it refutes every
+candidate *and* the reference (all six had cluster score 0.0 at every tier) — so
+it is a broken oracle, not an API mismatch. The gate now disambiguates this
+(`testsCompileAgainstOwnAPI`: if the tests do not compile against their own API
+stub, unsound; if they do but the reference does not fit, inconclusive), reaching
+a verdict on **100%** of the profiled problems.
+
+The result after removing the noise the gate can now identify:
+
+| stage | verdict breakdown | cascade empirical risk | certifies |
+|-------|-------------------|------------------------|-----------|
+| no gate | — | 0.15 | nothing useful |
+| pinned + gate (n=47) | 7 unsound, 0 inconclusive, 40 clean | **0.025** | **α=0.15** |
+
+Of the 7 excluded: **1** was a wrong-value assertion (`scale_fibonacci`:
+`Fibonacci(79)` wrong) and **6** were missing-import broken tests. After
+exclusion the cascade is wrong on exactly **one** sound-oracle problem
+(`conc_safe_counter`, a genuine top-tier miss) — **empirical risk 0.025**.
+
+**This reframes the study's most-cited earlier conclusion.** Experiment 8 said
+"the deployable-α floor is model accuracy (~11%), not sample size." With the
+oracle noise removed, the true model-error rate on this benchmark is **~1 in 40
+(0.025)**, not 11%. The floor was **neither** model accuracy nor sample size — it
+was **spec-model test noise**. Now that it is gone, **sample size is once again
+the binding constraint**: α=0.05 needs n≥~45 clean records (paper eq. 7) and the
+interrupted run left only 40.
+
 ## Honest limitations
 
-- **The gate reaches a verdict on only ~40% of the benchmark.** 36 of 64 problems
-  are *inconclusive* in both configs: the references use canonical names
-  (`Fibonacci`, `GCD`, `IsAnagram`) while the spec model invents its own each run,
-  so the reference cannot compile against the generated tests. The gate correctly
-  refuses to call these unsound, but it also cannot clear them. The remaining
-  errors after exclusion all live in this inconclusive zone — including
-  `scale_fibonacci`, where the name mismatch likely broke candidates too. **The
-  true floor is bracketed, not pinned** (2:1:1: [0.05, ~0.09]; 3:2:1: [0.08,
-  ~0.12]). Closing this needs the benchmark to pin each problem's API signature so
-  the spec model must match the reference — the obvious next step, and a
-  prerequisite for any honest deployable-α claim.
-- **The unsound set is itself unstable across runs.** Between two `-refs`
-  attempts only `scale_two_sum` recurred as unsound — the resampled-test-noise
-  signature, now visible inside the gate's own verdicts. This is *why* cross-run
-  risk numbers were never comparable.
+- **The clean floor (0.025) is n=40, from an interrupted run.** Three of the four
+  long live runs (`-refs` ×2, `-pin-api` ×1) were killed externally at ~45–50 of
+  64 problems (`context canceled` on the tail); the two dirty runs and one 3:2:1
+  `-refs` run completed. So the pinned floor rests on the 47 profiled problems (40
+  clean after exclusion), not the full 64. n=40 is *below* the ~45 the paper needs
+  for α=0.05, which is exactly why α=0.05 does not certify here — a sample-size
+  wall, not an accuracy one. A completed n=64 pinned run is the remaining step, and
+  it needs whatever is interrupting long jobs resolved first.
+- **The gate's `-pin-api` reach depends on the spec model obeying the pin.** It
+  collapsed inconclusive from ~57% to 13%, and the refined gate reclassifies the
+  residual (missing-import tests) as unsound, reaching a verdict on 100% of
+  *profiled* problems. But that is because pinning worked on this benchmark; a
+  spec model that silently reworded a pinned signature would reappear as
+  inconclusive. The mechanism is sound; the coverage is empirical.
+- **The unsound set is unstable across runs** (only `scale_two_sum` recurs across
+  `-refs` attempts) — the resampled-test-noise signature, visible inside the
+  gate's own verdicts, and *why* cross-run risk numbers were never comparable.
 - **`-baselines` cost/risk uses all records** (it does not apply the unsound
   exclusion); the *certificate* empirical risk does. The cost comparison
   (Result 1) is unaffected — all three policies ran against the same tests, so a
@@ -154,10 +198,17 @@ agree with independent partial runs.)
    cost at an intermediate fan-out** — 3.16× (2:1:1, equal risk) to 3.35× (3:2:1,
    lower risk) — without starving the sample count. The strongest cost result in
    the study.
-2. **The measured risk floor was inflated by unsound generated tests.** A
-   reference-validation gate removes the conclusive cases and lets the 2:1:1
-   cascade certify α=0.19 where the untriaged run could not.
-3. **A cheaper bottom tier does not lower the floor** — the floor is a top-tier
+2. **The measured risk floor was overwhelmingly spec-model test noise, not model
+   accuracy.** A reference-validation gate — extended by pinning the API so it can
+   reach a verdict on the whole benchmark — shows the true model-error rate is
+   **~1 in 40 (0.025)**, versus a raw measured ~0.15 and experiment 8's cited
+   ~0.11. Three distinct spec-model noise classes were found and are now detected:
+   wrong expected values, mismatched function names, and missing imports.
+3. **This relocates the deployable-α blocker back to sample size.** With the
+   noise removed the cascade certifies α=0.15 at n=40 and would reach α=0.05 near
+   n≥45 (paper eq. 7). Experiment 8's "the floor is model accuracy" was an
+   artifact of noisy oracles.
+4. **A cheaper bottom tier does not lower the floor** — the floor is a top-tier
    property under a sound oracle. The apparent "drop" is noise removal, not model
    improvement.
 
@@ -168,16 +219,19 @@ agree with independent partial runs.)
 go-cascade calibrate -from-records results/go-specialist-211.execution.json -alpha 0.19 -delta 0.10 -baselines -o /tmp/c.json
 go-cascade calibrate -from-records results/go-specialist-321.execution.json -alpha 0.19 -delta 0.10 -baselines -o /tmp/c.json
 
-# Certificate flip from the oracle-soundness gate (offline, on committed -refs records):
-go-cascade calibrate -from-records results/go-specialist-321-refs.execution.json -alpha 0.19 -delta 0.10 -o /tmp/c.json  # valid=true, 2 unsound excluded
+# Certificate flip from the oracle-soundness gate (offline, on committed records):
+go-cascade calibrate -from-records results/go-specialist-321-refs.execution.json -alpha 0.19 -delta 0.10 -o /tmp/c.json    # -refs: valid=true, 2 unsound excluded
+go-cascade calibrate -from-records results/go-specialist-211-pinned.execution.json -alpha 0.15 -delta 0.10 -o /tmp/c.json  # pinned: valid=true, 7 unsound, 0 inconclusive, risk 0.025
 
-# Live, with the oracle-soundness gate (needs Bedrock; ~$6/config):
+# Live, with API pinning (needs Bedrock; ~$6/config). -pin-api implies -refs:
 AWS_PROFILE=aws go-cascade calibrate --provider=bedrock \
-  --config examples/bench/config.go-specialist-321.json \
-  -bench examples/bench/combined.jsonl -refs examples/bench \
+  --config examples/bench/config.go-specialist-211.json \
+  -bench examples/bench/combined.jsonl -refs examples/bench -pin-api \
   -alpha 0.10 -delta 0.10 -compare -baselines -records run.json
 ```
 
-Live spend this experiment: ~$26 (two dirty runs, one complete + two interrupted
-2:1:1 `-refs` runs, one complete 3:2:1 `-refs` run). Session total: roughly
-$59–63.
+Live spend this experiment: ~$32 (two dirty runs; one complete + two interrupted
+2:1:1 `-refs` runs; one complete 3:2:1 `-refs` run; one interrupted `-pin-api`
+run). Session total: roughly $65–69. The committed `go-specialist-211-pinned`
+records carry the shipped gate's flags (6 missing-import problems reclassified
+from inconclusive to unsound per the refined `testsCompileAgainstOwnAPI` logic).
