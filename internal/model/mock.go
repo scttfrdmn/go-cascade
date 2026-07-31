@@ -49,6 +49,11 @@ func (m Mock) Generate(_ context.Context, req Request) (*Response, error) {
 		text = fence(m.repair(p, last))
 	case PurposeJudge:
 		text = m.judge(p, last)
+	case PurposePlan:
+		// A stipulated plan; the mock exists to exercise the two-stage code path,
+		// not to model planning quality. Never cite this as planner behaviour.
+		text = "Plan: implement the API directly. Handle empty/nil input and the " +
+			"stated boundary cases; standard library only."
 	default:
 		// Fold the problem into the seed so that a benchmark of many problems
 		// produces a varied defect distribution rather than one repeated

@@ -23,11 +23,45 @@ type Tier struct {
 	Samples     int     `json:"samples"`      // n candidates drawn for behavioural clustering
 	RepairDepth int     `json:"repair_depth"` // max repair rounds before escalating
 	Temperature float32 `json:"temperature"`
+
+	// PlannerModel, when set, makes this a two-stage tier: a single call to the
+	// planner model rewrites the problem into an implementation plan, and every
+	// coder sample (ModelID) is generated *from that plan* instead of the raw
+	// problem. Empty means a plain single-stage tier (the default). The planner
+	// is a prompt-construction step only — it never touches the oracle or the
+	// verify ladder, so soundness (invariant #4) is unaffected — but because it
+	// materially shapes the submitted code it is bound by invariant #3: it must
+	// differ from TestModel or the record is oracle-contaminated (see Validate
+	// and Router acceptance).
+	PlannerModel string `json:"planner_model,omitempty"`
+	// PlannerInPerMTok/OutPerMTok price the planner call when it is a different
+	// model than the coder. Zero falls back to the coder's own prices so a
+	// same-model two-stage tier needs no extra config.
+	PlannerInPerMTok  float64 `json:"planner_input_usd_per_mtok,omitempty"`
+	PlannerOutPerMTok float64 `json:"planner_output_usd_per_mtok,omitempty"`
 }
 
-// Cost returns the USD cost of a single call with the given token counts.
+// Cost returns the USD cost of a single coder call with the given token counts.
 func (t Tier) Cost(inTok, outTok int) float64 {
 	return float64(inTok)/1e6*t.InPerMTok + float64(outTok)/1e6*t.OutPerMTok
+}
+
+// TwoStage reports whether this tier runs a planner call before the coder.
+func (t Tier) TwoStage() bool { return t.PlannerModel != "" }
+
+// PlannerCost prices a single planner call. It uses the planner's own per-MTok
+// prices when set, otherwise the coder's — so a two-stage tier that reuses the
+// same model needs no separate pricing, while a distinct planner is priced
+// correctly rather than at the (usually cheaper) coder's rate.
+func (t Tier) PlannerCost(inTok, outTok int) float64 {
+	in, out := t.PlannerInPerMTok, t.PlannerOutPerMTok
+	if in == 0 {
+		in = t.InPerMTok
+	}
+	if out == 0 {
+		out = t.OutPerMTok
+	}
+	return float64(inTok)/1e6*in + float64(outTok)/1e6*out
 }
 
 // Config is the whole knob surface.
@@ -168,6 +202,16 @@ func (c *Config) Validate() error {
 	for i, t := range c.Tiers {
 		if t.Samples < 1 {
 			return fmt.Errorf("tier %d (%s): samples must be >= 1", i, t.Name)
+		}
+		// Invariant #3: a two-stage tier's planner shapes the submitted code, so
+		// it is a code author and must differ from the oracle's author. Equal to
+		// TestModel is not a config error the run should silently proceed past —
+		// it contaminates every record — so reject it up front rather than only
+		// flagging it at accept time.
+		if t.PlannerModel != "" && t.PlannerModel == c.TestModel {
+			return fmt.Errorf("tier %d (%s): planner_model equals test_model %q; "+
+				"the planner authors the code and must differ from the oracle's author (invariant #3)",
+				i, t.Name, c.TestModel)
 		}
 	}
 	return nil
