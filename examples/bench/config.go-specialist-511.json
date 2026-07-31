@@ -1,0 +1,11 @@
+{
+  "_comment": "Go-specialist bottom-tier, HIGH cheap-tier fan-out (5:1:1). Tests the tension diagnosis from results/tension-diagnosis-2026-07-30.md: at 2:1:1 a single flaky-but-unanimous wrong answer (scale_chunk) sits at the 2-sample Wilson ceiling (0.425), indistinguishable from correct unanimous answers, forcing tau0=1.0 at alpha=0.05 and inverting the cost win. Raising tier0 to 5 samples lifts the unanimity ceiling to ~0.649 AND splits flaky clusters (samples disagree -> wrong-answer score drops), so a threshold below the ceiling can admit correct answers while rejecting flaky wrong ones. Success = a valid alpha=0.05 certificate with tier0 threshold < 1.0 and cascade cost < always-frontier. Tiers 1-2 stay at 1 sample to isolate the tier0 fan-out lever; prices identical to config.go-specialist-211.json so cross-run cost comparison holds. test_model=sonnet-4-6 differs from every tier (invariant #3).",
+  "test_model": "us.anthropic.claude-sonnet-4-6",
+  "test_input_usd_per_mtok": 3.0,
+  "test_output_usd_per_mtok": 15.0,
+  "tiers": [
+    {"name":"small","model_id":"us.meta.llama4-maverick-17b-instruct-v1:0","input_usd_per_mtok":0.24,"output_usd_per_mtok":0.97,"samples":5,"repair_depth":2,"temperature":0.8},
+    {"name":"mid","model_id":"us.anthropic.claude-sonnet-4-5-20250929-v1:0","input_usd_per_mtok":3.0,"output_usd_per_mtok":15.0,"samples":1,"repair_depth":2,"temperature":0.4},
+    {"name":"large","model_id":"us.anthropic.claude-opus-4-5-20251101-v1:0","input_usd_per_mtok":5.0,"output_usd_per_mtok":25.0,"samples":1,"repair_depth":2,"temperature":0.2}
+  ]
+}
