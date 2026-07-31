@@ -42,8 +42,20 @@ type Router struct {
 	// Observe, if set, receives a calibration record per solve.
 	Observe func(calibrate.Record)
 
+	// refs, if set, maps a problem id to an execution-validated reference
+	// solution's source. During calibration the profiler runs the reference
+	// against the freshly-generated test suite; if the reference is refuted the
+	// generated oracle is unsound (it rejects correct code, invariant #4) and the
+	// record is flagged OracleUnsound and excluded. Empty by default: reference
+	// validation is opt-in via `calibrate -refs`.
+	refs map[string]string
+
 	limit int // max concurrent verifications
 }
+
+// SetReferences installs the reference solutions used to detect an unsound
+// generated oracle during calibration. Keyed by problem id.
+func (r *Router) SetReferences(refs map[string]string) { r.refs = refs }
 
 // New builds a router. cert may be nil, in which case the run is uncertified.
 func New(cfg *config.Config, prov model.Provider, cert *calibrate.Certificate) (*Router, error) {
@@ -574,6 +586,75 @@ func (r *Router) acceptOne(ctx context.Context, src string, spec *prompt.Spec) (
 	defer ws.Remove() //nolint:errcheck // scratch dir
 	acc := r.ladder.Accept(ctx, ws, r.verifyOpts())
 	return acc, acc.CPUTime
+}
+
+// OracleVerdict is the three-way result of checking a generated test suite
+// against a known-correct reference solution.
+type OracleVerdict int
+
+// Oracle-soundness verdicts.
+const (
+	// OracleSound: the reference compiled against the generated API and passed
+	// every generated test. The oracle accepts correct code, as it must.
+	OracleSound OracleVerdict = iota
+	// OracleUnsoundVerdict: the reference compiled but a generated *assertion*
+	// refuted it (test/race/accept stage). The tests reject correct code, so the
+	// oracle is unsound (invariant #4) and its labels on this problem are noise.
+	OracleUnsoundVerdict
+	// OracleInconclusive: the reference did not even compile against the
+	// generated tests — a parse/type/build/vet failure. This means the spec model
+	// invented an API name or signature that differs from the reference's
+	// canonical one, so the reference simply does not fit *this* run's contract.
+	// It is NOT evidence that the tests are wrong (a candidate written against the
+	// generated API could still be judged soundly), so the record is kept. Only a
+	// behavioural refutation of a compiling reference proves unsoundness.
+	OracleInconclusive
+)
+
+// validateOracle checks whether this problem's generated test suite is a sound
+// oracle by running the known-correct reference solution through the full verify
+// ladder plus acceptance, then classifying *how* it failed. The distinction is
+// load-bearing:
+//
+//   - A compile/static failure (parse, types, build, vet) means the reference's
+//     canonical signature does not match the API this run's spec model invented.
+//     The reference does not fit the contract, which says nothing about whether
+//     the tests are correct for a candidate that *does* fit it. Inconclusive:
+//     keep the record. (Confusing this with unsoundness over-excludes ~12x and
+//     drives the measured floor spuriously to zero.)
+//   - A behavioural failure of a *compiling* reference (test, race, accept) means
+//     the generated tests reject provably-correct code: an unsound oracle.
+//
+// Returns OracleSound when no reference is registered (nothing to check) so the
+// default path is unchanged. diag carries the reference's refutation output.
+func (r *Router) validateOracle(ctx context.Context, id string, spec *prompt.Spec) (OracleVerdict, string) {
+	ref, ok := r.refs[id]
+	if !ok {
+		return OracleSound, ""
+	}
+	rep, acc, _, err := r.verifyOne(ctx, ref, spec)
+	if err != nil {
+		return OracleInconclusive, fmt.Sprintf("reference workspace error: %v", err)
+	}
+	if !rep.OK {
+		// StageTest is the first stage that runs the reference rather than just
+		// compiling/vetting it. A failure at or after it is behavioural; anything
+		// earlier is an API/compile mismatch and is inconclusive.
+		if rep.FailedAt >= verify.StageTest {
+			return OracleUnsoundVerdict, fmt.Sprintf("reference refuted at %s: %s", rep.FailedAt, strings.TrimSpace(rep.Diagnostic))
+		}
+		return OracleInconclusive, fmt.Sprintf("reference does not fit generated API (%s): %s", rep.FailedAt, strings.TrimSpace(rep.Diagnostic))
+	}
+	if acc == nil || !acc.OK {
+		stage, d := "hidden", ""
+		if acc != nil {
+			stage, d = acc.FailedAt.String(), acc.Diagnostic
+		}
+		// The reference already passed the visible ladder (rep.OK), so reaching
+		// acceptance means it compiled; an acceptance failure is behavioural.
+		return OracleUnsoundVerdict, fmt.Sprintf("reference refuted at %s stage: %s", stage, strings.TrimSpace(d))
+	}
+	return OracleSound, ""
 }
 
 // repairLoop feeds the exact verifier diagnostic back to the same tier.

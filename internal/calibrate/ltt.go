@@ -64,6 +64,24 @@ type Record struct {
 	// Contaminated marks a record whose oracle was written by the same model
 	// that wrote the code. Such records are excluded from calibration.
 	Contaminated bool `json:"contaminated"`
+	// OracleUnsound marks a record whose generated test suite is not a sound
+	// oracle: a known-correct reference solution *compiled* against the generated
+	// API but was refuted by a generated assertion (a test/race/accept failure).
+	// Rejecting correct code violates invariant #4, so on that problem the labels
+	// are noise, not truth. Such records are excluded from calibration exactly
+	// like Contaminated ones — only set when calibrating with a reference set
+	// (-refs). OracleUnsoundDiag carries the reference's failure output.
+	OracleUnsound     bool   `json:"oracle_unsound,omitempty"`
+	OracleUnsoundDiag string `json:"oracle_unsound_diag,omitempty"`
+	// OracleInconclusive marks a record where the reference solution did not
+	// compile against the generated tests — the spec model invented an API name
+	// or signature that differs from the reference's canonical one. This is NOT
+	// evidence the tests are wrong (a candidate matching the generated API could
+	// still be judged soundly), so the record is KEPT in calibration; the flag is
+	// recorded only so the run can report how often the reference check could not
+	// reach a verdict. Distinguishing this from OracleUnsound is essential: a
+	// naming mismatch is not an unsound oracle.
+	OracleInconclusive bool `json:"oracle_inconclusive,omitempty"`
 	// Shadow marks a record collected on the stream that bypasses the cache.
 	// Calibration uses shadow records where available, because the router in a
 	// warm system sees the conditional distribution of cache misses, not the
@@ -176,17 +194,19 @@ const (
 // Certificate is the artefact the router loads. A run without one is explicitly
 // uncertified and must not claim a guarantee.
 type Certificate struct {
-	Valid         bool      `json:"valid"`
-	Alpha         float64   `json:"alpha"`
-	Delta         float64   `json:"delta"`
-	N             int       `json:"n_calibration"`
-	NShadow       int       `json:"n_shadow"`
-	NExcluded     int       `json:"n_excluded_contaminated"`
-	Method        Method    `json:"method"`
-	GridSize      int       `json:"grid_size"`
-	Tiers         []string  `json:"tiers"`
-	Thresholds    []float64 `json:"thresholds"`
-	EmpiricalRisk float64   `json:"empirical_risk"`
+	Valid               bool      `json:"valid"`
+	Alpha               float64   `json:"alpha"`
+	Delta               float64   `json:"delta"`
+	N                   int       `json:"n_calibration"`
+	NShadow             int       `json:"n_shadow"`
+	NExcluded           int       `json:"n_excluded_contaminated"`
+	NOracleUnsound      int       `json:"n_excluded_oracle_unsound,omitempty"`
+	NOracleInconclusive int       `json:"n_oracle_inconclusive,omitempty"`
+	Method              Method    `json:"method"`
+	GridSize            int       `json:"grid_size"`
+	Tiers               []string  `json:"tiers"`
+	Thresholds          []float64 `json:"thresholds"`
+	EmpiricalRisk       float64   `json:"empirical_risk"`
 	// RealizedRisk is the ground-truth risk of the selected thresholds (§5.5).
 	// Under the sound execution oracle it equals EmpiricalRisk. Under a judge
 	// oracle it can exceed alpha even when the certificate is Valid: the judge
@@ -219,11 +239,27 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 		opts.Delta = 0.1
 	}
 	excluded := 0
+	unsound := 0
+	inconclusive := 0
 	var use []Record
 	for _, r := range recs {
 		if r.Contaminated {
 			excluded++
 			continue
+		}
+		// A generated test suite that refutes a known-correct reference is not a
+		// sound oracle (invariant #4): its labels are noise. Drop it exactly like
+		// a contaminated record so the risk estimate reflects real defects, not
+		// spec-model test bugs. Only ever set when calibrating with -refs.
+		if r.OracleUnsound {
+			unsound++
+			continue
+		}
+		// Inconclusive means the reference did not fit the generated API (a naming
+		// mismatch, not an unsound test), so the check reached no verdict. Keep the
+		// record — it is only tallied for reporting.
+		if r.OracleInconclusive {
+			inconclusive++
 		}
 		use = append(use, r)
 	}
@@ -252,6 +288,11 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 				"the test model also appears as a code tier, so every oracle shares an author with "+
 				"the code it judges. Set test_model to a model that is not in the tier list", excluded)
 		}
+		if unsound > 0 {
+			return nil, fmt.Errorf("all %d calibration records were excluded as oracle-unsound: "+
+				"every generated test suite refuted its reference solution. The spec model is "+
+				"producing broken tests; inspect them before trusting any risk number", unsound)
+		}
 		return nil, fmt.Errorf("no calibration records")
 	}
 
@@ -259,7 +300,8 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 	grid := buildGrid(free, opts.Step)
 	cert := &Certificate{
 		Alpha: opts.Alpha, Delta: opts.Delta, N: n, NShadow: len(shadow),
-		NExcluded: excluded, Method: opts.Method, GridSize: len(grid),
+		NExcluded: excluded, NOracleUnsound: unsound, NOracleInconclusive: inconclusive,
+		Method: opts.Method, GridSize: len(grid),
 		Tiers: tiers, Note: note, CreatedAt: time.Now().UTC(),
 	}
 	if len(grid) == 0 {

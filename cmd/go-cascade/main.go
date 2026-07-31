@@ -287,6 +287,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	outPath := fs.String("o", "thresholds.json", "certificate output path")
 	recOut := fs.String("records", "", "also write the raw calibration records here")
 	fromRec := fs.String("from-records", "", "replay calibration from saved records instead of profiling again")
+	refsDir := fs.String("refs", "", "directory of execution-validated reference solutions (id/solution.go under any subtree); a generated test suite that refutes its reference is flagged oracle-unsound and excluded from calibration")
 	baselines := fs.Bool("baselines", false, "also report cascade vs always-cheapest vs always-frontier (cost and ground-truth risk)")
 	oracle := fs.String("oracle", "execution", "acceptance oracle: execution (sound) or judge (LLM reviewer, §5.5c)")
 	compare := fs.Bool("compare", false, "profile both oracles and report certified vs realized risk for each")
@@ -391,6 +392,20 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 		return err
 	}
 	defer r.Close() //nolint:errcheck // scratch dir
+
+	// Reference solutions let the profiler detect an unsound generated oracle: a
+	// test suite that refutes known-correct code cannot soundly label candidates
+	// (invariant #4), so such problems are excluded from calibration rather than
+	// counted as model errors.
+	if *refsDir != "" {
+		refs, ferr := loadReferences(*refsDir, probs)
+		if ferr != nil {
+			return ferr
+		}
+		fmt.Fprintf(os.Stderr, "loaded %d/%d reference solutions from %s for oracle-soundness checks\n",
+			len(refs), len(probs), *refsDir)
+		r.SetReferences(refs)
+	}
 
 	// Compare mode profiles both oracles on the same problems and prints the
 	// certified-vs-realized risk for each. This is the §5.5c experiment in
@@ -683,6 +698,14 @@ func printCert(path string, cert *calibrate.Certificate) {
 	fmt.Printf("  alpha / delta   %.3f / %.3f\n", cert.Alpha, cert.Delta)
 	fmt.Printf("  n               %d (%d excluded as contaminated, %d shadow)\n",
 		cert.N, cert.NExcluded, cert.NShadow)
+	if cert.NOracleUnsound > 0 {
+		fmt.Printf("  oracle-unsound  %d excluded (generated tests refuted the compiling reference)\n",
+			cert.NOracleUnsound)
+	}
+	if cert.NOracleInconclusive > 0 {
+		fmt.Printf("  oracle-check    %d inconclusive & kept (reference did not fit the generated API)\n",
+			cert.NOracleInconclusive)
+	}
 	fmt.Printf("  method          %s over a grid of %d\n", cert.Method, cert.GridSize)
 	fmt.Printf("  thresholds      %v\n", cert.Thresholds)
 	fmt.Printf("  empirical risk  %.4f (p=%.4g)\n", cert.EmpiricalRisk, cert.PValue)
@@ -782,6 +805,48 @@ func readBench(path string) ([]benchProblem, error) {
 		out = append(out, p)
 	}
 	return out, sc.Err()
+}
+
+// loadReferences finds an execution-validated reference solution for each bench
+// problem under root. It matches <root>/**/<id>/solution.go, so the pilot, hard,
+// and scale reference trees (each rooted at its own directory) are all found from
+// a single -refs pointing at examples/bench. A problem with no reference is
+// simply left unchecked; the returned map covers only the ids that were found.
+func loadReferences(root string, probs []benchProblem) (map[string]string, error) {
+	want := make(map[string]bool, len(probs))
+	for _, p := range probs {
+		want[p.ID] = true
+	}
+	refs := make(map[string]string)
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || d.Name() != "solution.go" {
+			return nil
+		}
+		// The reference id is the name of the directory holding solution.go.
+		id := filepath.Base(filepath.Dir(path))
+		if !want[id] {
+			return nil
+		}
+		if _, dup := refs[id]; dup {
+			return fmt.Errorf("two reference solutions for id %q under %s; ids must be unique", id, root)
+		}
+		src, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		refs[id] = string(src)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load references from %s: %w", root, err)
+	}
+	if len(refs) == 0 {
+		return nil, fmt.Errorf("no reference solutions matching any bench id found under %s", root)
+	}
+	return refs, nil
 }
 
 func readProblem(file string, rest []string) (string, error) {
