@@ -6,7 +6,7 @@ never sent a query to a real model — every number came from the deterministic
 mock. These runs replace that gap with measurements, and with an honest account
 of what they do and do not establish.
 
-**One-line summary:** across fourteen live experiments the executable oracle was
+**One-line summary:** across fifteen live experiments the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
 that widened with scale (α 0.27 vs 0.32 at n=28; **0.19 vs 0.30 at n=64**)** —
@@ -85,6 +85,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 12a | [tension diagnosis](tension-diagnosis-2026-07-30.md) (offline analysis of #12) | **why** α=0.05 forces `[1,1]` | the tension is **one flaky cheap-tier answer**: `scale_chunk` is oracle-wrong yet unanimous at the 2-sample Wilson ceiling (0.425), indistinguishable from 40 correct unanimous answers → τ0 collapses to 1.0. **0 tier-0 acceptance-risk events** — the cheap tier is never confidently-wrong-and-accepted. Localises the fix to a **higher tier-0 fan-out** (lifts the ceiling + splits flaky clusters); `config.go-specialist-511.json` added to test it |
 | 13 | [5:1:1 fan-out](fanout-511-2026-07-30.md) | the diagnosis's predicted fix — **tier-0 = 5 samples** | **on this draw**, α=0.05 certifies AND the cost win holds: τ0=**0.4** (cheap tier accepted), cascade **2.13× cheaper** than frontier at 0 risk, 0/53 errors, unanimity ceiling 0.425→**0.649**. **Confound flagged** (`scale_chunk` drew correct) — and experiment 14 shows this **does not replicate** |
 | 14 | [confound close](confound-close-2026-07-31.md) | theorem + **2 repeat draws** | **the α=0.05 cost win is real but fragile — it does not replicate.** Theorem (free): fan-out buys headroom vs **flaky** wrong (gap 0.40→0.88 as N=1→10) and **none** vs **confident** wrong (gap 0 ∀N). Empirically, **3 fresh 5:1:1 draws → 3 outcomes:** [0.4,1] win / [1,1] no-win (a cheap **confident-wrong** `scale_is_palindrome`, 5/5) / **valid=false** (a **top-tier miss**). At n≈53 one error anywhere moves the certificate — binding constraint is **model accuracy at small n** |
+| 15 | [two-stage tier](two-stage-arm-2026-07-31.md) | the last untested **lever** — Opus **plans**, Maverick **codes** | **negative result: generalist-instructs-specialist is an accuracy lever, not a cost lever — and at an Opus planner, a cost disaster.** The plan nudges tier-0 accuracy 0.88→**0.92** (one problem, noise-band) and does **not** fix confident errors (`scale_chunk` stayed 5/5-wrong with the plan). But the Opus call on every tier-0 query makes tier-0 cost **35×** higher → cascade **3.1× pricier than always-frontier**. A cheap-bottom-tier (#11) beats instructing a specialist |
 
 ### How each run answered the previous one's limitation
 
@@ -154,16 +155,19 @@ The value is in the chain, not any single number:
    blocker back to sample size** (α=0.05 needs n≥45; the interrupted pinned run
    left 40), overturning experiment 8's "the floor is model accuracy."
 
-### Two candidate levers — one now run, one still open
+### Two candidate levers — both now run
 
 - **A cheaper/more-accurate bottom tier** (e.g. a Go-specialist small model):
   **run** (experiment 11). It delivered the cost win but *not* a lower floor — the
   floor is a top-tier property under a sound oracle, and the apparent excess was
   spec-model test noise, not the bottom tier.
-- **A generalist-instructs-specialist arm**: a strong general model rewrites the
-  problem into a precise spec/plan that a narrow code model executes. Testable in
-  this harness as a two-stage tier. Both are config/prompt-level experiments the
-  cost baseline and cert comparison could score directly.
+- **A generalist-instructs-specialist arm**: **run** (experiment 15). A strong
+  planner (Opus) rewrites the problem into a plan a cheap coder (Maverick) executes.
+  It is an **accuracy lever, not a cost lever** — the plan nudges tier-0 accuracy up
+  slightly (0.88→0.92, noise-band) and does not fix confident errors, while an
+  Opus planner on every cheap-tier query makes the cascade **3.1× pricier than
+  always-frontier**. The cheap-bottom-tier lever (11) beats it; a two-stage tier only
+  makes cost sense with a planner *much* cheaper than the frontier (untested).
 
 ## What is established
 
