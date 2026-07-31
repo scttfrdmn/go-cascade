@@ -225,6 +225,57 @@ func CodeUser(problem, api string, nonce int, avoid []string) string {
 // CodeSystem returns the code-phase system prompt.
 func CodeSystem() string { return codeSystem }
 
+const planSystem = `You are a senior Go engineer writing an implementation plan for
+another engineer to code from. You do NOT write the implementation yourself.
+
+Given a problem statement and the exact API to implement, respond with a concise
+plan in prose and short pseudo-steps: the algorithm and its complexity, the data
+structures, the edge cases that must be handled (empty/nil input, boundaries,
+overflow, aliasing, Unicode, concurrency hazards), and any subtle correctness
+traps in the spec. Be specific about anything easy to get wrong.
+
+Rules:
+- Do NOT write Go implementation code or a full function body. Pseudo-code steps
+  and signatures are fine; a finished solution is not.
+- Standard library only.
+- Do not restate the problem; add the reasoning a careful implementer needs.`
+
+// PlanSystem returns the planning-phase system prompt for a two-stage tier.
+func PlanSystem() string { return planSystem }
+
+// PlanUser renders the planning-phase user turn: the problem plus the fixed API
+// the coder must implement. The planner sees only what the coder already sees
+// (problem + API); it must NOT be shown the hidden tests (invariant #1/#2).
+func PlanUser(problem, api string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Problem statement:\n\n%s\n\n", strings.TrimSpace(problem))
+	fmt.Fprintf(&b, "The implementation must satisfy exactly this API:\n\n```go\n%s\n```\n",
+		strings.TrimSpace(api))
+	return b.String()
+}
+
+// CodeUserFromPlan renders the code-phase user turn for a two-stage tier: the
+// same contract as CodeUser plus an implementation plan authored by the planner
+// model. The plan is advisory context, not a spec — the API remains
+// authoritative — so a coder that disagrees with the plan still must satisfy the
+// API and will be caught by the same oracle.
+func CodeUserFromPlan(problem, api, plan string, nonce int, avoid []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Problem statement:\n\n%s\n\n", strings.TrimSpace(problem))
+	fmt.Fprintf(&b, "Implement exactly this API:\n\n```go\n%s\n```\n", strings.TrimSpace(api))
+	if p := strings.TrimSpace(plan); p != "" {
+		fmt.Fprintf(&b, "\nAn implementation plan from a senior engineer (advisory; the API above is authoritative):\n\n%s\n", p)
+	}
+	if len(avoid) > 0 {
+		b.WriteString("\nThese approaches were already tried and refuted; do not repeat them:\n")
+		for _, a := range avoid {
+			fmt.Fprintf(&b, "- %s\n", a)
+		}
+	}
+	fmt.Fprintf(&b, "\n(sample %d)\n", nonce)
+	return b.String()
+}
+
 // RepairUser renders a repair turn: the previous attempt plus the exact
 // verifier diagnostics that refuted it.
 func RepairUser(problem, api, prev, stage, diag string) string {

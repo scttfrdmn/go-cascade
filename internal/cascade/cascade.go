@@ -409,7 +409,7 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 		res.Score, res.Static = score, rep.Report.Static
 		res.Certified = r.calibrated()
 		res.Certificate = r.cert
-		res.OracleContaminated = tier.ModelID == r.cfg.TestModel
+		res.OracleContaminated = tier.ModelID == r.cfg.TestModel || tier.PlannerModel == r.cfg.TestModel
 		res.Trace = append(res.Trace, Step{
 			Stage: "tier", Tier: tier.Name, Action: ActAccept, Score: score, Threshold: tau,
 			Clusters: clusters, Reason: acceptReason(score, tau, certified, last),
@@ -537,17 +537,44 @@ func (r *Router) sampleTier(ctx context.Context, k int, problem string, spec *pr
 		}
 	}
 
+	// Two-stage tier: one planner call rewrites the problem into an
+	// implementation plan that every coder sample then works from. The planner
+	// is drawn once (not per sample) so the plan is shared and its cost is a
+	// single per-query charge, and it sees only the problem + API — never the
+	// hidden tests (invariant #1/#2). A planner error is not fatal: on failure we
+	// fall back to plan-free generation so the tier degrades to single-stage
+	// rather than aborting the query.
+	var plan string
+	if tier.TwoStage() {
+		presp, err := r.prov.Generate(ctx, model.Request{
+			ModelID: tier.PlannerModel, Purpose: model.PurposePlan,
+			System: prompt.PlanSystem(),
+			Messages: []model.Message{{Role: model.RoleUser,
+				Text: prompt.PlanUser(problem, spec.API)}},
+			MaxTokens: 4000, Temperature: tier.Temperature,
+		})
+		if err != nil {
+			return nil, err
+		}
+		plan = presp.Text
+		usd := tier.PlannerCost(presp.Usage.InputTokens, presp.Usage.OutputTokens)
+		res.Cost.addModel(presp.Usage.InputTokens, presp.Usage.OutputTokens, usd)
+	}
+
 	out := make([]cluster.Candidate, tier.Samples)
 	var mu sync.Mutex
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(r.limit)
 	for i := range tier.Samples {
 		g.Go(func() error {
+			userText := prompt.CodeUser(problem, spec.API, i, avoid)
+			if tier.TwoStage() {
+				userText = prompt.CodeUserFromPlan(problem, spec.API, plan, i, avoid)
+			}
 			resp, err := r.prov.Generate(gctx, model.Request{
 				ModelID: tier.ModelID, Purpose: model.PurposeCode,
-				System: prompt.CodeSystem(),
-				Messages: []model.Message{{Role: model.RoleUser,
-					Text: prompt.CodeUser(problem, spec.API, i, avoid)}},
+				System:    prompt.CodeSystem(),
+				Messages:  []model.Message{{Role: model.RoleUser, Text: userText}},
 				MaxTokens: 8000, Temperature: tier.Temperature, Seed: i,
 			})
 			if err != nil {

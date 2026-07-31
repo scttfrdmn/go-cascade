@@ -25,6 +25,7 @@ type Purpose string
 // Request purposes.
 const (
 	PurposeSpec   Purpose = "spec"   // derive API contract + tests from the problem
+	PurposePlan   Purpose = "plan"   // rewrite the problem into an implementation plan (two-stage tier)
 	PurposeCode   Purpose = "code"   // write a solution against the contract
 	PurposeRepair Purpose = "repair" // fix a solution given verifier diagnostics
 	// PurposeJudge asks a model to rule on a candidate's correctness. It backs

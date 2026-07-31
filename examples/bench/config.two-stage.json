@@ -1,0 +1,11 @@
+{
+  "_comment": "Generalist-instructs-specialist two-stage bottom tier. Tier 0 is a two-stage tier: the PLANNER model (opus-4-5, a strong generalist) rewrites each problem into an implementation plan, and the CODER model (Llama 4 Maverick, the cheap specialist) generates the solution FROM that plan instead of the raw problem. The hypothesis: a good plan lets a cheap coder punch above its single-stage weight, buying accuracy at the cheap tier without escalating. planner_model differs from test_model (sonnet-4-6) so invariant #3 holds (the planner authors the code and must not be the oracle author). planner_input/output prices are opus-4-5's real list rates so the planner call is priced correctly, not at the coder's cheaper rate; the coder's own input/output prices are Maverick's real us-west-2 rates. Tiers 1-2 stay single-stage Claude at list price so cross-run cost comparison holds. Fan-out 2:1:1 matches config.go-specialist-211.json for a like-for-like comparison against the non-planned cheap tier. This config is a STARTING POINT for the two-stage arm; the planner/coder pairing (opus vs sonnet planner) is a live-run decision.",
+  "test_model": "us.anthropic.claude-sonnet-4-6",
+  "test_input_usd_per_mtok": 3.0,
+  "test_output_usd_per_mtok": 15.0,
+  "tiers": [
+    {"name":"small","model_id":"us.meta.llama4-maverick-17b-instruct-v1:0","input_usd_per_mtok":0.24,"output_usd_per_mtok":0.97,"planner_model":"us.anthropic.claude-opus-4-5-20251101-v1:0","planner_input_usd_per_mtok":5.0,"planner_output_usd_per_mtok":25.0,"samples":2,"repair_depth":2,"temperature":0.8},
+    {"name":"mid","model_id":"us.anthropic.claude-sonnet-4-5-20250929-v1:0","input_usd_per_mtok":3.0,"output_usd_per_mtok":15.0,"samples":1,"repair_depth":2,"temperature":0.4},
+    {"name":"large","model_id":"us.anthropic.claude-opus-4-5-20251101-v1:0","input_usd_per_mtok":5.0,"output_usd_per_mtok":25.0,"samples":1,"repair_depth":2,"temperature":0.2}
+  ]
+}

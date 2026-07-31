@@ -3,6 +3,7 @@ package cascade
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -326,5 +327,94 @@ func TestValidateRejectsDualKnobs(t *testing.T) {
 	cfg.Alpha, cfg.Budget = 0, 0
 	if err := cfg.Validate(); err == nil {
 		t.Error("neither alpha nor budget set must be rejected")
+	}
+}
+
+// A two-stage tier's planner authors the code, so a planner equal to the oracle
+// author violates invariant #3 and must be rejected at config time, not silently
+// calibrated. (Fast: no toolchain.)
+func TestValidateRejectsPlannerEqualsTestModel(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Tiers[0].PlannerModel = cfg.TestModel // planner == oracle author
+	if err := cfg.Validate(); err == nil {
+		t.Error("a planner_model equal to test_model must be rejected (invariant #3)")
+	}
+	cfg.Tiers[0].PlannerModel = model.MockLarge // distinct planner is fine
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("a planner distinct from the oracle author must be accepted: %v", err)
+	}
+}
+
+// recordingProvider wraps a Provider and tallies calls by purpose, plus the last
+// user text seen per purpose, so a test can assert the planner ran and that its
+// output reached the coder.
+type recordingProvider struct {
+	inner   model.Provider
+	mu      sync.Mutex
+	byModel map[string]int
+	byPurp  map[model.Purpose]int
+	// planReachedCoder is true if any code-purpose prompt carried a plan. It is a
+	// bool, not "the last prompt", because a two-stage tier 0 can escalate to
+	// single-stage higher tiers whose plan-free prompts would otherwise mask it.
+	planReachedCoder bool
+}
+
+func newRecording(inner model.Provider) *recordingProvider {
+	return &recordingProvider{inner: inner, byModel: map[string]int{}, byPurp: map[model.Purpose]int{}}
+}
+
+func (p *recordingProvider) Name() string { return p.inner.Name() }
+
+func (p *recordingProvider) Generate(ctx context.Context, req model.Request) (*model.Response, error) {
+	p.mu.Lock()
+	p.byModel[req.ModelID]++
+	p.byPurp[req.Purpose]++
+	if req.Purpose == model.PurposeCode && len(req.Messages) > 0 &&
+		strings.Contains(req.Messages[len(req.Messages)-1].Text, "implementation plan") {
+		p.planReachedCoder = true
+	}
+	p.mu.Unlock()
+	return p.inner.Generate(ctx, req)
+}
+
+// A two-stage tier must (a) make exactly one planner call to the planner model,
+// (b) thread the plan into the coder prompt, (c) charge the planner's cost, and
+// (d) leave the oracle uncontaminated when the planner differs from TestModel.
+func TestTwoStageTierRunsPlanner(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = "" // bypass arm zero so the tier actually samples
+	// Make tier 0 two-stage: MockLarge plans, MockSmall codes. Both differ from
+	// the MockOracle test model, so the record must be uncontaminated.
+	cfg.Tiers[0].PlannerModel = model.MockLarge
+	cfg.Tiers[0].Samples = 2
+
+	rec := newRecording(model.Mock{})
+	r, err := New(cfg, rec, nil)
+	if err != nil {
+		t.Skipf("cannot build router (no go toolchain?): %v", err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+
+	res, err := r.Solve(context.Background(), seqProblem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := rec.byPurp[model.PurposePlan]; p != 1 {
+		t.Errorf("two-stage tier made %d planner calls, want exactly 1", p)
+	}
+	if rec.byModel[model.MockLarge] < 1 {
+		t.Error("the planner model was never called")
+	}
+	if !rec.planReachedCoder {
+		t.Error("the plan never reached any coder prompt")
+	}
+	if res.OracleContaminated {
+		t.Error("a planner distinct from TestModel must not contaminate the oracle")
+	}
+	if res.Cost.ModelCalls < 1 {
+		t.Error("planner cost was not accounted")
 	}
 }
