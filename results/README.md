@@ -6,7 +6,7 @@ never sent a query to a real model — every number came from the deterministic
 mock. These runs replace that gap with measurements, and with an honest account
 of what they do and do not establish.
 
-**One-line summary:** across twelve live experiments the executable oracle was
+**One-line summary:** across thirteen live experiments the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
 that widened with scale (α 0.27 vs 0.32 at n=28; **0.19 vs 0.30 at n=64**)** —
@@ -29,9 +29,14 @@ that pinned run to completion (n=64): **α=0.05 certifies** — the first
 deployable-α certificate in the study, with genuine model errors **0/52** (the
 floor was **100% test noise** on this draw) — **but the cost win inverts at that
 α**: the certified thresholds `[1,1]` force the cascade to escalate every problem,
-making it *pricier* than always-frontier. **Deployable α and the 3.2× cost win are
-mutually exclusive at the 2:1:1 fan-out** — the cheap tier's 2-sample Wilson bound
-cannot clear a threshold strict enough to certify α=0.05.
+making it *pricier* than always-frontier. That mutual-exclusivity turned out to be
+a **2:1:1-fan-out property, not a method property**: the thirteenth experiment
+raised the tier-0 fan-out to **5 samples (5:1:1)** and got **both at once** — α=0.05
+certifies with τ0=**0.4** (cheap tier accepted) and the cascade is **2.13× cheaper**
+than always-frontier at 0 risk. The 5-sample unanimity ceiling rises 0.425→0.649,
+giving the calibrator threshold headroom the 2-sample bound denied it (one draw;
+the specific blocker `scale_chunk` also drew correct, a confound stated in the
+write-up).
 
 ## The central question
 
@@ -74,6 +79,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 11 | [Go-specialist tier + oracle noise](go-specialist-2026-07-25.md) | cheap **non-Claude bottom tier** (Llama 4 Maverick) at **2:1:1 / 3:2:1**, then **API pinning** to close the oracle gate | **cascade beats frontier on cost 3.2–3.4× with sample count intact**; and pinning the API so the reference gate reaches every problem shows the "~11% floor" was **~93% spec-model test noise** — true model-error rate **~0.025 (1 in 40)**, relocating the deployable-α blocker back to sample size |
 | 12 | [completed n=64 pinned run](pinned-n64-complete-2026-07-30.md) | the **full-n pinned run** experiment 11 left interrupted (deployable-α + cost, together) | **α=0.05 certifies** (first deployable-α cert; genuine model errors **0/52**, floor was **100% test noise**) — **but the cost win inverts there**: at α=0.05 the certified thresholds `[1,1]` force full escalation, so the cascade is **pricier** than frontier. Deployable α and the 3.2× cost win are **mutually exclusive at 2:1:1** |
 | 12a | [tension diagnosis](tension-diagnosis-2026-07-30.md) (offline analysis of #12) | **why** α=0.05 forces `[1,1]` | the tension is **one flaky cheap-tier answer**: `scale_chunk` is oracle-wrong yet unanimous at the 2-sample Wilson ceiling (0.425), indistinguishable from 40 correct unanimous answers → τ0 collapses to 1.0. **0 tier-0 acceptance-risk events** — the cheap tier is never confidently-wrong-and-accepted. Localises the fix to a **higher tier-0 fan-out** (lifts the ceiling + splits flaky clusters); `config.go-specialist-511.json` added to test it |
+| 13 | [5:1:1 fan-out](fanout-511-2026-07-30.md) | the diagnosis's predicted fix — **tier-0 = 5 samples** | **tension resolved: α=0.05 certifies AND the cost win holds, together.** τ0=**0.4** (cheap tier accepted, was 1.0), cascade **2.13× cheaper** than frontier at 0 risk (was 0.61× pricier), 0/53 genuine errors. The 5-sample unanimity ceiling rises 0.425→**0.649**, giving the threshold headroom. **Confound:** `scale_chunk` drew *correct* this run, so structural headroom (solid) and a lucky draw (the specific blocker) can't be fully separated |
 
 ### How each run answered the previous one's limitation
 
@@ -179,19 +185,23 @@ underweights, but one that still favours the executable oracle.
 
 ## What is NOT established (open, honest)
 
-- **Deployable-α certification is REACHED (experiment 12) — but it costs the cost
-  win.** Experiment 8's "α=0.05 is unreachable; the floor is model accuracy
+- **Deployable-α certification is REACHED (experiments 12–13), and the cost win
+  survives it.** Experiment 8's "α=0.05 is unreachable; the floor is model accuracy
   (~0.11)" was an artifact of oracle noise. With the `-refs -pin-api` gate removing
   spec-model test noise, the completed n=64 pinned run has genuine model errors
   **0/52** and **certifies α=0.05** (valid=true, 0 empirical risk) — the first
   deployable-α certificate in the study, which the judge arm cannot match on the
-  same candidates (its lowest empirical risk is 0.077). The *new* open edge is that
-  at α=0.05 the certified thresholds are `[1,1]`, forcing the cascade to escalate
-  every problem, so it becomes **pricier than always-frontier**: deployable α and
-  the 3.2× cost win are **mutually exclusive at 2:1:1**. The next lever is the
-  cheap tier's routing signal at strict α — a 2-sample Wilson bound cannot clear a
-  threshold high enough to certify α=0.05, so a higher cheap-tier fan-out is the
-  untested path to getting both. (Caveat: 0/52 is one draw with a wide interval.)
+  same candidates (its lowest empirical risk is 0.077). At 2:1:1 this *cost* the
+  cost win (thresholds `[1,1]` → full escalation → pricier than frontier), but
+  experiment 13 showed that was a **fan-out property, not a method property**:
+  raising the cheap tier to 5 samples lifts the unanimity ceiling 0.425→0.649, and
+  at 5:1:1 α=0.05 certifies with τ0=0.4 (cheap tier accepted) while the cascade is
+  **2.13× cheaper** than always-frontier at 0 risk. **Remaining open edge:** both
+  results are single draws (0/52, 0/53 have wide intervals), and experiment 13's
+  specific 2:1:1 blocker (`scale_chunk`) also drew correct, so the structural
+  headroom (solid) and the lucky draw (the specific problem) are not fully
+  separable. A repeat draw or a seeded-flaky-error test would settle which
+  dominates.
 - **The scar-free-race blind spot is one data point and was not reproduced.**
   η_fa > 0 was observed exactly once (the pilot's model-authored race). The
   race-seeded test (experiment 6) caught all 20 seeded races — but only because
