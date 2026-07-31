@@ -6,7 +6,7 @@ never sent a query to a real model — every number came from the deterministic
 mock. These runs replace that gap with measurements, and with an honest account
 of what they do and do not establish.
 
-**One-line summary:** across eleven live experiments the executable oracle was
+**One-line summary:** across twelve live experiments the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
 that widened with scale (α 0.27 vs 0.32 at n=28; **0.19 vs 0.30 at n=64**)** —
@@ -24,7 +24,14 @@ completed by **pinning the API** so it reaches every problem, showed the earlier
 "~11% accuracy floor" was **~93% spec-model test noise** — the true model-error
 rate is **~0.025 (1 in 40)**. That overturns the "floor is model accuracy"
 reading and **relocates the deployable-α blocker back to sample size** (α=0.05
-needs n≥45; the interrupted pinned run reached 40).
+needs n≥45; the interrupted pinned run reached 40). The twelfth experiment ran
+that pinned run to completion (n=64): **α=0.05 certifies** — the first
+deployable-α certificate in the study, with genuine model errors **0/52** (the
+floor was **100% test noise** on this draw) — **but the cost win inverts at that
+α**: the certified thresholds `[1,1]` force the cascade to escalate every problem,
+making it *pricier* than always-frontier. **Deployable α and the 3.2× cost win are
+mutually exclusive at the 2:1:1 fan-out** — the cheap tier's 2-sample Wilson bound
+cannot clear a threshold strict enough to certify α=0.05.
 
 ## The central question
 
@@ -65,6 +72,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 9 | [cost baseline](cost-baseline-2026-07-25.md) | **cascade vs single-model policies** (cost + truth) | at default 5:2:1, **always-frontier wins** — cascade is priciest; the fan-out erases the cheap tier's edge |
 | 10 | [fan-out test](fanout-2026-07-25.md) | same, at **1:1:1** fan-out | **cascade wins on cost — 2.75× cheaper than frontier** — confirming the fan-out was the culprit (risk noisy) |
 | 11 | [Go-specialist tier + oracle noise](go-specialist-2026-07-25.md) | cheap **non-Claude bottom tier** (Llama 4 Maverick) at **2:1:1 / 3:2:1**, then **API pinning** to close the oracle gate | **cascade beats frontier on cost 3.2–3.4× with sample count intact**; and pinning the API so the reference gate reaches every problem shows the "~11% floor" was **~93% spec-model test noise** — true model-error rate **~0.025 (1 in 40)**, relocating the deployable-α blocker back to sample size |
+| 12 | [completed n=64 pinned run](pinned-n64-complete-2026-07-30.md) | the **full-n pinned run** experiment 11 left interrupted (deployable-α + cost, together) | **α=0.05 certifies** (first deployable-α cert; genuine model errors **0/52**, floor was **100% test noise**) — **but the cost win inverts there**: at α=0.05 the certified thresholds `[1,1]` force full escalation, so the cascade is **pricier** than frontier. Deployable α and the 3.2× cost win are **mutually exclusive at 2:1:1** |
 
 ### How each run answered the previous one's limitation
 
@@ -170,15 +178,19 @@ underweights, but one that still favours the executable oracle.
 
 ## What is NOT established (open, honest)
 
-- **No *useful-α* certification — and scaling n did not fix it.** At n=64
-  (experiment 8) execution certifies α=0.19 (down from 0.27 at n=28) and the gap
-  over the judge widened to 11 points, but α=0.05 stayed unreachable. The reason
-  is now *measured*, not assumed: execution's empirical risk is ~0.11 at both n,
-  and the certifiable α cannot fall below the observed error rate. So the binding
-  constraint is **model accuracy (~11% true error on this benchmark), not sample
-  size.** Reaching a deployable α needs a more accurate cascade (better
-  escalation/repair, a stronger top tier), not more calibration data. Sample size
-  gated the n=28 result; accuracy gates from here down.
+- **Deployable-α certification is REACHED (experiment 12) — but it costs the cost
+  win.** Experiment 8's "α=0.05 is unreachable; the floor is model accuracy
+  (~0.11)" was an artifact of oracle noise. With the `-refs -pin-api` gate removing
+  spec-model test noise, the completed n=64 pinned run has genuine model errors
+  **0/52** and **certifies α=0.05** (valid=true, 0 empirical risk) — the first
+  deployable-α certificate in the study, which the judge arm cannot match on the
+  same candidates (its lowest empirical risk is 0.077). The *new* open edge is that
+  at α=0.05 the certified thresholds are `[1,1]`, forcing the cascade to escalate
+  every problem, so it becomes **pricier than always-frontier**: deployable α and
+  the 3.2× cost win are **mutually exclusive at 2:1:1**. The next lever is the
+  cheap tier's routing signal at strict α — a 2-sample Wilson bound cannot clear a
+  threshold high enough to certify α=0.05, so a higher cheap-tier fan-out is the
+  untested path to getting both. (Caveat: 0/52 is one draw with a wide interval.)
 - **The scar-free-race blind spot is one data point and was not reproduced.**
   η_fa > 0 was observed exactly once (the pilot's model-authored race). The
   race-seeded test (experiment 6) caught all 20 seeded races — but only because
