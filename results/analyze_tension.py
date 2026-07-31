@@ -78,6 +78,21 @@ def main(path):
     print("A higher tier0 fan-out helps ONLY if the blocker's error is flaky (samples")
     print("disagree, its score drops), not confident (samples repeat it, score holds).")
 
+    # 5. Split clusters: tier0 answers whose score is BELOW the unanimity ceiling —
+    #    i.e. the samples did NOT all agree. At a higher fan-out these are the flaky
+    #    answers the extra samples surfaced. A flaky-WRONG one held below tau0 is the
+    #    mechanism operating independently of any single problem's draw (see the
+    #    fanout-511 addendum: num_isqrt split to 2/5 = 0.143 and escalated).
+    ceiling = max((r["tiers"][0]["score"] for r in clean), default=0.0)
+    split_wrong = [(r["id"], round(r["tiers"][0]["score"], 3)) for r in clean
+                   if 0 < r["tiers"][0]["score"] < ceiling - 1e-9
+                   and r["tiers"][0].get("correct") is False]
+    print(f"\nsplit-cluster flaky-WRONG tier0 answers (0 < score < ceiling {ceiling:.3f}): "
+          f"{len(split_wrong)}")
+    for i, s in split_wrong:
+        print(f"  {i}: score={s:.3f}  <- flaky wrong answer surfaced by the fan-out, "
+              f"escalated if below tau0")
+
 
 if __name__ == "__main__":
     main(sys.argv[1] if len(sys.argv) > 1
