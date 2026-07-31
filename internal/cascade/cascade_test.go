@@ -345,9 +345,9 @@ func TestValidateRejectsPlannerEqualsTestModel(t *testing.T) {
 	}
 }
 
-// recordingProvider wraps a Provider and tallies calls by purpose, plus the last
-// user text seen per purpose, so a test can assert the planner ran and that its
-// output reached the coder.
+// recordingProvider wraps a Provider and tallies calls by model and by purpose,
+// and flags whether any coder prompt carried a plan, so a test can assert the
+// planner ran and that its output reached the coder.
 type recordingProvider struct {
 	inner   model.Provider
 	mu      sync.Mutex

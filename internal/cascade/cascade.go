@@ -516,7 +516,7 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 	res.Solution, res.Solved, res.AcceptedAt = bestCand.Source, true, tier.Name
 	res.Score, res.Static = bestScore, bestCand.Report.Static
 	res.Certified, res.Certificate = r.calibrated(), r.cert
-	res.OracleContaminated = tier.ModelID == r.cfg.TestModel
+	res.OracleContaminated = tier.ModelID == r.cfg.TestModel || tier.PlannerModel == r.cfg.TestModel
 	res.Trace = append(res.Trace, Step{
 		Stage: "speculative", Tier: tier.Name, Action: ActAccept, Score: bestScore,
 		Clusters: bestClusters, CostSoFar: res.Cost.TotalUSD,
@@ -748,6 +748,11 @@ func (r *Router) testsCompileAgainstOwnAPI(ctx context.Context, spec *prompt.Spe
 // Repair attempts on a fixed model are strongly positively correlated: if it
 // cannot fix the defect in two rounds it will not fix it in five. The depth cap
 // is the point of that observation, not an arbitrary limit.
+//
+// A two-stage tier's repair is deliberately plan-free: repair is driven by the
+// concrete refutation (RepairUser), not by re-planning, so the planner's plan is
+// not re-threaded here. This is a design choice, not an oversight — if a plan
+// were wanted at repair time it would be an independent extension.
 func (r *Router) repairLoop(ctx context.Context, k int, problem string, spec *prompt.Spec,
 	prev *cluster.Candidate, res *Result,
 ) (*cluster.Candidate, bool) {
