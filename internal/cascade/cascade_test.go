@@ -149,6 +149,29 @@ func TestHTwiceZero(t *testing.T) { if Twice(0) != 0 { t.Fatal("want 0") } }`,
 	if v != OracleInconclusive {
 		t.Errorf("an API-name mismatch must be inconclusive, not unsound; got v=%d diag=%q", v, diag)
 	}
+
+	// A generated test that uses a stdlib package it forgot to import does not
+	// compile against ANY candidate (or the reference), so it is a broken/unsound
+	// oracle — distinct from an API mismatch, where the tests compile against
+	// their own API. This is the third spec-model noise class the pinned run
+	// surfaced (missing import in the test). It must be UNSOUND, not inconclusive.
+	missingImportSpec := &prompt.Spec{
+		API: api, // matches the reference's Double, so it is not a signature mismatch
+		VisibleTests: `package solution
+import "testing"
+func TestVDouble(t *testing.T) { if Double(3) != 6 { t.Fatal("want 6") } }`,
+		// Uses strings.Repeat but never imports "strings": will not compile.
+		HiddenTests: `package solution
+import "testing"
+func TestHDoubleBig(t *testing.T) { _ = strings.Repeat("x", 3); if Double(0) != 0 { t.Fatal("want 0") } }`,
+	}
+	v, diag = r.validateOracle(ctx, "dbl", missingImportSpec)
+	if v != OracleUnsoundVerdict {
+		t.Errorf("a test that will not compile against its own API must be unsound; got v=%d diag=%q", v, diag)
+	}
+	if !strings.Contains(diag, "do not compile against their own API") {
+		t.Errorf("diagnostic should name the malformed-test cause, got: %q", diag)
+	}
 }
 
 // A run with a valid certificate must say so, including when the final tier

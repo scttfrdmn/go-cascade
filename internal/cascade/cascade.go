@@ -623,13 +623,14 @@ const (
 	// refuted it (test/race/accept stage). The tests reject correct code, so the
 	// oracle is unsound (invariant #4) and its labels on this problem are noise.
 	OracleUnsoundVerdict
-	// OracleInconclusive: the reference did not even compile against the
-	// generated tests — a parse/type/build/vet failure. This means the spec model
-	// invented an API name or signature that differs from the reference's
-	// canonical one, so the reference simply does not fit *this* run's contract.
-	// It is NOT evidence that the tests are wrong (a candidate written against the
-	// generated API could still be judged soundly), so the record is kept. Only a
-	// behavioural refutation of a compiling reference proves unsoundness.
+	// OracleInconclusive: the reference did not compile against the generated
+	// tests, BUT the tests do compile against their own generated API stub — so
+	// the spec model invented an API name/signature that differs from the
+	// reference's canonical one. The reference does not fit *this* run's contract,
+	// which says nothing about whether the tests are correct for a candidate that
+	// does fit it, so the record is kept. Only a behavioural refutation of a
+	// compiling reference, or a test that will not compile against its own API,
+	// proves unsoundness.
 	OracleInconclusive
 )
 
@@ -660,10 +661,24 @@ func (r *Router) validateOracle(ctx context.Context, id string, spec *prompt.Spe
 	}
 	if !rep.OK {
 		// StageTest is the first stage that runs the reference rather than just
-		// compiling/vetting it. A failure at or after it is behavioural; anything
-		// earlier is an API/compile mismatch and is inconclusive.
+		// compiling/vetting it. A failure at or after it is behavioural; the tests
+		// ran and rejected correct code, so the oracle is unsound.
 		if rep.FailedAt >= verify.StageTest {
 			return OracleUnsoundVerdict, fmt.Sprintf("reference refuted at %s: %s", rep.FailedAt, strings.TrimSpace(rep.Diagnostic))
+		}
+		// A compile-stage failure is ambiguous. Two sub-cases, and they get
+		// opposite verdicts. Disambiguate by compiling the generated tests against
+		// their OWN generated API stub (spec.API, whose bodies already panic):
+		//   - If the tests do not compile even against their own API, the test
+		//     suite is malformed (e.g. it uses a stdlib package it forgot to
+		//     import). It refutes EVERY candidate, not just the reference, so it is
+		//     a broken/unsound oracle — no code can pass it.
+		//   - If the tests do compile against their own API, then only the
+		//     reference does not fit that API: a name/signature mismatch, which is
+		//     inconclusive (a candidate written to the generated API could still be
+		//     judged soundly).
+		if selfOK, selfDiag := r.testsCompileAgainstOwnAPI(ctx, spec); !selfOK {
+			return OracleUnsoundVerdict, fmt.Sprintf("generated tests do not compile against their own API (%s): %s", rep.FailedAt, strings.TrimSpace(selfDiag))
 		}
 		return OracleInconclusive, fmt.Sprintf("reference does not fit generated API (%s): %s", rep.FailedAt, strings.TrimSpace(rep.Diagnostic))
 	}
@@ -677,6 +692,28 @@ func (r *Router) validateOracle(ctx context.Context, id string, spec *prompt.Spe
 		return OracleUnsoundVerdict, fmt.Sprintf("reference refuted at %s stage: %s", stage, strings.TrimSpace(d))
 	}
 	return OracleSound, ""
+}
+
+// testsCompileAgainstOwnAPI reports whether the generated test files compile
+// against the generated API stub alone (spec.API, bodies already panicking).
+// It runs the verify ladder on the stub: a failure BEFORE StageTest is a compile
+// error (the tests reference something the API does not declare — most often a
+// stdlib package the test forgot to import), so the test suite is malformed. A
+// failure AT or AFTER StageTest just means the panic stub cannot pass the tests,
+// which is expected and proves the suite compiles. This check involves no model
+// candidate, so it is independent of any tier's output (invariant #2 is not at
+// risk: nothing is being selected against the holdout).
+func (r *Router) testsCompileAgainstOwnAPI(ctx context.Context, spec *prompt.Spec) (ok bool, diag string) {
+	ws, err := r.runner.NewWorkspace(spec.API, spec.VisibleTests, spec.HiddenTests)
+	if err != nil {
+		return false, fmt.Sprintf("workspace: %v", err)
+	}
+	defer ws.Remove() //nolint:errcheck // scratch dir
+	rep := r.ladder.Run(ctx, ws, spec.API, r.verifyOpts())
+	if rep.OK || rep.FailedAt >= verify.StageTest {
+		return true, ""
+	}
+	return false, fmt.Sprintf("%s: %s", rep.FailedAt, rep.Diagnostic)
 }
 
 // repairLoop feeds the exact verifier diagnostic back to the same tier.
