@@ -5,76 +5,90 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 ---
 
-We're continuing the go-cascade live evaluation. Before anything else:
+We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be at `63a9473` (PR #29, two-stage arm).
-   29 PRs merged. Working tree clean, no PR open. If a PR *is* open, confirm CI
+1. **Check git state.** `main` should be at `021d7fe` (PR #33, paper reconciliation).
+   33 PRs merged. Working tree clean, no PR open. If a PR *is* open, confirm CI
    green and I'll tell you whether to merge — don't merge unilaterally.
-2. **Re-read `results/README.md`** (now FIFTEEN experiments). The two most recent
-   arcs: the deployable-α confound (#12→#14) and the two-stage arm (#15).
+2. **Re-read `results/README.md`** (now SEVENTEEN experiments) and **`docs/verification-saturated-cascades.md` §5.6** (the live-evaluation reconciliation).
    `AWS_PROFILE=aws` for live Bedrock; `--provider=mock` is free.
 
-## Where the study stands (both original levers now RUN)
+## Where the study stands — a clean stopping point
 
-The last session closed the two levers the README flagged as open:
+Both original levers and all three NEXT-SESSION refinement threads are now run and
+written up. The last session closed the study's open threads:
 
-- **Deployable α=0.05 is reachable** (experiment 12, first in the study) once the
-  `-refs -pin-api` gate removes spec-model test noise — genuine model error was
-  0/52. **But** the α=0.05 *cost win* is **fragile, not guaranteed** (experiments
-  13–14): a higher cheap-tier fan-out (5:1:1) buys threshold headroom against
-  *flaky* cheap-tier errors and *none* against *confident* ones (proved:
-  `results/headroom_theorem.py`), and across 3 fresh 5:1:1 draws only 1 certified
-  with a cost win — the others hit a confident cheap-tier error (no win) and a
-  top-tier miss (no cert). At n≈53 one error anywhere moves the certificate;
-  binding constraint is **model accuracy at small n**.
-- **Generalist-instructs-specialist is an accuracy lever, not a cost lever**
-  (experiment 15). Opus-plans/Maverick-codes nudged tier-0 accuracy 0.88→0.92
-  (noise-band) but the Opus planner on every tier-0 query made the cascade **3.1×
-  pricier than always-frontier**. The cheap-bottom-tier win (#11) beats it.
+- **Experiment 16** (PR #31): cheap-planner two-stage (Haiku plans, Maverick codes).
+  A cheaper planner mitigates but does NOT reverse the two-stage cost penalty
+  (overhead 35×→8.7× vs #15's Opus; still 2.13× pricier at the certified thresholds).
+  **Two planner points confirm: generalist-instructs-specialist is an accuracy lever,
+  not a cost lever.**
+- **Experiment 17** (PR #32): cost-win frequency — six 5:1:1 draws (three new, WITH
+  `-compare`/β=0). **2 of 6 certify with a cost win, 3 of 6 certify-but-pricier, 1 no
+  cert.** Exact rule: win iff 0 confident-wrong tier-0 in the clean set — and BOTH wins
+  rode the oracle-soundness exclusion, not cheap-tier robustness. Sharper fragility
+  claim than #14's "lucky draw."
+- **Paper alignment** (PR #33): added dated **§5.6** reconciling the pre-live paper
+  with the 17 experiments — "demonstrated at n≤64, NOT validated." Fixed the
+  flatly-false pre-live sentences with pointers to §5.6; preserved the honesty record.
 
-## Open refinement threads (pick one, or decide it's write-up time)
+The paper and CLAUDE.md are now consistent with what was demonstrated vs. argued.
 
-All three are refinements, not new territory — the study is broad (15 experiments)
-and at a plausible stopping/write-up point. Scope spend with me before any live run.
+## Open threads (all are NEW scope — the refinement backlog is exhausted)
 
-1. **Cheap-planner two-stage variant** — build `config.two-stage-haiku.json`
-   (Haiku/Nova planner, NOT Opus/Sonnet — the only pairing with a shot at net cost
-   benefit) and run it (~$4-6). Does a cheap plan salvage the two-stage economics?
-   The two-stage tier code is merged (PR #28); this is config + a live run only.
-2. **Cost-win frequency** — 2-3 more 5:1:1 draws WITH `-compare` (for β=0 ground
-   truth; the #14 draws b/c lacked it) to turn "1 of 3 certified with a cost win"
-   into an actual frequency estimate (~$12-18).
-3. **Write-up / paper alignment** — the live results now cover §5.5 pieces the
-   paper argued; consider reconciling `docs/verification-saturated-cascades.md`
-   with what was demonstrated vs. what remains argued.
+Nothing is half-done. The study is broad (17 experiments) and internally consistent.
+Everything below is a fresh direction, not a loose end. Scope spend with me before
+any live run.
+
+1. **The real §5.5 validation experiment** (the one the paper says would validate,
+   never yet run): n≥300 on a *standard* Go benchmark (HumanEval-Go / MBPP-Go /
+   repo-level), all five arms, plus the two secondary tests §5.5(4) cache-warmth and
+   §5.5(5) mutation-score-vs-*measured*-η_fa. This is large (real money, real
+   engineering — benchmark ingestion + reference validation for 300+ problems) and is
+   the single thing that would move the work from "demonstrated" to "validated." Scope
+   carefully with me first.
+2. **Plan-once-reuse-across-the-cascade** — the only untested two-stage variant with a
+   shot at cost-positive: amortise ONE planner call over all tiers instead of charging
+   it per-tier-0-query. This is a *structural code change* (the plan currently lives in
+   `sampleTier`, regenerated per fan-out — see PR #28), not just config. Invariant-
+   carrying package; read `docs/verification-saturated-cascades.md` before touching
+   `internal/cascade`.
+3. **§3.7 estimator test in isolation** (cheaper slice of #1's secondary): does
+   mutation score track *measured* η_fa on problems where the reference permits
+   ground-truth labelling? This is the §3.7 "unknown bias" question — the weakest link
+   in the measurement→claim chain — and could be probed on the existing 64-problem set
+   without a 300-problem benchmark.
+
+Or: **declare the study done** and treat it as a finished artifact. It is at a
+defensible stopping point.
 
 Keep the discipline: branch-per-change + PR + green CI + I merge; surface confounds
-rather than bury them (last session revised its own #13 headline when repeat draws
-showed the cost win didn't replicate — that's the bar); state demonstrated vs.
-argued; never cite a mock number as a model measurement; launch long work with
-run_in_background, react to notifications, don't sleep-poll; long calibrate runs
-checkpoint + `-resume` on an external kill (proven on 3 real kills last session);
-and 1Password SSH signing intermittently fails on commit — ask me to unlock and
-retry.
+rather than bury them (experiment 17 revised its own "2 of 6" into "2 of 6, and both
+wins ride the soundness gate" — that's the bar); state demonstrated vs. argued; never
+cite a mock number as a model measurement; launch long work with run_in_background,
+react to notifications, don't sleep-poll; long calibrate runs checkpoint + `-resume`
+on an external kill (proven on 5 real kills now); and 1Password SSH signing
+intermittently fails on commit — ask me to unlock and retry.
 
 ---
 
-## Quick reference (state as of 2026-07-31)
+## Quick reference (state as of 2026-08-01)
 
-- Public repo: github.com/scttfrdmn/go-cascade. main `63a9473`, 29 PRs merged, none open.
-- **Two-stage tier is now a shipped feature** (PR #28): `config.Tier.PlannerModel`
-  (+ `PlannerIn/OutPerMTok`); empty = single-stage. Planner call in `sampleTier`
-  before the fan-out; `prompt.PlanSystem/PlanUser` + `CodeUserFromPlan`;
-  `model.PurposePlan`. Invariant #3 enforced at `config.Validate` AND both
-  `OracleContaminated` accept sites. `examples/bench/config.two-stage.json` =
-  Opus/Maverick starting config.
-- **New analysis scripts** (offline, free, re-derivable): `results/headroom_theorem.py`
-  (fan-out flaky-vs-confident dichotomy), `results/analyze_tension.py` (why a draw's
-  τ0 collapses), `results/analyze_draws.py` (aggregate draws: flaky/confident/refuted
-  split + acceptance-risk events).
-- **Configs:** `config.go-specialist-{211,321}.json` (Maverick tier0, 2:1:1/3:2:1),
-  `config.go-specialist-511.json` (5:1:1), `config.two-stage.json` (Opus plans).
-  test_model = sonnet-4-6, MUST differ from every tier AND every planner (#3).
-- **Live spend this project so far:** ~$80-85 (prior ~$65-69 + this session's ~$15:
-  n=64 pinned ~$2.2, 2 draws ~$2, two-stage ~$4.6, + spec/pin/planner overhead).
-- Bedrock models ACTIVE (us-west-2): maverick-17b, opus-4-5, sonnet-4-5, sonnet-4-6.
+- Public repo: github.com/scttfrdmn/go-cascade. main `021d7fe`, 33 PRs merged, none open.
+- **New this session:** `config.two-stage-haiku.json` (Haiku planner); records
+  `two-stage-haiku-maverick-n64.{execution,judge}.json`,
+  `go-specialist-511-draw-{d,e,f}.{execution,judge}.json`; write-ups
+  `results/two-stage-haiku-2026-07-31.md`, `results/cost-win-frequency-2026-08-01.md`;
+  paper §5.6 reconciliation.
+- **Configs:** `config.go-specialist-{211,321,511}.json`, `config.two-stage.json`
+  (Opus plans), `config.two-stage-haiku.json` (Haiku plans). test_model = sonnet-4-6,
+  MUST differ from every tier AND every planner (invariant #3).
+- **Analysis scripts (offline, free):** `results/headroom_theorem.py`,
+  `results/analyze_tension.py`, `results/analyze_draws.py` (feed it the six 5:1:1
+  draws a–f; a/b/c are #13/#14, d/e/f are #17 with `-compare`).
+- **Live spend this project so far:** ~$95–105 (prior ~$80–85 + this session's ~$16–20:
+  cheap-planner ~$4-6, three 5:1:1 `-compare` draws ~$12-15).
+- Bedrock models ACTIVE (us-west-2, as of this session): maverick-17b, haiku-4-5,
+  sonnet-4-5, sonnet-4-6, opus-4-5 (+ many newer opus/sonnet/fable-5 profiles now
+  listed — keep configs pinned to the models each experiment used for cross-run
+  cost comparability). Re-run `go-cascade models` to confirm before any live run.
