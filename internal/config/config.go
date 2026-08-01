@@ -88,6 +88,24 @@ type Config struct {
 	Alpha  float64 `json:"alpha"`
 	Budget float64 `json:"budget_usd"`
 
+	// PlannerModel, when set, makes the WHOLE cascade two-stage: a single planner
+	// call per query rewrites the problem into an implementation plan that EVERY
+	// tier's coder works from. It differs from a *tier's* PlannerModel, which
+	// draws and charges a plan per tier and lifts only that one tier: here one
+	// plan is drawn at cascade entry and threaded into all tiers, so its cost
+	// amortises across escalation instead of being sunk at whichever tier drew it.
+	// Empty means no cascade-level planner. Like a tier planner it is a
+	// prompt-construction step that never touches the oracle (soundness/invariant
+	// #4 unaffected) but shapes the submitted code, so invariant #3 binds: it must
+	// differ from TestModel (Validate rejects equality). Mixing it with any tier's
+	// own PlannerModel is rejected — the two plan sources would double-charge and
+	// muddy cost attribution.
+	PlannerModel string `json:"planner_model,omitempty"`
+	// PlannerInPerMTok/OutPerMTok price the cascade planner call. Zero falls back
+	// to tier 0's coder prices (the tier the plan cost is attributed to).
+	PlannerInPerMTok  float64 `json:"planner_input_usd_per_mtok,omitempty"`
+	PlannerOutPerMTok float64 `json:"planner_output_usd_per_mtok,omitempty"`
+
 	// Deadline flips the topology from sequential cascade to speculative
 	// parallel. Zero means sequential.
 	Deadline time.Duration `json:"deadline"`
@@ -199,6 +217,14 @@ func (c *Config) Validate() error {
 				c.Tiers[i].Name, c.Tiers[i-1].Name)
 		}
 	}
+	// Invariant #3: a cascade-level planner shapes the code every tier submits, so
+	// it is a code author and must differ from the oracle's author, exactly like a
+	// tier planner. Reject equality up front rather than flagging it at accept time.
+	if c.PlannerModel != "" && c.PlannerModel == c.TestModel {
+		return fmt.Errorf("planner_model equals test_model %q; the cascade planner "+
+			"authors the code and must differ from the oracle's author (invariant #3)",
+			c.TestModel)
+	}
 	for i, t := range c.Tiers {
 		if t.Samples < 1 {
 			return fmt.Errorf("tier %d (%s): samples must be >= 1", i, t.Name)
@@ -213,8 +239,34 @@ func (c *Config) Validate() error {
 				"the planner authors the code and must differ from the oracle's author (invariant #3)",
 				i, t.Name, c.TestModel)
 		}
+		// A cascade-level planner and a tier-level planner are two independent plan
+		// sources. Running both would draw two plans and double-charge, and it is
+		// never what the caller wants — a cascade planner already threads its plan
+		// into this tier. Reject the combination so cost attribution stays clean.
+		if c.PlannerModel != "" && t.PlannerModel != "" {
+			return fmt.Errorf("tier %d (%s): has its own planner_model while a "+
+				"cascade-level planner_model is also set; use one plan source, not both",
+				i, t.Name)
+		}
 	}
 	return nil
+}
+
+// TwoStage reports whether a single planner call runs for the whole cascade.
+func (c *Config) TwoStage() bool { return c.PlannerModel != "" }
+
+// PlannerCost prices the one cascade-level planner call. It uses the cascade
+// planner's own per-MTok prices when set, otherwise tier 0's coder prices — the
+// tier the single plan charge is attributed to for offline replay.
+func (c *Config) PlannerCost(inTok, outTok int) float64 {
+	in, out := c.PlannerInPerMTok, c.PlannerOutPerMTok
+	if in == 0 && len(c.Tiers) > 0 {
+		in = c.Tiers[0].InPerMTok
+	}
+	if out == 0 && len(c.Tiers) > 0 {
+		out = c.Tiers[0].OutPerMTok
+	}
+	return float64(inTok)/1e6*in + float64(outTok)/1e6*out
 }
 
 // Load reads a JSON config file over the defaults.

@@ -106,6 +106,16 @@ func (r *Router) calibrated() bool {
 	return r.cert != nil && r.cert.Valid
 }
 
+// contaminated reports whether the oracle's author also authored the accepted
+// code (invariant #3). The code author is the tier's coder, its own planner if
+// two-stage, or the cascade-level planner if configured — any of them equal to
+// TestModel taints the record and excludes it from calibration.
+func (r *Router) contaminated(tier config.Tier) bool {
+	return tier.ModelID == r.cfg.TestModel ||
+		tier.PlannerModel == r.cfg.TestModel ||
+		r.cfg.PlannerModel == r.cfg.TestModel
+}
+
 // threshold returns the accept threshold for tier k.
 func (r *Router) threshold(k int) (float64, bool) {
 	if r.calibrated() && k < len(r.cert.Thresholds) {
@@ -334,12 +344,20 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 	ph := cache.ProblemHash(problem)
 	var carried []string // diagnostics carried forward so the next tier starts informed
 
+	// One plan for the whole cascade (if a cascade planner is configured), drawn
+	// before the first tier and threaded into every tier's coder so its cost is
+	// paid once per query, not once per tier reached.
+	plan, pin, pout, pusd := r.cascadePlan(ctx, problem, spec)
+	if plan != "" {
+		res.Cost.addModel(pin, pout, pusd)
+	}
+
 	for k, tier := range r.cfg.Tiers {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		t0 := time.Now()
-		cands, err := r.sampleTier(ctx, k, problem, spec, res, carried)
+		cands, err := r.sampleTier(ctx, k, problem, spec, res, carried, plan)
 		if err != nil {
 			return err
 		}
@@ -409,7 +427,7 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 		res.Score, res.Static = score, rep.Report.Static
 		res.Certified = r.calibrated()
 		res.Certificate = r.cert
-		res.OracleContaminated = tier.ModelID == r.cfg.TestModel || tier.PlannerModel == r.cfg.TestModel
+		res.OracleContaminated = r.contaminated(tier)
 		res.Trace = append(res.Trace, Step{
 			Stage: "tier", Tier: tier.Name, Action: ActAccept, Score: score, Threshold: tau,
 			Clusters: clusters, Reason: acceptReason(score, tau, certified, last),
@@ -434,6 +452,14 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 	sub, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// The cascade plan is drawn once before the tiers fan out; its single charge
+	// lands on res directly (a query-level cost, not attributable to any one
+	// speculative tier). Every tier's coder then shares this plan.
+	plan, pin, pout, pusd := r.cascadePlan(ctx, problem, spec)
+	if plan != "" {
+		res.Cost.addModel(pin, pout, pusd)
+	}
+
 	var mu sync.Mutex
 	for k := range r.cfg.Tiers {
 		wg.Add(1)
@@ -442,7 +468,7 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 			mu.Lock()
 			local := &Result{}
 			mu.Unlock()
-			c, err := r.sampleTier(sub, k, problem, spec, local, nil)
+			c, err := r.sampleTier(sub, k, problem, spec, local, nil, plan)
 			mu.Lock()
 			res.Cost.ModelUSD += local.Cost.ModelUSD
 			res.Cost.ComputeUSD += local.Cost.ComputeUSD
@@ -516,7 +542,7 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 	res.Solution, res.Solved, res.AcceptedAt = bestCand.Source, true, tier.Name
 	res.Score, res.Static = bestScore, bestCand.Report.Static
 	res.Certified, res.Certificate = r.calibrated(), r.cert
-	res.OracleContaminated = tier.ModelID == r.cfg.TestModel || tier.PlannerModel == r.cfg.TestModel
+	res.OracleContaminated = r.contaminated(tier)
 	res.Trace = append(res.Trace, Step{
 		Stage: "speculative", Tier: tier.Name, Action: ActAccept, Score: bestScore,
 		Clusters: bestClusters, CostSoFar: res.Cost.TotalUSD,
@@ -525,9 +551,39 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 	return nil
 }
 
-// sampleTier draws n candidates and verifies them concurrently.
+// cascadePlan draws the one cascade-level plan for a query. Unlike a tier's own
+// planner (drawn inside sampleTier, charged per tier, benefiting only that
+// tier), this plan is drawn once at cascade entry and threaded into every tier's
+// coder, so its cost amortises across escalation. The planner sees only the
+// problem + API — never the hidden tests (invariant #1/#2). A planner error is
+// not fatal: the empty plan degrades every tier gracefully to plan-free
+// generation rather than aborting the query. Returns the plan text plus the
+// tokens and USD of the single call so the caller can attribute the charge; all
+// zero and "" when no cascade planner is configured.
+func (r *Router) cascadePlan(ctx context.Context, problem string, spec *prompt.Spec) (plan string, in, out int, usd float64) {
+	if !r.cfg.TwoStage() {
+		return "", 0, 0, 0
+	}
+	presp, err := r.prov.Generate(ctx, model.Request{
+		ModelID: r.cfg.PlannerModel, Purpose: model.PurposePlan,
+		System: prompt.PlanSystem(),
+		Messages: []model.Message{{Role: model.RoleUser,
+			Text: prompt.PlanUser(problem, spec.API)}},
+		MaxTokens: 4000, Temperature: 0.3,
+	})
+	if err != nil {
+		return "", 0, 0, 0
+	}
+	usd = r.cfg.PlannerCost(presp.Usage.InputTokens, presp.Usage.OutputTokens)
+	return presp.Text, presp.Usage.InputTokens, presp.Usage.OutputTokens, usd
+}
+
+// sampleTier draws n candidates and verifies them concurrently. cascadePlan, if
+// non-empty, is the query-level plan threaded into every coder here; a tier's
+// own PlannerModel (mutually exclusive with a cascade planner, see Validate)
+// draws a per-tier plan instead.
 func (r *Router) sampleTier(ctx context.Context, k int, problem string, spec *prompt.Spec,
-	res *Result, carried []string,
+	res *Result, carried []string, cascadePlan string,
 ) ([]cluster.Candidate, error) {
 	tier := r.cfg.Tiers[k]
 	avoid := carried
@@ -544,7 +600,11 @@ func (r *Router) sampleTier(ctx context.Context, k int, problem string, spec *pr
 	// hidden tests (invariant #1/#2). A planner error is not fatal: on failure we
 	// fall back to plan-free generation so the tier degrades to single-stage
 	// rather than aborting the query.
-	var plan string
+	//
+	// A cascade-level plan takes the place of a per-tier one when configured; the
+	// two are mutually exclusive (Validate rejects setting both), so at most one
+	// of these branches supplies the plan threaded into the coder below.
+	plan := cascadePlan
 	if tier.TwoStage() {
 		presp, err := r.prov.Generate(ctx, model.Request{
 			ModelID: tier.PlannerModel, Purpose: model.PurposePlan,
@@ -568,7 +628,7 @@ func (r *Router) sampleTier(ctx context.Context, k int, problem string, spec *pr
 	for i := range tier.Samples {
 		g.Go(func() error {
 			userText := prompt.CodeUser(problem, spec.API, i, avoid)
-			if tier.TwoStage() {
+			if plan != "" {
 				userText = prompt.CodeUserFromPlan(problem, spec.API, plan, i, avoid)
 			}
 			resp, err := r.prov.Generate(gctx, model.Request{
