@@ -128,4 +128,15 @@ func TestWriteJSONFileAtomicOverwrite(t *testing.T) {
 			t.Errorf("stray file left in checkpoint dir: %q (temp not renamed away)", e.Name())
 		}
 	}
+
+	// The mode matches the old os.WriteFile path. os.CreateTemp defaults to 0600,
+	// so without an explicit chmod the atomic writer would silently tighten the
+	// permissions of every records and certificate file the tool emits.
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fi.Mode().Perm(); got != 0o644 {
+		t.Errorf("checkpoint mode = %#o, want 0644 (must match the pre-atomic writer)", got)
+	}
 }

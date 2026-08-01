@@ -1266,6 +1266,12 @@ func writeJSONFile(path string, v any) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
+	// os.CreateTemp makes the file 0600; the previous os.WriteFile path used 0644.
+	// Restore that so switching to the atomic writer does not silently change the
+	// permissions of every records/certificate file the tool emits.
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return err
+	}
 	return os.Rename(tmpName, path)
 }
 
