@@ -29,6 +29,7 @@ const usage = `go-cascade - route a Go coding problem to the cheapest model that
 Usage:
   go-cascade solve      [flags] "problem statement"
   go-cascade calibrate  [flags] -bench problems.jsonl
+  go-cascade estimator  [flags] -bench problems.jsonl -refs dir -pin-api
   go-cascade models     [flags]
   go-cascade cache      [stats|clear] [flags]
 
@@ -55,6 +56,8 @@ func main() {
 		err = cmdSolve(ctx, os.Args[2:])
 	case "calibrate":
 		err = cmdCalibrate(ctx, os.Args[2:])
+	case "estimator":
+		err = cmdEstimator(ctx, os.Args[2:])
 	case "models":
 		err = cmdModels(ctx, os.Args[2:])
 	case "cache":
@@ -506,6 +509,210 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 
 	printCert(*outPath, cert)
 	return nil
+}
+
+// cmdEstimator runs the §3.7 estimator test: does mutation score predict the
+// generated oracle's false-acceptance rate on the MODEL's real defect
+// distribution? For each problem it profiles every tier, and for each accepted
+// representative it measures (M) the mutation score against the generated suite
+// and (Y) an independent correctness label from the human-authored canonical
+// reference test suite. A candidate the generated suite accepts but the
+// canonical suite rejects is a genuine, non-circular η_fa event.
+//
+// This is a MEASUREMENT, not a calibration: it emits no certificate and touches
+// no threshold. It requires -pin-api (so candidates share the reference's API
+// and compile against its canonical tests) and the reference tree that ships
+// solution_test.go alongside each solution.go.
+func cmdEstimator(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("estimator", flag.ExitOnError)
+	var cf commonFlags
+	cf.register(fs)
+	bench := fs.String("bench", "", "JSONL file of {\"id\":..,\"problem\":..} problems")
+	refsDir := fs.String("refs", "", "directory of reference solutions AND their canonical test suites (id/solution.go and id/solution_test.go under any subtree)")
+	obsOut := fs.String("o", "estimator.json", "estimator observations output path (JSON)")
+	resume := fs.Bool("resume", false, "skip problems already present in -o and append; lets an interrupted run continue")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *bench == "" {
+		return errors.New("-bench is required")
+	}
+	if *refsDir == "" {
+		return errors.New("-refs <dir> is required: the estimator needs the canonical reference test suites")
+	}
+	// The estimator has no risk target; alpha is irrelevant but config.Validate
+	// wants one of alpha/budget set. Default it so the router builds.
+	if cf.alpha == 0 && cf.budget == 0 {
+		cf.alpha = 0.05
+	}
+	// Mutation analysis is the whole point here, so default it on rather than to
+	// the config's value (which is often 0 for cheap calibration runs).
+	if cf.mutants < 0 {
+		cf.mutants = 24
+	}
+
+	cfg, prov, _, err := cf.build()
+	if err != nil {
+		return err
+	}
+	probs, err := readBench(*bench)
+	if err != nil {
+		return err
+	}
+	// Estimator observations, like calibration records, must come from the
+	// cache-bypass path: a warm cache would return prior solutions and skew which
+	// candidates the tiers actually produce.
+	cfg.CacheDir = ""
+
+	r, err := cascade.New(cfg, prov, nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close() //nolint:errcheck // scratch dir
+
+	// The estimator pins the API (candidates implement the reference's exact
+	// signatures, so they compile against the canonical tests) and loads both the
+	// reference solutions (for pinning) and the canonical test suites (the
+	// independent oracle).
+	refs, ferr := loadReferences(*refsDir, probs)
+	if ferr != nil {
+		return ferr
+	}
+	canon, cerr := loadCanonicalTests(*refsDir, probs)
+	if cerr != nil {
+		return cerr
+	}
+	apis := make(map[string]string, len(refs))
+	var failed []string
+	for id, src := range refs {
+		api, aerr := prompt.ExtractAPI(src)
+		if aerr != nil {
+			failed = append(failed, id)
+			continue
+		}
+		apis[id] = api
+	}
+	fmt.Fprintf(os.Stderr, "loaded %d references, %d canonical suites, pinned %d APIs from %s\n",
+		len(refs), len(canon), len(apis), *refsDir)
+	if len(failed) > 0 {
+		fmt.Fprintf(os.Stderr, "  could not extract an API for %d: %s\n", len(failed), strings.Join(failed, ", "))
+	}
+	r.SetReferences(refs)
+	r.SetPinnedAPIs(apis)
+	r.SetCanonicalTests(canon)
+
+	obs := make([]cascade.EstimatorObs, 0, len(probs)*len(cfg.Tiers))
+	done := map[string]bool{}
+	if *resume {
+		if prior, lerr := loadEstimatorObs(*obsOut); lerr == nil {
+			obs = prior
+			for _, o := range prior {
+				done[o.ID] = true
+			}
+			if len(done) > 0 {
+				fmt.Fprintf(os.Stderr, "resuming: %d problems already recorded, skipping them\n", len(done))
+			}
+		}
+	}
+	checkpoint := func() error { return writeJSONFile(*obsOut, obs) }
+
+	interrupted := false
+	for i, p := range probs {
+		if done[p.ID] {
+			continue
+		}
+		if ctx.Err() != nil {
+			interrupted = true
+			break
+		}
+		fmt.Fprintf(os.Stderr, "[%d/%d] %s\n", i+1, len(probs), p.ID)
+		rows, eerr := r.EstimateOracleGap(ctx, p.ID, p.Problem, cfg.Mutants)
+		if eerr != nil {
+			if ctx.Err() != nil {
+				interrupted = true
+				break
+			}
+			fmt.Fprintf(os.Stderr, "  skipped: %v\n", eerr)
+			continue
+		}
+		obs = append(obs, rows...)
+		if err := checkpoint(); err != nil {
+			return err
+		}
+	}
+	if err := checkpoint(); err != nil {
+		return err
+	}
+	if interrupted {
+		fmt.Fprintf(os.Stderr, "INTERRUPTED (context cancelled). Observations checkpointed to %s; "+
+			"re-run with -resume to finish.\n", *obsOut)
+	}
+	printEstimatorSummary(obs)
+	return nil
+}
+
+// loadEstimatorObs reads a previously written estimator observation file.
+func loadEstimatorObs(path string) ([]cascade.EstimatorObs, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var obs []cascade.EstimatorObs
+	if err := json.Unmarshal(b, &obs); err != nil {
+		return nil, err
+	}
+	return obs, nil
+}
+
+// printEstimatorSummary reports the §3.7 headline: the false-acceptance rate
+// among generated-accepted candidates, and how mutation score splits it. The
+// per-row detail is in the JSON; this is the at-a-glance read. It deliberately
+// does not compute a correlation coefficient — n is small and the honest
+// artefact is the raw contingency, not an over-precise statistic.
+func printEstimatorSummary(obs []cascade.EstimatorObs) {
+	var accepted, ranCanon, falseAccept int
+	var mHi, mHiFA, mLo, mLoFA int // M split at 0.9, among accepted-with-canonical rows
+	for _, o := range obs {
+		if !o.GeneratedAccept || !o.CanonicalRan {
+			continue
+		}
+		accepted++
+		ranCanon++
+		if o.FalseAccept {
+			falseAccept++
+		}
+		if o.MutationValid == 0 {
+			continue // M undefined for this row
+		}
+		if o.MutationScore >= 0.9 {
+			mHi++
+			if o.FalseAccept {
+				mHiFA++
+			}
+		} else {
+			mLo++
+			if o.FalseAccept {
+				mLoFA++
+			}
+		}
+	}
+	fmt.Printf("\n§3.7 estimator test — measured η_fa vs mutation score\n")
+	fmt.Printf("  rows: %d total; %d generated-accepted with a canonical label\n", len(obs), ranCanon)
+	if ranCanon == 0 {
+		fmt.Printf("  no comparable rows (need -pin-api so candidates compile against canonical tests)\n")
+		return
+	}
+	fmt.Printf("  measured η_fa (accepted-by-generated, refuted-by-canonical): %d/%d = %.3f\n",
+		falseAccept, ranCanon, float64(falseAccept)/float64(ranCanon))
+	fmt.Printf("  the §3.7 question — does high mutation score mean low η_fa?\n")
+	if mHi > 0 {
+		fmt.Printf("    M >= 0.90: η_fa = %d/%d = %.3f\n", mHiFA, mHi, float64(mHiFA)/float64(mHi))
+	}
+	if mLo > 0 {
+		fmt.Printf("    M <  0.90: η_fa = %d/%d = %.3f\n", mLoFA, mLo, float64(mLoFA)/float64(mLo))
+	}
+	fmt.Printf("  (η_fa should be LOWER in the high-M bucket if M is a usable proxy; %d rows have undefined M)\n",
+		ranCanon-mHi-mLo)
 }
 
 // profileOne dispatches to the execution or judge oracle. The execution oracle
@@ -967,6 +1174,48 @@ func loadReferences(root string, probs []benchProblem) (map[string]string, error
 		return nil, fmt.Errorf("no reference solutions matching any bench id found under %s", root)
 	}
 	return refs, nil
+}
+
+// loadCanonicalTests finds the human-authored reference TEST suite for each
+// bench problem under root, matching <root>/**/<id>/solution_test.go — the
+// sibling of the solution.go loadReferences finds. These are the INDEPENDENT
+// oracle for the §3.7 estimator test: they were written by a human against the
+// reference, not by the spec model, so a candidate that passes the generated
+// suite but fails these is a genuine (non-circular) false acceptance.
+func loadCanonicalTests(root string, probs []benchProblem) (map[string]string, error) {
+	want := make(map[string]bool, len(probs))
+	for _, p := range probs {
+		want[p.ID] = true
+	}
+	tests := make(map[string]string)
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || d.Name() != "solution_test.go" {
+			return nil
+		}
+		id := filepath.Base(filepath.Dir(path))
+		if !want[id] {
+			return nil
+		}
+		if _, dup := tests[id]; dup {
+			return fmt.Errorf("two reference test suites for id %q under %s; ids must be unique", id, root)
+		}
+		src, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		tests[id] = string(src)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load canonical tests from %s: %w", root, err)
+	}
+	if len(tests) == 0 {
+		return nil, fmt.Errorf("no reference test suites matching any bench id found under %s", root)
+	}
+	return tests, nil
 }
 
 func readProblem(file string, rest []string) (string, error) {

@@ -414,6 +414,86 @@ func TestCascadePlannerProfiledOncePerQuery(t *testing.T) {
 	}
 }
 
+// EstimateOracleGap must produce one observation per tier, run the INDEPENDENT
+// canonical suite on the accepted candidate, and — for a candidate that is truly
+// correct — record it as canonically correct with no false-acceptance event.
+// This asserts the wiring (independent oracle consulted, per-tier rows, no
+// contamination of the acceptance path), not a statistical result.
+func TestEstimateOracleGapWiring(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = "" // bypass arm zero so tiers actually sample
+	r := newRouter(t, cfg, nil)
+
+	// A human-authored canonical suite for the mock's LongestIncreasingRun. It is
+	// independent of the mock spec model's generated tests — the whole point of
+	// the §3.7 measurement. The mock's "correct" candidate satisfies it.
+	const canon = `package solution
+
+import "testing"
+
+func TestCanonLongestIncreasingRun(t *testing.T) {
+	cases := []struct {
+		in   []int
+		want int
+	}{
+		{nil, 0},
+		{[]int{}, 0},
+		{[]int{5}, 1},
+		{[]int{1, 2, 3}, 3},
+		{[]int{3, 2, 1}, 1},
+		{[]int{1, 2, 1, 2, 3, 4}, 4},
+	}
+	for _, c := range cases {
+		if got := LongestIncreasingRun(c.in); got != c.want {
+			t.Errorf("LongestIncreasingRun(%v) = %d, want %d", c.in, got, c.want)
+		}
+	}
+}`
+	r.SetCanonicalTests(map[string]string{"lir": canon})
+
+	obs, err := r.EstimateOracleGap(context.Background(), "lir", seqProblem, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(obs) != len(cfg.Tiers) {
+		t.Fatalf("got %d observations, want one per tier (%d)", len(obs), len(cfg.Tiers))
+	}
+	// At least one tier must have produced an accepted candidate that the
+	// canonical suite actually ran on — otherwise the measurement is vacuous.
+	var sawCanonRun bool
+	for _, o := range obs {
+		if o.CanonicalRan {
+			sawCanonRun = true
+			// A candidate the generated oracle accepted AND the canonical suite
+			// passed is not a false acceptance.
+			if o.GeneratedAccept && o.CanonicalCorrect && o.FalseAccept {
+				t.Errorf("tier %s: a canonically-correct accepted candidate was flagged as a false accept", o.Tier)
+			}
+			// FalseAccept implies the canonical suite refuted it.
+			if o.FalseAccept && o.CanonicalCorrect {
+				t.Errorf("tier %s: FalseAccept set on a canonically-correct candidate", o.Tier)
+			}
+		}
+	}
+	if !sawCanonRun {
+		t.Error("the canonical suite never ran on any accepted candidate; measurement is vacuous")
+	}
+
+	// A problem with no canonical suite must be skipped, not errored.
+	skip, err := r.EstimateOracleGap(context.Background(), "no-canon", seqProblem, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range skip {
+		if o.Skipped == "" {
+			t.Error("a problem with no canonical suite should mark every tier skipped")
+		}
+	}
+}
+
 // recordingProvider wraps a Provider and tallies calls by model and by purpose,
 // and flags whether any coder prompt carried a plan, so a test can assert the
 // planner ran and that its output reached the coder.
