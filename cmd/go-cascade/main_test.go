@@ -89,3 +89,43 @@ func TestLoadRecordsRoundTripAndMissing(t *testing.T) {
 		t.Error("malformed records file must error, not silently return empty")
 	}
 }
+
+// writeJSONFile must be atomic: overwriting an existing checkpoint leaves a
+// complete, parseable file and no stray temp files. A non-atomic writer
+// truncates in place, so an external SIGTERM mid-write can leave a 0-byte file
+// and lose an entire long run's progress — the failure that defeated -resume on
+// the estimator run. This asserts the post-write invariants the fix guarantees.
+func TestWriteJSONFileAtomicOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "recs.json")
+
+	// A first checkpoint, then a second (larger) one over it — the overwrite path.
+	if err := writeJSONFile(path, []calibrate.Record{{ID: "old"}}); err != nil {
+		t.Fatal(err)
+	}
+	want := []calibrate.Record{{ID: "a"}, {ID: "b"}, {ID: "c"}}
+	if err := writeJSONFile(path, want); err != nil {
+		t.Fatal(err)
+	}
+
+	// The target parses and holds the new content, not a truncation of the old.
+	got, err := loadRecords(path)
+	if err != nil {
+		t.Fatalf("checkpoint did not parse after overwrite: %v", err)
+	}
+	if len(got) != 3 || got[0].ID != "a" || got[2].ID != "c" {
+		t.Errorf("overwrite left wrong content: got %+v", got)
+	}
+
+	// No temp file is left behind: os.Rename consumed it. A lingering ".tmp-*"
+	// would mean the rename never happened and the write was not atomic.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name() != "recs.json" {
+			t.Errorf("stray file left in checkpoint dir: %q (temp not renamed away)", e.Name())
+		}
+	}
+}

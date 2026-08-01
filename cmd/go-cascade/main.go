@@ -1232,12 +1232,41 @@ func readProblem(file string, rest []string) (string, error) {
 	return "", errors.New("no problem statement: pass it as an argument or with -f")
 }
 
+// writeJSONFile writes v as indented JSON atomically: marshal fully, write to a
+// temp file in the same directory, then rename over the target. os.Rename is
+// atomic on a single filesystem, so a process killed mid-write leaves either the
+// old file intact or the new complete file — never a truncated or empty one. A
+// plain os.WriteFile truncates the target to zero *before* writing, so an
+// external SIGTERM landing in that window destroys all prior progress and defeats
+// the -resume design (observed live: an estimator run killed mid-checkpoint left
+// a 0-byte records file and lost 31 problems of work).
 func writeJSONFile(path string, v any) error {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o644)
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	// Best-effort cleanup if we bail before the rename; after a successful rename
+	// the temp name no longer exists, so the Remove is a harmless no-op.
+	defer os.Remove(tmpName) //nolint:errcheck // cleanup of a temp path
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close() //nolint:errcheck // already returning an error
+		return err
+	}
+	// fsync then close before rename so the bytes are durable, not just buffered.
+	if err := tmp.Sync(); err != nil {
+		tmp.Close() //nolint:errcheck // already returning an error
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // loadRecords reads a records file written by a prior run, for -resume. A missing
