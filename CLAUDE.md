@@ -149,16 +149,21 @@ a test, but the tests will not catch every way of violating them.
 
 ## Known gaps (contributions welcome)
 
-- No evaluation against a live model. Not one query has been sent to Bedrock.
-- The judge-oracle comparison arm (§5.5c) is now *implemented* but only exercised
-  against the mock. `calibrate --oracle=judge` and `--compare` swap the
-  acceptance oracle for an LLM reviewer (never a ladder stage — invariant #4) and
-  record execution ground truth alongside the judge verdict, so a certificate's
-  `realized_risk` can be checked against its `empirical_risk`. Against the mock,
-  the judge arm certifies at α=0.15 with 0 empirical risk while realized risk is
-  0.22 — the §3.1 noise floor made visible. **This is a mock number; it exercises
-  the mechanism and is not a measurement of any model.** The remaining gap is the
-  live §5.5 run on a real, diverse benchmark.
+- **Live evaluation has been run** (17 experiments against Bedrock; see `results/`
+  and paper §5.6). It is **demonstrated, not validated**: n ≤ 64, far below the
+  §5.5 bar of n ≥ 300, on a small non-standard single-file/stdlib benchmark. The
+  full §5.5 experiment (n ≥ 300, standard benchmark, all five arms, both secondary
+  tests) remains unrun — that is the open gap, not "no live run."
+- The judge-oracle comparison arm (§5.5c) is implemented **and now run live** (not
+  only mock). `calibrate --oracle=judge` and `--compare` swap the acceptance oracle
+  for an LLM reviewer (never a ladder stage — invariant #4) and record execution
+  ground truth alongside the judge verdict, so `realized_risk` can be checked against
+  `empirical_risk`. Live, the executable oracle certified strictly lower than the
+  judge on identical candidates (α 0.19 vs 0.30 at n=64, δ=0.10), the gap driven
+  mostly by the judge's over-*rejection*; its one confirmed over-*acceptance* was a
+  scar-free race. (The old mock figure — judge certifies α=0.15 at 0 empirical while
+  realized risk is 0.22 — still illustrates the §3.1 floor, but **is a mock number,
+  not a measurement of any model.**)
 - Adaptive conformal inference (paper eq. 9) is not implemented; only the static
   LTT bound plus shadow sampling.
 - No boundary randomization, so the selected policy is feasible but not exactly

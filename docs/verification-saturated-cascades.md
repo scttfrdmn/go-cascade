@@ -36,10 +36,14 @@ cost is approximately $4\times10^{-3}$, and report an implementation
 (`gocascade`, 4,328 lines) with measured per-stage costs. Building the system
 falsified two of our own design assumptions, which we report as results. We
 conclude with an explicit account of what the artifact establishes and — at
-greater length — what it does not: in particular, it has never been run against
-a production language model, and every cost-saving figure in the earlier
-informal treatment of this design was structural estimation rather than
-measurement.
+greater length — what it does not. The body of that account was written before any
+live query; a dated reconciliation (§5.6) then maps seventeen subsequent Bedrock
+runs onto it. In brief: the central comparative claim — that an executable oracle
+certifies materially lower than a judge — is now **demonstrated at n ≤ 64** (α 0.19
+vs 0.30 at n = 64, δ = 0.10) rather than only argued, but **not validated**, the n
+being far below the paper's own n ≥ 300 bar and the benchmark not yet standard.
+Every cost-saving figure in the earlier informal treatment of this design remains
+structural estimation rather than measurement, and should still not be cited.
 
 ---
 
@@ -759,6 +763,12 @@ important limitation in this document.
 
 ### 5.3 What is *not* established
 
+> **Superseded in part — read with §5.6.** This subsection is the pre-live record
+> (no query had been sent to a production model when it was written). Several items
+> below have since been addressed by the live evaluation; §5.6 marks which, and which
+> still stand. The text is retained unedited as the honest account of the pre-live
+> state.
+
 **No evaluation against a production language model has been performed.** Not
 one query has been sent to Bedrock. The Bedrock provider compiles and is
 structurally exercised, but it is unexercised against the live API.
@@ -842,6 +852,11 @@ implemented.
 
 ### 5.5 What would constitute validation
 
+> **Partially addressed — read with §5.6.** Arm (c), the judge-scored variant that
+> §5.3 flagged as the missing comparison, has since been run (at n ≤ 64); the full
+> experiment below — n ≥ 300 on a standard benchmark with all five arms and both
+> secondary tests — remains unrun. §5.6 maps the live runs onto this list item by item.
+
 For the record, the experiment we would want:
 
 1. **Benchmark.** 400+ Go problems spanning difficulty, at least a third
@@ -864,6 +879,108 @@ For the record, the experiment we would want:
 Until at least (3) is run, the correct characterization of this work is: a
 design with a proof, an implementation with measured components, and no
 empirical validation of its central comparative claim.
+
+### 5.6 Reconciliation with the live evaluation (added 2026-08-01)
+
+§5.1–§5.5 were written before a single query had been sent to a production model.
+That is no longer true. Seventeen live experiments have since been run against AWS
+Bedrock (Claude Haiku/Sonnet/Opus tiers as the cascade, a separate Sonnet as oracle
+author, and a non-Claude cheap tier — Llama 4 Maverick — in the cost experiments);
+all records and per-experiment write-ups are in `results/`. This subsection
+reconciles those runs with the claims above. It **supersedes specific sentences in
+§5.3, §5.5, and §7 where they assert no live run exists**, but it does not soften the
+parts of §5.3–§5.4 that remain true; where a limitation still stands, it is repeated
+here rather than quietly dropped. The pre-live text is left intact above as the
+honest record of what was and was not known before the evaluation.
+
+**The overriding caveat, stated once and load-bearing for everything below.** The
+live calibration sets reached **n = 28 and n = 64** — far below the **n ≥ 300** that
+§5.5(1) names as the bar for an α = 0.05 certificate to *mean* something, and the
+benchmark is still the small, single-file, stdlib-only family §5.3 and §5.4 (external
+validity) criticize, now expanded to 64 problems across three families
+(`problems`/`hard`/`scale`) but not a standard benchmark. **No claim below should be
+read as the §5.5 validation experiment.** What the runs establish is narrower and
+specific: the mechanisms behave on live models the way the design predicts, and two
+of the paper's hedges can be tightened while two others must be *widened*.
+
+**§3.1 / §5.3 central comparative claim — now demonstrated at this scale, not merely
+argued.** §5.3 said the claim that an executable oracle certifies lower than a judge
+was "argued analytically (§3.1) but not demonstrated empirically," because arm (c) —
+a judge-scored variant of the identical architecture — had never been run. It has now
+been run on identical candidates (the `--compare` / `--oracle=judge` path). The
+executable oracle certified a strictly lower risk bound than the judge at both scales,
+and the gap widened with n: **α 0.27 vs 0.32 at n = 28; 0.19 vs 0.30 at n = 64**
+(δ = 0.10). β = 0 held on every run — the execution arm's realized (ground-truth)
+risk equalled its empirical risk every time, so (11)/(12) are not just a construction.
+**Refinement the paper underweights:** the certification gap is driven *mostly by the
+judge's false-rejection rate* (β > 0 inflating its empirical risk), not by the
+false-acceptance rate η_fa that §3.1 foregrounds. The η_fa danger is *real but
+narrow* — see the next point.
+
+**§3.1 judge noise floor — the mechanism was observed, and localized.** §3.1 asserts a
+judge caps honest certification at its noise floor (cited 10–15%). Live, the judge
+arm's lowest empirical risk was ~0.077–0.085 while its *realized* risk on the same
+candidates ran higher (e.g. 0.22 against 0 empirical in the mock-scale judge study;
+0.000 realized against 0.073–0.085 empirical on several live draws where the judge
+merely over-rejected). The one confirmed case of the dangerous direction — a judge
+*accepting* wrong code (η_fa > 0) — was a **scar-free data race**: a defect a reader
+cannot see, caught by the executable oracle under `V_5`. For logic defects and
+races-with-a-visible-tell, a strong judge was reliable and strictness-robust (37/37
+such seeded defects caught, permissive setting included). So §3.1's floor is real, but
+its bite is concentrated exactly where the paper says execution's soundness matters:
+reading-invisible defects.
+
+**A validation-relevant hazard the paper does not discuss: oracle *unsoundness* from
+generated tests.** §3.6/§5.1 treat the oracle as sound by construction (execution ⇒
+β = 0). That holds for the *verifier ladder*, but when the **test suite itself is
+model-generated** (the spec model authoring `TestH*`/`TestV*`), a suite that refutes a
+correct reference is an *unsound* oracle whose labels are noise — a failure mode
+orthogonal to η_fa and not modelled in §3. This was observed live and was initially
+misread as model error: an early run's "~11% accuracy floor" turned out to be **~93%
+spec-model test noise**, not tier error. The fix now in the artifact
+(`calibrate -refs <dir>`, optionally `-pin-api`) runs each problem's execution-validated
+reference through the generated tests and *excludes* records whose oracle is refuted by
+its own reference; with the gate, genuine tier error on the clean n = 64 set was
+**0/52**. This is a genuine addition to §3's account of what can go wrong with the
+oracle, and it is now enforced mechanically alongside the §5.1 integrity mechanisms.
+
+**Cost — §5.3's "no baseline comparison exists" is closed; the result is mixed and
+tuning-dependent.** Arms (a) always-frontier and (d) always-cheapest are now computed
+per run. The cascade's cost verdict is *not* uniformly favorable and depends on
+fan-out and operating point: at the default 5:2:1 fan-out the cascade *loses* to
+always-frontier; at 1:1:1 and with a cheap non-Claude bottom tier at 2:1:1/3:2:1 it
+beats always-frontier by ~2.75–3.4× at matched risk. The informal ~2.5× figure §5.3
+disavows should still not be cited — the measured advantage exists but is a property of
+tuning, not of the design as such. Crucially, at the **deployable α = 0.05** the cost
+win is *fragile*: certified thresholds frequently collapse to full escalation, and
+across six 5:1:1 draws only **2 certified with a cost win** — and both of those rode
+the oracle-soundness exclusion above rather than cheap-tier robustness. The honest
+cost claim is therefore: *the cascade can beat always-frontier at matched risk, but a
+deployable-α cost win is draw-dependent at this n, and its binding constraint is
+cheap-tier confident-error rate, not fan-out* (an analytic dichotomy — fan-out buys
+discrimination headroom against *flaky* errors and none against *confident* ones — is
+in `results/headroom_theorem.py`).
+
+**Two design levers the paper does not analyze, tested and reported negative.** A
+cheaper/more-accurate bottom tier is the cost lever that works (above). A
+*generalist-instructs-specialist* two-stage tier (a strong model plans, a cheap model
+codes from the plan) was tested with both an Opus and a Haiku planner: it is an
+**accuracy lever, not a cost lever** — the plan nudges cheap-tier accuracy up slightly
+(0.88 → ~0.92–0.95, noise-band) and does not fix confident errors, while a planner call
+on every cheap-tier query makes the cascade 2.1–3.1× *pricier* than always-frontier.
+Neither is claimed in §1.2; both are reported so the design space is mapped honestly.
+
+**What still stands from §5.3–§5.5, unchanged.** The n is still far below §5.5(1);
+the benchmark is still not a standard one (HumanEval-Go/MBPP-Go/repo-level unrun);
+§5.4's external-validity restriction to single-file stdlib-only Go is unchanged;
+§5.5(4) (cache-warmth sensitivity, the direct §2.9 test) and §5.5(5) (mutation score
+vs *measured* η_fa correlation, the §3.7 estimator test) have **not** been run — the
+mutation-score-as-η_fa-proxy question in §3.7 remains exactly as open as stated.
+Adaptive conformal inference (9), non-nested ordering (§2.6), and boundary
+randomization (§2.4) remain unimplemented. So the correct one-line update to the
+closing sentence of §5.5 is: *arm (c) has now been run at n ≤ 64 and the central
+comparative claim is demonstrated at that scale; the full §5.5 experiment — n ≥ 300 on
+a standard benchmark with all five arms and the two secondary tests — remains unrun.*
 
 ---
 
@@ -909,10 +1026,17 @@ at least estimable rather than circular. Go makes this economically attractive a
 $\rho\approx4\times10^{-3}$; other languages will need different topologies.
 
 Building the system falsified two of our assumptions, which is the strongest
-argument we can make for building systems rather than only describing them. It
-has not yet been run against a production model, and the comparative claim at the
-centre of the design — that an executable oracle certifies materially lower than
-a judge — remains argued rather than demonstrated.
+argument we can make for building systems rather than only describing them. As
+originally written this section closed by noting the system had not been run
+against a production model and that the central comparative claim — that an
+executable oracle certifies materially lower than a judge — remained argued rather
+than demonstrated. That is no longer the case: it has since been run against AWS
+Bedrock, and on identical candidates the executable oracle certified a strictly
+lower risk bound than a judge at both scales tested (α 0.19 vs 0.30 at n = 64,
+δ = 0.10), with the gap widening in n. **The claim is now demonstrated at n ≤ 64 —
+not validated:** that n is far below the n ≥ 300 the paper's own bar (§5.5) requires,
+and the benchmark is not yet a standard one. §5.6 reconciles the live runs with §5
+claim by claim, including two hedges that tighten and two that must widen.
 
 ---
 
@@ -951,3 +1075,9 @@ The calibration figures (§4.3, §5.1) come from 18 paraphrased problems over 4
 templates with the mock provider, `-delta 0.10`, `-step 0.1`, fixed-sequence
 multiplicity control. Records are replayable offline via
 `gocascade calibrate -from-records`.
+
+The **live** figures cited in §5.6 come from the seventeen Bedrock experiments in
+`results/`; each `results/*.md` write-up carries its exact command line and commits
+its execution/judge records (replayable with the same `-from-records` path). The
+mock numbers above and the live numbers in §5.6 are kept separate on purpose — a
+mock number is never a measurement of model behaviour.
