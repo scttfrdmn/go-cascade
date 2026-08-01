@@ -6,7 +6,7 @@ never sent a query to a real model — every number came from the deterministic
 mock. These runs replace that gap with measurements, and with an honest account
 of what they do and do not establish.
 
-**One-line summary:** across sixteen live experiments the executable oracle was
+**One-line summary:** across seventeen live experiments the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
 that widened with scale (α 0.27 vs 0.32 at n=28; **0.19 vs 0.30 at n=64**)** —
@@ -87,6 +87,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 14 | [confound close](confound-close-2026-07-31.md) | theorem + **2 repeat draws** | **the α=0.05 cost win is real but fragile — it does not replicate.** Theorem (free): fan-out buys headroom vs **flaky** wrong (gap 0.40→0.88 as N=1→10) and **none** vs **confident** wrong (gap 0 ∀N). Empirically, **3 fresh 5:1:1 draws → 3 outcomes:** [0.4,1] win / [1,1] no-win (a cheap **confident-wrong** `scale_is_palindrome`, 5/5) / **valid=false** (a **top-tier miss**). At n≈53 one error anywhere moves the certificate — binding constraint is **model accuracy at small n** |
 | 15 | [two-stage tier](two-stage-arm-2026-07-31.md) | the last untested **lever** — Opus **plans**, Maverick **codes** | **negative result: generalist-instructs-specialist is an accuracy lever, not a cost lever — and at an Opus planner, a cost disaster.** The plan nudges tier-0 accuracy 0.88→**0.92** (one problem, noise-band) and does **not** fix confident errors (`scale_chunk` stayed 5/5-wrong with the plan). But the Opus call on every tier-0 query makes tier-0 cost **35×** higher → cascade **3.1× pricier than always-frontier**. A cheap-bottom-tier (#11) beats instructing a specialist |
 | 16 | [cheap-planner two-stage](two-stage-haiku-2026-07-31.md) | the #15 follow-up — **Haiku** plans (not Opus), Maverick codes | **a cheaper planner mitigates but does not reverse the penalty.** Same accuracy nudge (tier-0 true-correct **0.946** ≈ Opus's 0.92 > no-plan 0.88; `scale_chunk` still confident-wrong). Haiku shrinks tier-0 overhead **35×→8.7×** and α=0.05 now certifies (clean draw, no top-tier miss) — **but the cascade is still 2.13× pricier** than frontier at the certified `[1,1]`, and only **1.17× cheaper** where tier-0 acceptance fires (α=0.15) vs the non-planned #12's **5.24×**. Two planner points (Opus 3.1×, Haiku 2.13×) **confirm the direction**: accuracy lever, not cost lever |
+| 17 | [cost-win frequency](cost-win-frequency-2026-08-01.md) | 3 more 5:1:1 draws **with `-compare`** (β=0), 6 draws total — turns #14's "does not replicate" into a **frequency** | **2 of 6 certify with a cost win; 3 of 6 certify-but-pricier (`[1,1]`); 1 of 6 no cert.** Exact rule: win **iff 0 confident-wrong tier-0 answers in the clean set**. And the catch — **both** wins had confident-wrong answers that were merely **oracle-unsound-excluded** (Maverick's confident mistakes coincided with the spec model's unsound-test problems), so the win rides a two-error-process coincidence, not robustness. `scale_is_palindrome` is the recurring *sound-oracle* confident error. Resume survived 2 more external kills (5 total) |
 
 ### How each run answered the previous one's limitation
 
@@ -219,9 +220,16 @@ underweights, but one that still favours the executable oracle.
   is achievable on a good draw, not guaranteed:** at n≈53 a single confident cheap
   error or top-tier miss moves the certificate. The binding constraint is model
   accuracy at small n; a *robust* win needs more calibration data or a more accurate
-  cheap tier, not more fan-out. (Caveats: three draws is tiny — "1 of 3" says the win
-  is unreliable, not how often it occurs; draws b/c ran without `-compare` so carry
-  oracle verdicts, not a fresh β=0 check.)
+  cheap tier, not more fan-out. **Experiment 17 turned this into a frequency** — three
+  more 5:1:1 draws *with* `-compare` (β=0), six draws total: **2 of 6 certify with a
+  cost win, 3 of 6 certify-but-pricier (`[1,1]` collapse), 1 of 6 fails to certify.**
+  And the mechanism is sharper — and more fragile — than "lucky draw": the win happens
+  **iff the clean calibration set has zero confident-wrong tier-0 answers** (exact
+  across all six), and *both* observed wins had confident-wrong answers that were merely
+  **oracle-unsound-excluded** (Maverick's confident mistakes coincided with the spec
+  model's unsound-test problems). So the win rides a coincidence between two independent
+  error processes, not cheap-tier robustness. `scale_is_palindrome` is the recurring
+  *sound-oracle* confident error behind the [1,1] collapses.
 - **The scar-free-race blind spot is one data point and was not reproduced.**
   η_fa > 0 was observed exactly once (the pilot's model-authored race). The
   race-seeded test (experiment 6) caught all 20 seeded races — but only because
