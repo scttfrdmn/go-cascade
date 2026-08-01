@@ -615,6 +615,19 @@ floor, and it is also the step most in need of qualification:
 > requirement. The direction of the net bias is not known to us and we do not
 > claim it is small.
 
+**Update (2026-08-01): the direction has since been measured, on one benchmark.**
+The §5.5(5) estimator test has now been run live (§5.6): measured
+$\eta_{\mathrm{fa}}=0/144$ (95% upper bound 0.021) against a pooled $1-M=0.0996$
+that predicted ≈ 11 false acceptances. On that benchmark the net bias is therefore
+**conservative** — $M$ under-states $1-\eta_{\mathrm{fa}}$, so using it errs toward
+over-estimating risk rather than under-estimating it. Two qualifications keep the
+paragraph above standing rather than superseding it: the result is one benchmark
+(64 single-file stdlib problems), and it says nothing about whether $M$ *ranks*
+candidates by $\eta_{\mathrm{fa}}$ — with zero events in both the high-$M$ and
+low-$M$ buckets that question is untouched. So the claim "we do not claim the bias
+is small" is now sharper in one direction and unchanged in the other: the bias is
+not small, it is large and safe.
+
 A further floor: an assertion-free suite still kills some mutants, because
 `i++ → i--` hangs and `< → <=` panics, and a crash is detection. Measured on our
 implementation, a suite that asserts nothing scored $M=0.30$ against $M=0.90$ for
@@ -874,7 +887,8 @@ For the record, the experiment we would want:
 5. **Oracle-gap validation.** Correlation between mutation score and *measured*
    $\eta_{\mathrm{fa}}$ on problems where reference implementations permit
    ground-truth labelling. This is the test that would tell us whether §3.7's
-   estimator is usable.
+   estimator is usable. *(Run at n=64 on 2026-08-01 — see §5.6: the bias is
+   measured and conservative; the ranking question needs the n ≥ 300 of (1).)*
 
 Until at least (3) is run, the correct characterization of this work is: a
 design with a proof, an implementation with measured components, and no
@@ -973,14 +987,35 @@ Neither is claimed in §1.2; both are reported so the design space is mapped hon
 **What still stands from §5.3–§5.5, unchanged.** The n is still far below §5.5(1);
 the benchmark is still not a standard one (HumanEval-Go/MBPP-Go/repo-level unrun);
 §5.4's external-validity restriction to single-file stdlib-only Go is unchanged;
-§5.5(4) (cache-warmth sensitivity, the direct §2.9 test) and §5.5(5) (mutation score
-vs *measured* η_fa correlation, the §3.7 estimator test) have **not** been run — the
-mutation-score-as-η_fa-proxy question in §3.7 remains exactly as open as stated.
+§5.5(4) (cache-warmth sensitivity, the direct §2.9 test) has **not** been run.
 Adaptive conformal inference (9), non-nested ordering (§2.6), and boundary
 randomization (§2.4) remain unimplemented. So the correct one-line update to the
 closing sentence of §5.5 is: *arm (c) has now been run at n ≤ 64 and the central
 comparative claim is demonstrated at that scale; the full §5.5 experiment — n ≥ 300 on
 a standard benchmark with all five arms and the two secondary tests — remains unrun.*
+
+**§5.5(5) has now been run, and it *widens* one caveat while closing another**
+(`results/estimator-test-n64-2026-08-01.md`, 2026-08-01). At n = 64 × 3 tiers, with
+mutation score measured against the *generated* suite and correctness against each
+problem's *human-authored canonical* suite (so the estimate is not circular),
+measured η_fa was **0/144** (95% Clopper–Pearson upper bound 0.021) while the pooled
+mutation gap 1 − M = 0.0996 predicted ≈ 11 false acceptances — a discrepancy with
+probability ≈ 2 × 10⁻⁶ under the per-row gaps if M were tight. **So §3.7's "unknown
+bias" now has a measured direction on this benchmark: M under-states 1 − η_fa
+substantially, i.e. it errs conservatively**, which is the safe direction for a proxy
+in a risk argument and is worth stating because §3.7 could not previously say which
+way it erred. What the run does **not** settle is whether M *ranks* candidates by
+η_fa: M spanned 0.50–1.00, but with zero events in both the M ≥ 0.90 (n=94) and
+M < 0.90 (n=40) buckets the bounds overlap entirely, and the twelve lowest-M rows
+were all canonically correct (small mutant pools on short functions;
+timing-dependent mutants a concurrency suite cannot deterministically kill). The
+ordering question needs the n ≥ 300 of §5.5(1). The run also surfaced a hazard class
+§3 does not model: the generated oracle's *observed* errors were **all**
+over-rejections — 11 confirmed rejections of canonically-correct candidates (7.1% of
+labeled rows) against 0 false acceptances, plus 37 rows where no candidate survived
+the ladder at all. A generated suite that is sound but *stricter than canonical*
+costs escalations, not risk, so it is invisible to the certificate and visible only
+in the cost column.
 
 ---
 
