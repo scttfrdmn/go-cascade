@@ -58,6 +58,13 @@ type Router struct {
 	// `calibrate -pin-api` (which implies -refs). Read-only after construction.
 	pinnedAPI map[string]string
 
+	// canonicalTests, if set, maps a problem id to that problem's human-authored
+	// reference test suite (refs/<id>/solution_test.go). It is the INDEPENDENT
+	// oracle for the §3.7 estimator test (EstimateOracleGap) — never consulted on
+	// the acceptance path, so no risk of contaminating a certificate. Empty by
+	// default. Read-only after construction.
+	canonicalTests map[string]string
+
 	limit int // max concurrent verifications
 }
 
