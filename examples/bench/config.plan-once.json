@@ -1,0 +1,14 @@
+{
+  "_comment": "PLAN-ONCE-REUSE-ACROSS-THE-CASCADE — the only untested two-stage variant with a shot at cost-positive (see results/README.md and NEXT-SESSION thread 2). Experiments 15/16 charged a planner call PER tier-0 query and found generalist-instructs-specialist is an accuracy lever, not a cost lever: the plan nudges tier-0 accuracy up slightly but the per-query planner charge makes the cascade 2.1-3.1x PRICIER than always-frontier. Those arms used a TIER-level planner_model (drawn inside sampleTier, charged per tier, benefiting only that one tier). This config sets a CASCADE-level planner_model instead: ONE Haiku plan is drawn per query at cascade entry and threaded into EVERY tier's coder (Maverick, Sonnet, Opus). Two consequences the per-tier arms could not get: (1) the single plan charge amortises across escalation rather than being sunk at tier 0, and (2) the plan lifts accuracy at every rung, so a query can resolve at a cheaper tier. Hypothesis: this is the structural change that could turn the two-stage economics cost-positive. planner_model (haiku-4-5) differs from test_model (sonnet-4-6) so invariant #3 holds; the cascade planner and per-tier planners are mutually exclusive (config.Validate rejects both). Maverick coder prices are the REAL us-west-2 on-demand rates ($0.24/$0.97); planner priced at Haiku list ($1/$5, the approximation every prior config used); mid/large stay single-stage Claude at the same list prices every prior run used so cross-run cost comparison holds. Fan-out 2:1:1 matches config.two-stage.json / config.two-stage-haiku.json / config.go-specialist-211.json for a like-for-like comparison against both prior planner arms and the non-planned cheap tier. MOCK-TESTABLE ONLY until a live run is scoped.",
+  "test_model": "us.anthropic.claude-sonnet-4-6",
+  "test_input_usd_per_mtok": 3.0,
+  "test_output_usd_per_mtok": 15.0,
+  "planner_model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "planner_input_usd_per_mtok": 1.0,
+  "planner_output_usd_per_mtok": 5.0,
+  "tiers": [
+    {"name":"small","model_id":"us.meta.llama4-maverick-17b-instruct-v1:0","input_usd_per_mtok":0.24,"output_usd_per_mtok":0.97,"samples":2,"repair_depth":2,"temperature":0.8},
+    {"name":"mid","model_id":"us.anthropic.claude-sonnet-4-5-20250929-v1:0","input_usd_per_mtok":3.0,"output_usd_per_mtok":15.0,"samples":1,"repair_depth":2,"temperature":0.4},
+    {"name":"large","model_id":"us.anthropic.claude-opus-4-5-20251101-v1:0","input_usd_per_mtok":5.0,"output_usd_per_mtok":25.0,"samples":1,"repair_depth":2,"temperature":0.2}
+  ]
+}

@@ -345,6 +345,75 @@ func TestValidateRejectsPlannerEqualsTestModel(t *testing.T) {
 	}
 }
 
+// A cascade-level planner authors the code every tier submits, so it too must
+// differ from the oracle author (invariant #3), and it may not coexist with a
+// per-tier planner (two plan sources would double-charge). Both are config-time
+// errors. (Fast: no toolchain.)
+func TestValidateCascadePlanner(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.PlannerModel = cfg.TestModel // cascade planner == oracle author
+	if err := cfg.Validate(); err == nil {
+		t.Error("a cascade planner_model equal to test_model must be rejected (invariant #3)")
+	}
+	cfg.PlannerModel = model.MockLarge // distinct planner is fine
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("a cascade planner distinct from the oracle author must be accepted: %v", err)
+	}
+	cfg.Tiers[0].PlannerModel = model.MockMid // now also a tier planner: two sources
+	if err := cfg.Validate(); err == nil {
+		t.Error("a cascade planner and a tier planner together must be rejected (double plan source)")
+	}
+}
+
+// A cascade-level planner must (a) make EXACTLY ONE planner call for the whole
+// query no matter how many tiers are profiled, (b) thread that one plan into
+// every tier's coder, (c) attribute its single charge to tier 0 so offline
+// replay counts it once, and (d) leave the oracle uncontaminated when it differs
+// from TestModel. This is the property that distinguishes plan-once-reuse from a
+// per-tier planner, so it is asserted on Profile, which runs every tier.
+func TestCascadePlannerProfiledOncePerQuery(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = ""                  // bypass arm zero so tiers actually sample
+	cfg.PlannerModel = model.MockLarge // one planner for the whole cascade
+	if len(cfg.Tiers) < 2 {
+		t.Fatal("need >=2 tiers to prove one plan spans multiple tiers")
+	}
+
+	rec := newRecording(model.Mock{})
+	r, err := New(cfg, rec, nil)
+	if err != nil {
+		t.Skipf("cannot build router (no go toolchain?): %v", err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+
+	out, err := r.Profile(context.Background(), "p1", seqProblem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// (a) exactly one planner call across all profiled tiers.
+	if p := rec.byPurp[model.PurposePlan]; p != 1 {
+		t.Errorf("cascade planner made %d calls over %d tiers, want exactly 1", p, len(cfg.Tiers))
+	}
+	// (b) the plan reached a coder prompt.
+	if !rec.planReachedCoder {
+		t.Error("the cascade plan never reached any coder prompt")
+	}
+	// (c) the plan charge lands on tier 0 (tier 0 always reached), and only there.
+	if len(out.Tiers) < 2 {
+		t.Fatalf("profiled %d tiers, want >=2", len(out.Tiers))
+	}
+	if out.Tiers[0].Cost <= 0 {
+		t.Error("tier 0 cost does not include the plan charge")
+	}
+	// (d) planner distinct from TestModel => uncontaminated.
+	if out.Contaminated {
+		t.Error("a cascade planner distinct from TestModel must not contaminate the record")
+	}
+}
+
 // recordingProvider wraps a Provider and tallies calls by model and by purpose,
 // and flags whether any coder prompt carried a plan, so a test can assert the
 // planner ran and that its output reached the coder.

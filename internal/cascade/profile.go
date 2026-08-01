@@ -39,13 +39,23 @@ func (r *Router) Profile(ctx context.Context, id, problem string) (*calibrate.Re
 		rec.OracleInconclusive, rec.OracleUnsoundDiag = true, diag
 	}
 
+	// One cascade plan per problem, threaded into every profiled tier. Its single
+	// USD charge is attributed to tier 0's cost below, so offline Replay — which
+	// sums the cost of each reached tier — counts the plan exactly once per query
+	// (tier 0 is always reached). A cascade planner equal to TestModel authors the
+	// code every tier submits and so contaminates the record (invariant #3).
+	plan, _, _, planUSD := r.cascadePlan(ctx, problem, spec)
+	if r.cfg.PlannerModel == r.cfg.TestModel {
+		rec.Contaminated = true
+	}
+
 	for k, tier := range r.cfg.Tiers {
 		if err := ctx.Err(); err != nil {
 			return rec, err
 		}
 		local := &Result{}
 		t0 := time.Now()
-		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil)
+		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil, plan)
 		if err != nil {
 			return rec, err
 		}
@@ -59,6 +69,9 @@ func (r *Router) Profile(ctx context.Context, id, problem string) (*calibrate.Re
 			obs.Correct = acc != nil && acc.OK
 		}
 		obs.Cost = local.Cost.TotalUSD
+		if k == 0 {
+			obs.Cost += planUSD // the one plan charge, counted once per query
+		}
 		rec.Tiers = append(rec.Tiers, obs)
 
 		if tier.ModelID == r.cfg.TestModel {

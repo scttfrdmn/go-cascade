@@ -77,12 +77,20 @@ func (r *Router) ProfileJudge(ctx context.Context, id, problem, judgeModel strin
 	}
 	rec := &calibrate.Record{ID: id, Problem: problem, Shadow: true}
 
+	// One cascade plan threaded into every tier; charged once to tier 0 (see
+	// Profile). The judge arm's oracle is the judge model, so the plan author
+	// contaminates when it equals the judge, not the test model.
+	plan, _, _, planUSD := r.cascadePlan(ctx, problem, spec)
+	if r.cfg.PlannerModel == judgeModel {
+		rec.Contaminated = true
+	}
+
 	for k, tier := range r.cfg.Tiers {
 		if err := ctx.Err(); err != nil {
 			return rec, err
 		}
 		local := &Result{}
-		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil)
+		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil, plan)
 		if err != nil {
 			return rec, err
 		}
@@ -109,6 +117,9 @@ func (r *Router) ProfileJudge(ctx context.Context, id, problem, judgeModel strin
 			obs.TrueCorrect = &truth
 		}
 		obs.Cost = local.Cost.TotalUSD
+		if k == 0 {
+			obs.Cost += planUSD
+		}
 		rec.Tiers = append(rec.Tiers, obs)
 
 		// The judge is the oracle here, so contamination is judge-vs-code, not
@@ -173,18 +184,33 @@ func (r *Router) ProfilePaired(ctx context.Context, id, problem, judgeModel stri
 		judgeRec.OracleInconclusive, judgeRec.OracleUnsoundDiag = true, diag
 	}
 
+	// One shared cascade plan threaded into every tier for both arms; its single
+	// charge is attributed to tier 0 of each record (see Profile). Plan-author
+	// contamination differs per arm exactly like coder contamination below.
+	plan, _, _, planUSD := r.cascadePlan(ctx, problem, spec)
+	if r.cfg.PlannerModel == r.cfg.TestModel {
+		execRec.Contaminated = true
+	}
+	if r.cfg.PlannerModel == judgeModel {
+		judgeRec.Contaminated = true
+	}
+
 	for k, tier := range r.cfg.Tiers {
 		if err := ctx.Err(); err != nil {
 			return execRec, judgeRec, err
 		}
 		// Sampling is shared: draw the candidates once and cost them once. Both
-		// arms carry this identical sampling cost.
+		// arms carry this identical sampling cost. Tier 0 also carries the one
+		// plan charge, counted once per query.
 		local := &Result{}
-		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil)
+		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil, plan)
 		if err != nil {
 			return execRec, judgeRec, err
 		}
 		sampleCost := local.Cost.TotalUSD
+		if k == 0 {
+			sampleCost += planUSD
+		}
 		score, winner := cluster.Score(cluster.Group(cands))
 
 		execObs := calibrate.TierObs{Tier: tier.Name, Score: score, Cost: sampleCost}
@@ -256,16 +282,22 @@ func (r *Router) ProfileStrictnessReplay(ctx context.Context, id, problem, judge
 		judgeRecs[lvl] = &calibrate.Record{ID: id, Problem: problem, Shadow: true}
 	}
 
+	// One cascade plan threaded into every tier; charged once to tier 0 (see Profile).
+	plan, _, _, planUSD := r.cascadePlan(ctx, problem, spec)
+
 	for k, tier := range r.cfg.Tiers {
 		if err := ctx.Err(); err != nil {
 			return execRec, judgeRecs, err
 		}
 		local := &Result{}
-		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil)
+		cands, err := r.sampleTier(ctx, k, problem, spec, local, nil, plan)
 		if err != nil {
 			return execRec, judgeRecs, err
 		}
 		sampleCost := local.Cost.TotalUSD
+		if k == 0 {
+			sampleCost += planUSD
+		}
 		score, winner := cluster.Score(cluster.Group(cands))
 
 		execObs := calibrate.TierObs{Tier: tier.Name, Score: score, Cost: sampleCost}
@@ -356,8 +388,11 @@ func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, 
 	}
 
 	// Draw one seed solution from the cheapest tier and harvest wrong mutants.
+	// Thread the cascade plan (if any) so the seed reflects the configured
+	// generation path; the seeded experiment records no cost, so no attribution.
+	plan, _, _, _ := r.cascadePlan(ctx, problem, spec)
 	local := &Result{}
-	cands, err := r.sampleTier(ctx, 0, problem, spec, local, nil)
+	cands, err := r.sampleTier(ctx, 0, problem, spec, local, nil, plan)
 	if err != nil {
 		return nil, 0, err
 	}
