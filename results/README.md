@@ -6,7 +6,7 @@ never sent a query to a real model — every number came from the deterministic
 mock. These runs replace that gap with measurements, and with an honest account
 of what they do and do not establish.
 
-**One-line summary:** across seventeen live experiments the executable oracle was
+**One-line summary:** across eighteen live experiments the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
 that widened with scale (α 0.27 vs 0.32 at n=28; **0.19 vs 0.30 at n=64**)** —
@@ -62,7 +62,7 @@ comparison was argued, never demonstrated. These runs demonstrate the pieces.
   floor needs n ≥ 22 even at zero errors), so the *risk numbers* are point
   estimates; the *oracle-divergence* counts are the signal.
 
-## The eleven experiments
+## The experiments
 
 Each row links to its full write-up. "η_fa" = judge passed a program the tests
 refute (the dangerous direction). "β" = judge failed a program the tests accept.
@@ -88,6 +88,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 15 | [two-stage tier](two-stage-arm-2026-07-31.md) | the last untested **lever** — Opus **plans**, Maverick **codes** | **negative result: generalist-instructs-specialist is an accuracy lever, not a cost lever — and at an Opus planner, a cost disaster.** The plan nudges tier-0 accuracy 0.88→**0.92** (one problem, noise-band) and does **not** fix confident errors (`scale_chunk` stayed 5/5-wrong with the plan). But the Opus call on every tier-0 query makes tier-0 cost **35×** higher → cascade **3.1× pricier than always-frontier**. A cheap-bottom-tier (#11) beats instructing a specialist |
 | 16 | [cheap-planner two-stage](two-stage-haiku-2026-07-31.md) | the #15 follow-up — **Haiku** plans (not Opus), Maverick codes | **a cheaper planner mitigates but does not reverse the penalty.** Same accuracy nudge (tier-0 true-correct **0.946** ≈ Opus's 0.92 > no-plan 0.88; `scale_chunk` still confident-wrong). Haiku shrinks tier-0 overhead **35×→8.7×** and α=0.05 now certifies (clean draw, no top-tier miss) — **but the cascade is still 2.13× pricier** than frontier at the certified `[1,1]`, and only **1.17× cheaper** where tier-0 acceptance fires (α=0.15) vs the non-planned #12's **5.24×**. Two planner points (Opus 3.1×, Haiku 2.13×) **confirm the direction**: accuracy lever, not cost lever |
 | 17 | [cost-win frequency](cost-win-frequency-2026-08-01.md) | 3 more 5:1:1 draws **with `-compare`** (β=0), 6 draws total — turns #14's "does not replicate" into a **frequency** | **2 of 6 certify with a cost win; 3 of 6 certify-but-pricier (`[1,1]`); 1 of 6 no cert.** Exact rule: win **iff 0 confident-wrong tier-0 answers in the clean set**. And the catch — **both** wins had confident-wrong answers that were merely **oracle-unsound-excluded** (Maverick's confident mistakes coincided with the spec model's unsound-test problems), so the win rides a two-error-process coincidence, not robustness. `scale_is_palindrome` is the recurring *sound-oracle* confident error. Resume survived 2 more external kills (5 total) |
+| 18 | [plan-once-reuse](plan-once-reuse-2026-08-01.md) | the last untested two-stage variant — **one** plan/query threaded into **every** tier (PR #35), not per-tier | **negative, and it explains why: at 2:1:1 the amortisation the design targets never happens.** Tier-0 accuracy 0.885 ≈ no-plan 0.88 (*below* both per-tier arms — one general plan loses the per-tier specificity that carried the nudge); cost collapses to per-tier's (~2× pricier at certified α=0.15, 1.19× at α≤0.10). Plan-once pays off only if the cheap tier *accepts* (avoiding escalation + plan re-charges), but the 2-sample Wilson ceiling (0.425) is below every certifiable threshold, so tier 0 always escalates and the one plan buys nothing. **Three planner points now close the question: no plan-placement variant reverses "accuracy lever, not cost lever."** Ran clean, no external kill |
 
 ### How each run answered the previous one's limitation
 
@@ -163,18 +164,26 @@ The value is in the chain, not any single number:
   **run** (experiment 11). It delivered the cost win but *not* a lower floor — the
   floor is a top-tier property under a sound oracle, and the apparent excess was
   spec-model test noise, not the bottom tier.
-- **A generalist-instructs-specialist arm**: **run** (experiments 15 and 16). A
-  strong planner rewrites the problem into a plan a cheap coder (Maverick) executes.
-  It is an **accuracy lever, not a cost lever** — the plan nudges tier-0 accuracy up
-  slightly (0.88→0.92 with an Opus planner, 0.88→0.946 with a Haiku planner, both
-  noise-band) and does not fix confident errors, while a planner call on every
-  cheap-tier query makes the cascade pricier than always-frontier: **3.1× with Opus
-  (#15), 2.13× with Haiku (#16)**. A cheaper planner mitigates the penalty (tier-0
-  overhead 35×→8.7×) but does not reverse it — even at α=0.15 where tier-0 acceptance
-  fires, the Haiku-planned cascade is only 1.17× cheaper vs the non-planned #12's
-  5.24×. The cheap-bottom-tier lever (11) beats it at every operating point; the only
-  untested variant that could plausibly turn it cost-positive is plan-once-reuse-across-
-  the-cascade (a structural code change).
+- **A generalist-instructs-specialist arm**: **run, and now closed** (experiments
+  15, 16, and 18). A strong planner rewrites the problem into a plan a cheap coder
+  (Maverick) executes. It is an **accuracy lever, not a cost lever** — the plan
+  nudges tier-0 accuracy up slightly (0.88→0.92 with a per-tier Opus planner,
+  0.88→0.946 with a per-tier Haiku planner, both noise-band) and does not fix
+  confident errors, while a planner call on every cheap-tier query makes the cascade
+  pricier than always-frontier: **3.1× with Opus (#15), 2.13× with Haiku (#16)**.
+  **Experiment 18 tested the last variant — plan-once-reuse-across-the-cascade (one
+  plan per query threaded into every tier, the structural change in PR #35) — and it
+  is also negative, for a newly-identified structural reason.** Plan-once did not even
+  reproduce the accuracy nudge (tier-0 0.885 ≈ no-plan 0.88, *below* both per-tier
+  arms — one general plan trades the per-tier specificity that carried the nudge), and
+  it collapsed to the *same* cost as per-tier planning (~2× pricier at the certified
+  α=0.15, 1.19× at α≤0.10). The reason is the amortisation the design was built to
+  capture **never happens at 2:1:1**: it pays off only if the cheap tier *accepts*
+  (avoiding escalation and plan re-charges), but the 2-sample Wilson ceiling (0.425)
+  sits below every certifiable threshold, so tier 0 is always escalated through and
+  the one plan buys nothing. **Three planner points on the same side close the
+  question: no plan-placement variant reverses the direction.** The cheap-bottom-tier
+  lever (11) remains the only thing that makes the cascade beat always-frontier on cost.
 
 ## What is established
 
@@ -301,4 +310,5 @@ AWS_PROFILE=<profile> go-cascade calibrate --provider=bedrock \
 Raw records (`*.execution.json`, `*.judge.json`, per-level and seeded JSON) are
 committed alongside each write-up so any α can be re-evaluated offline.
 
-Total live spend for all eleven experiments plus diagnosis: roughly $65–69.
+Total live spend across all eighteen experiments plus offline diagnosis: roughly
+$100–112 (the first eleven ~$65–69; experiments 12–17 ~$30–37; experiment 18 ~$5–7).
