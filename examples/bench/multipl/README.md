@@ -62,12 +62,13 @@ This gate is what makes stage 2's bill honest. Without it, those 39 problems are
 for twice — once in tokens spent generating a reference that can never compile, and
 again as permanently-red directories in the tree.
 
-**n = 489 still clears the §5.5 bar of n ≥ 300 comfortably**, which is the only
-threshold that matters here; the exclusions cost margin, not the experiment. Any
-write-up must report 489/528 and why, not the headline 528 — a reader comparing
-against published pass@k numbers on this benchmark needs to know 39 problems are
-absent and that the absences are not random with respect to difficulty (they cluster
-in MBPP's tuple-heavy problems, which transpile worst to Go).
+**n = 489 still clears the §5.5 bar of n ≥ 300 comfortably** — as does the 467 that
+survive stage 2 (see below). That bar is the only threshold that matters here; the
+exclusions cost margin, not the experiment. Any write-up must report 489/528 and why,
+not the headline 528 — a reader comparing against published pass@k numbers on this
+benchmark needs to know 39 problems are absent and that the absences are not random
+with respect to difficulty (they cluster in MBPP's tuple-heavy problems, which
+transpile worst to Go).
 
 ## Why references have to be generated, and what that costs in rigour
 

@@ -66,23 +66,30 @@ bug), 23 internally invalid literals, 2 one-offs. Worth knowing when quoting n: 
 exclusions are **not random with respect to difficulty** — they cluster in MBPP's
 tuple-heavy problems, which transpile worst to Go.
 
-**Stage 2 (reference generation) was running when the session ended.** Check it:
+**Stage 2 is finished: 467 of 489 references validated (95.5%).** All three consistency
+checks pass — `manifest.json`, `problems.jsonl` and `refs/` list the same 489 ids, the
+22 ids with no `solution.go` are exactly the 22 marked unvalidated, and the tree is
+gofmt-clean. Re-verify cheaply (it re-executes rather than trusting the report):
 
 ```bash
-tail -5 /tmp/stage2-full.log
-find ~/mple-bench/refs -name solution.go | wc -l      # target: ~470 of 489
-python3 -c "import json;r=json.load(open('$HOME/mple-bench/references.json'));\
-print(sum(1 for v in r.values() if v['validated']),'validated;',\
-[k for k,v in r.items() if not v['validated']])"
+python3 -c "import json,os;r=json.load(open(os.path.expanduser('~/mple-bench/references.json')));\
+print(sum(1 for v in r.values() if v['validated']),'validated')"
 ```
 
-If it was killed, **re-run it — it is resumable and re-validates rather than
-trusting the file**:
+**Quote n = 467, not 489, and do not count the 22 as cascade failures.** 21 of them are
+upstream oracle defects, diagnosed individually (see the README's stage-2 section for
+the per-problem account): 1 unsatisfiable through the pinned signature
+(`he_92_any_int` demands opposite answers for `3` and `3.0` through a `float64`
+parameter), 1 self-inconsistent, 6 whose oracle encodes a reproducible reference bug,
+3 whose statement contradicts its own oracle, 4 under-specified ordering, 1 float
+last-ULP, 5 left explicitly unclassified. Exactly **one** — `he_116_sort_array`, which
+needs Python's `bin(-4) == "-0b100"` magnitude-popcount semantics — is a real model
+failure, confirmed satisfiable by a hand-written reference that passes its full suite.
 
-```bash
-AWS_PROFILE=aws python3 examples/bench/multipl/stage2_references.py \
-  --bench ~/mple-bench --resume
-```
+That result strengthens the caveat below rather than just trimming n: on a measurable
+fraction of this benchmark the upstream oracle is **wrong**, in the direction that
+rewards reproducing a Python bug. So the 467 references are, by construction, solutions
+that agree with the upstream suite *including wherever it is mistaken*.
 
 References are **model-written, human-test-validated** — Opus writes each one and it
 is kept *only* if it passes MultiPL-E's own human-derived suite by execution
@@ -90,9 +97,9 @@ is kept *only* if it passes MultiPL-E's own human-derived suite by execution
 which is what the 64-problem set's references are, and any write-up using this
 benchmark must say so: a defect the upstream suite misses passes into the reference
 unnoticed. A problem whose reference cannot be validated in 3 attempts keeps **no**
-`solution.go` and is named — n=450 with sound references beats n=489 with 39 quiet
-lies. Measured rate on the first 18: **17/18**; the failure (`he_116_sort_array`,
-which needs Python's `bin(-4)` semantics) behaved correctly.
+`solution.go` and is named — n=467 with sound references beats n=489 with 22 quiet
+lies. `loadReferences` tolerates a missing reference, so such an id simply carries no
+oracle-soundness gate.
 
 Verified free, end-to-end, before spending: correct hand-written solutions **pass**
 the canonical suites and wrong ones are **refuted** (both directions — the pass side
