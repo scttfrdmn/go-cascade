@@ -192,6 +192,17 @@ func (l *Ladder) Run(ctx context.Context, ws *Workspace, src string, opts Option
 	r.Tests = parseTestJSON(res.Output)
 	sr = stageFrom(StageTest, res)
 	sr.Diagnostic = summariseTestOutput(res.Output, sr.Diagnostic)
+	// A stage that ran ZERO tests must not report OK. `go test -run ^TestV` on a
+	// suite whose functions are named otherwise exits 0 with "[no tests to run]",
+	// so a vacuous pass would look identical to a real one and every candidate
+	// would clear this rung — an unsound oracle, which invariant #4 forbids. This
+	// is a soundness guard, not a style check: it converts a silently-empty
+	// partition into a refutation with a diagnostic that names the cause.
+	if sr.OK && len(r.Tests) == 0 {
+		sr.OK = false
+		sr.Diagnostic = "visible partition ran no tests: no test function matches ^TestV " +
+			"(a suite that runs nothing cannot refute anything)"
+	}
 	if !add(sr) {
 		return r
 	}
@@ -257,12 +268,53 @@ func (l *Ladder) Accept(ctx context.Context, ws *Workspace, opts Options) *Repor
 	r.Stages = append(r.Stages, sr)
 	r.CPUTime = res.Duration
 	r.Tests = parseTestJSON(res.Output)
+	// The same soundness guard as the visible stage, and it matters more here:
+	// this is the acceptance oracle. A hidden partition with no ^TestH function
+	// exits 0 having executed nothing, which would accept every candidate and
+	// certify a risk bound against an oracle that never ran (invariants #4/#6).
+	if sr.OK && len(r.Tests) == 0 {
+		sr.OK = false
+		sr.Diagnostic = "hidden partition ran no tests: no test function matches ^TestH " +
+			"(acceptance against an empty oracle is not acceptance)"
+		r.Stages[len(r.Stages)-1] = sr
+	}
 	if !sr.OK {
 		r.OK = false
 		r.FailedAt = StageAccept
 		r.Diagnostic = sr.Diagnostic
 	}
 	return r
+}
+
+// RunAllTests executes EVERY test in the workspace, with no ^TestV/^TestH filter,
+// and reports whether the candidate compiled, how many tests reported, and the
+// diagnostic.
+//
+// This exists for the estimator's independent (canonical) oracle, which is a
+// whole human-authored suite rather than a generated V/H partition. Running it
+// through the ladder's visible stage would apply `-run ^TestV` and silently skip
+// every TestH* function in it — measuring η_fa against a fraction of the suite,
+// with the adversarial half (boundaries, overflow) exactly the part dropped. It
+// is deliberately NOT on the acceptance path: the V/H split is what protects the
+// holdout (invariant #1), so nothing that routes may use this.
+//
+// ran=false means the candidate did not compile against the suite (no label is
+// available — an API mismatch is not an incorrectness signal) or the suite
+// executed no tests at all.
+func (l *Ladder) RunAllTests(ctx context.Context, ws *Workspace, opts Options) (ran, passed bool, ntests int, diag string) {
+	// Compile first and separately, so "does not compile" is distinguishable from
+	// "compiled and failed" — the caller reports those as different verdicts.
+	if res := ws.run(ctx, 60*time.Second, false, "build", "./..."); res.Err != nil {
+		return false, false, 0, summariseTestOutput(res.Output, res.Err.Error())
+	}
+	res := ws.run(ctx, opts.TestTimeout, true, "test", "-json", "-count=1", "./...")
+	tests := parseTestJSON(res.Output)
+	diag = summariseTestOutput(res.Output, "")
+	if len(tests) == 0 {
+		// Exit 0 with nothing executed is a vacuous pass; treat it as "no label".
+		return false, false, 0, "suite executed no tests: " + diag
+	}
+	return true, res.Err == nil, len(tests), diag
 }
 
 func (l *Ladder) typecheck(src string) error {
