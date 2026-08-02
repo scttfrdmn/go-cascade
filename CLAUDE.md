@@ -152,8 +152,21 @@ a test, but the tests will not catch every way of violating them.
 - **Live evaluation has been run** (17 experiments against Bedrock; see `results/`
   and paper §5.6). It is **demonstrated, not validated**: n ≤ 64, far below the
   §5.5 bar of n ≥ 300, on a small non-standard single-file/stdlib benchmark. The
-  full §5.5 experiment (n ≥ 300, standard benchmark, all five arms, both secondary
-  tests) remains unrun — that is the open gap, not "no live run."
+  full §5.5 experiment (n ≥ 300, standard benchmark, all five arms) remains unrun —
+  that is the open gap, not "no live run." Of the two secondary tests, §5.5(5) (the
+  §3.7 estimator test) **has** now been run; §5.5(4) (cache-warmth sensitivity) has
+  not.
+- **The §3.7 estimator test is run** (`go-cascade estimator`, experiment 19). Mutation
+  score M is a **conservative** proxy for 1 − η_fa on this benchmark, not a tight one:
+  measured η_fa 0/144 (95% bound 0.021) against a pooled 1 − M of 0.0996 that predicted
+  ~11 events. Non-circular by construction — M is measured against the *generated*
+  suite, correctness against each problem's *human-authored* `refs/<id>/solution_test.go`,
+  which `Router.SetCanonicalTests` supplies **off the acceptance path** (it must never
+  become a ladder stage or an oracle; that would break invariants #4/#6). Two live
+  cautions: whether M *ranks* candidates by η_fa is **unresolved** (no events in either
+  M bucket), and the generated oracle's observed errors are **all over-rejections** —
+  a sound-but-stricter-than-canonical suite costs escalations, not risk, so it is
+  invisible to the certificate.
 - The judge-oracle comparison arm (§5.5c) is implemented **and now run live** (not
   only mock). `calibrate --oracle=judge` and `--compare` swap the acceptance oracle
   for an LLM reviewer (never a ladder stage — invariant #4) and record execution
