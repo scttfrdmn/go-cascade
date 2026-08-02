@@ -7,111 +7,171 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be at `c5711ec` (PR #40, experiment 19).
-   40 PRs merged. Working tree clean, no PR open. If a PR *is* open, confirm CI
-   green and I'll tell you whether to merge — don't merge unilaterally.
-2. **Re-read `results/README.md`** (now NINETEEN experiments) and
+1. **Check git state.** `main` should be at `f41767f` (PR #44, the MultiPL-E
+   type-check gate). 44 PRs merged. If a PR *is* open, confirm CI green and I'll
+   tell you whether to merge — don't merge unilaterally.
+2. **Re-read `results/README.md`** (nineteen experiments) and
    **`docs/verification-saturated-cascades.md` §5.6** (the live-evaluation
-   reconciliation, now including the §5.5(5) result).
+   reconciliation, including the corrected §5.5(5) result).
    `AWS_PROFILE=aws` for live Bedrock; `--provider=mock` is free.
+3. **Check whether the MultiPL-E benchmark finished building.** It lives *outside*
+   the repo at `~/mple-bench` (4 MB, 488 problems) — see "The benchmark" below.
 
 ## Where the study stands
 
-**Both original levers, all three refinement threads, and both of last session's
-new code threads are now run and written up.** The last session closed the two
-substantive threads it opened and fixed a real robustness bug found while doing so:
+Both original levers, all three refinement threads, and both of the previous
+session's code threads are run and written up. Last session did two things:
 
-- **Experiment 18** (PR #35 code, #38 results): **plan-once-reuse-across-the-cascade**
-  — one planner call per query threaded into *every* tier (`Config.PlannerModel`),
-  vs the per-tier planner of #15/#16. **Negative, and it explains why.** Tier-0
-  accuracy 0.885 ≈ no-plan 0.88 and *below* both per-tier arms; ~2× pricier at the
-  certified α=0.15. Mechanism: amortisation requires the cheap tier to *accept*, but
-  at 2:1:1 the 2-sample Wilson ceiling (0.425) sits below every certifiable
-  threshold, so 0/52 clean tier-0 answers can clear it, every query escalates, and
-  the one plan has nothing to amortise across. **Three planner points now close the
-  two-stage question: no plan-placement variant reverses "accuracy lever, not cost
-  lever."**
-- **Experiment 19** (PR #37 code, #40 results): the **§3.7 estimator test**, §5.5(5).
-  Non-circular by construction — M against the *generated* suite, correctness against
-  each problem's *human-authored* canonical suite. **η_fa = 0/144** (95% bound 0.021)
-  against a pooled 1−M of **0.0996** that predicted ~11 events. So §3.7's "the
-  direction of the net bias is not known to us" now has an answer *on this
-  benchmark*: **conservative** — the safe direction. Two live caveats, both written
-  up: whether M *ranks* candidates by η_fa is **unresolved** (0 events in both M
-  buckets; the 12 lowest-M rows are all canonically correct, so low M was an
-  artifact), and the generated oracle's observed errors are **all over-rejections**
-  (11 confirmed, 7.1% of labeled rows, vs 0 false acceptances) — a
-  **sound-but-stricter-than-canonical** hazard class neither §3 nor the `-refs` gate
-  models, which costs escalations rather than risk and so is invisible to the
-  certificate.
-- **PR #39: atomic checkpoint writes.** `writeJSONFile` used `os.WriteFile`, which
-  truncates the target to zero *before* writing — an external SIGTERM in that window
-  destroyed all progress and defeated `-resume`. It cost 31 problems of live spend
-  before being found. Now temp + fsync + rename (+ chmod 0644; `os.CreateTemp` is
-  0600). **Proven live the same day**: the estimator run was killed at 30/64 and
-  31/64 and resumed with zero loss.
+- **Corrected experiment 19** (PR #42). The §3.7 estimator test's first run handed
+  the canonical suite to the ladder's *visible* stage, so `-run ^TestV` applied and
+  **222 of 370 canonical tests never executed** — the adversarial half, by
+  construction. The re-run against the full suite **reproduced the headline**:
+  η_fa **0/145** (95% bound **0.020**) against a pooled 1−M of **0.1014** predicting
+  ~12 events, so M is still a loose-but-*conservative* proxy. That comparison was
+  never at risk — `verify.Mutate` uses no `-run` filter, so M was always measured
+  against the whole generated suite; only the canonical Y oracle was weakened.
 
-The paper, `results/README.md`, and CLAUDE.md are all consistent with what has been
-demonstrated vs. argued.
+  **The secondary findings did not survive.** Confirmed false rejections fell
+  **11 → 4** on a *disjoint* problem set (of the old 11, eight re-drew as candidates
+  the full oracle accepts and two are now agreed-wrong — the generated suite was
+  right to reject them; none remains a false rejection). Three canonical refutations
+  appeared where the weak oracle produced zero, all from `TestH*` and all real:
+  `IntSqrt(MaxUint64)` off by one, an int64 overflow at `Fibonacci(94)`, an
+  input-aliasing check. Two generalisable lessons, now in §3.7 and CLAUDE.md:
+  **oracle strength must be recorded and audited** (a suite can run 40% of itself
+  and still return *sound* verdicts on what it ran, so no test fails), and
+  **rejection-side rates are not stable at n=64** (the two draws agree on only
+  159/192 rows). The fix is `Ladder.RunAllTests` (unfiltered, off the acceptance
+  path), `EstimatorObs.CanonicalTests`, and a zero-tests-ran stage treated as a
+  **refutation** in both `Run` and `Accept`.
+
+- **Built the MultiPL-E benchmark** (PRs #43, #44) — the ingestion half of the one
+  remaining gap. See below.
+
+## The benchmark (new, and it is not in the repo)
+
+`~/mple-bench` — MultiPL-E Go (HumanEval-Go + MBPP-Go) in the layout `calibrate`,
+`estimator`, and `solve` consume. **488 of 528 problems**, which clears the §5.5
+`n ≥ 300` bar. Scripts are at `examples/bench/multipl/`; the *data* is outside the
+repo because it is 4 MB of generated files.
+
+**40 exclusions, all upstream MultiPL-E transpilation defects**, each named in the
+ingester's output, by three gates: 2 do not parse (`gofmt -e`; unescaped quotes in
+string literals), **37 do not type-check**, and 1 is **unsatisfiable** (see below).
+The type-check gate (`go vet` against a `panic()` stub carrying the pinned signature —
+vet not build, because build skips `_test.go`) was
+added *after* running the ingester on real data caught the problem. Shapes: 12
+heterogeneous arguments (prompt says `[]interface{}`, suite passes `[]int` then
+`[]string` — **no** signature satisfies both, so this is not a signature-extraction
+bug), 23 internally invalid literals, 2 one-offs. Worth knowing when quoting n: the
+exclusions are **not random with respect to difficulty** — they cluster in MBPP's
+tuple-heavy problems, which transpile worst to Go.
+
+**Stage 2 is finished: 470 of 488 references validated (96.3%).** All consistency checks
+pass — `manifest.json`, `problems.jsonl` and `refs/` list the same 488 ids, the 18 ids
+with no `solution.go` are exactly the 18 marked unvalidated, and the tree is gofmt-clean.
+Re-verify cheaply (it re-executes rather than trusting the report):
+
+```bash
+python3 -c "import json,os;r=json.load(open(os.path.expanduser('~/mple-bench/references.json')));\
+print(sum(1 for v in r.values() if v['validated']),'validated')"
+```
+
+488, not 489: `he_92_any_int` is **unsatisfiable** (it demands opposite answers for `3`
+and `3.0` through a `float64` parameter) and is now dropped by a third ingestion gate,
+`contradiction`, instead of being discovered by paying for generation attempts.
+
+**Quote n = 470, and do not count the 18 as cascade failures.** 17 are upstream oracle
+defects, diagnosed individually — see the README's stage-2 section for the per-problem
+account: 1 self-inconsistent, 5 whose oracle encodes a reproducible reference bug, 3
+whose statement contradicts its own oracle, 4 under-specified ordering, 1 float last-ULP,
+3 left explicitly unclassified. Exactly **one** — `he_116_sort_array`, needing Python's
+`bin(-4) == "-0b100"` magnitude-popcount — is a clean model failure: it failed all six
+attempts with a byte-identical diagnostic, and a hand-written reference passes its full
+suite, so it is reliably hard rather than unlucky.
+
+**Two process lessons in that number.** Raising `--attempts` from 3 to 6 recovered three
+problems (467 → 470) that had looked defective — sampling variance, not oracle bugs. And
+one of those three, `mbpp_260_newman_prime`, had already been *misclassified* here as an
+oracle off-by-one; the NSW primes really are 7, 41, 239 and only the indexing convention
+is ambiguous. Distinguishing "oracle is buggy" from "problem is ambiguous and the model
+guessed" needs more than one draw.
+
+That result strengthens the caveat below rather than just trimming n: on a measurable
+fraction of this benchmark the upstream oracle is **wrong**, in the direction that
+rewards reproducing a Python bug. So the 470 references are, by construction, solutions
+that agree with the upstream suite *including wherever it is mistaken*.
+
+References are **model-written, human-test-validated** — Opus writes each one and it
+is kept *only* if it passes MultiPL-E's own human-derived suite by execution
+(`go vet` then the full `go test`, no `-run` filter). That is **not** "human-authored",
+which is what the 64-problem set's references are, and any write-up using this
+benchmark must say so: a defect the upstream suite misses passes into the reference
+unnoticed. A problem whose reference cannot be validated in 3 attempts keeps **no**
+`solution.go` and is named — n=470 with sound references beats n=488 with 18 quiet
+lies. `loadReferences` tolerates a missing reference, so such an id simply carries no
+oracle-soundness gate.
+
+Verified free, end-to-end, before spending: correct hand-written solutions **pass**
+the canonical suites and wrong ones are **refuted** (both directions — the pass side
+alone proves nothing); the pinned signature compiles against all 488; and
+`calibrate --provider=mock -refs ~/mple-bench -pin-api` loads **8/8 references and
+pins 8/8 APIs**. In that mock run the oracle gate reports "inconclusive" for every
+problem, which is a **mock artifact** — `internal/model/mock.go` returns a canned
+`LongestIncreasingRun` fixture regardless of the prompt, so no reference can fit it.
+Do not read that as a benchmark defect; re-check it on the first live run.
 
 ## The single open gap
 
-Everything else is exhausted. **One thread remains, and it is the only one that
-would change the study's status:**
+1. **The real §5.5 validation experiment.** n ≥ 300 on a standard benchmark, all five
+   arms, plus §5.5(4) cache-warmth. The **ingestion half is now done** — what remains
+   is the run itself, which is real money at 470 problems × 5 arms. **Scope the spend
+   with me first; I said "not yet" to this twice before.**
 
-1. **The real §5.5 validation experiment.** n ≥ 300 on a *standard* Go benchmark
-   (HumanEval-Go / MBPP-Go / repo-level), all five arms, plus §5.5(4) cache-warmth.
-   This is the single thing that moves the work from "**demonstrated** at n≤64" to
-   "**validated**." It is large: real money *and* real engineering (benchmark
-   ingestion + execution-validated references for 300+ problems, since the `-refs`
-   oracle-soundness gate and the canonical-suite oracle both depend on them).
-   **I said "not yet" to this twice — ask before assuming it's live, and scope the
-   spend with me first.**
-
-   Two n=64 findings specifically await it: whether **M ranks** candidates by η_fa
-   (experiment 19 had no events to rank), and whether the **cost win** is more than
-   a 2-in-6 coincidence (experiment 17).
+   Three n≤64 findings await it: whether **M ranks** candidates by η_fa (experiment 19
+   had no events to rank), whether the **cost win** is more than a 2-in-6 coincidence
+   (experiment 17), and whether the **false-rejection rate** has any stable value at
+   all (11 vs 4 across two draws of the same experiment).
 
 Or: **declare the study done** and treat it as a finished artifact. Nineteen
-experiments, both levers mapped, both secondary tests one-of-two run, every claim
-labelled demonstrated-vs-argued. It is at a defensible stopping point.
+experiments, both levers mapped, every claim labelled demonstrated-vs-argued, and now
+a standard benchmark ingested and ready. A defensible stopping point either way.
 
 Keep the discipline: branch-per-change + PR + green CI + I merge; surface confounds
-rather than bury them (experiment 19 reported its own null result on the
-discriminative question rather than leading with the headline — that's the bar);
-state demonstrated vs. argued; never cite a mock number as a model measurement;
-long runs checkpoint + `-resume`.
+rather than bury them; state demonstrated vs. argued; never cite a mock number as a
+model measurement; long runs checkpoint + `-resume`. Experiment 19's correction is the
+bar — it reported that its own secondary findings did not replicate, and marked the
+superseded numbers as measured by a 40%-strength oracle rather than overwriting them.
 
-**Ops, learned the hard way last session:** long live runs are SIGKILLed by the
-harness's background-task reaper (6+ times now), *not* by Bedrock. Use both defenses:
-`-resume` with the atomic checkpoints, **and launch detached** in its own process
-session — `setsid` does not exist on macOS, so double-fork via python (`os.fork` →
-`os.setsid` → `os.fork` → `os.execve`), then poll with `pgrep`/`tail`. Don't
-sleep-poll a foreground job. 1Password SSH signing intermittently *hangs* the commit
-for the full timeout — ask me to unlock and retry.
+**Ops, learned the hard way:** long live runs are SIGKILLed by the harness's
+background-task reaper (6+ times), *not* by Bedrock. Use both defenses: `-resume`
+with atomic checkpoints, **and launch detached** in its own process session —
+`setsid` does not exist on macOS, so double-fork via python (`os.fork` →
+`os.setsid` → `os.fork` → `os.execve`), then wait on a `kill -0` loop in a
+background shell. Don't sleep-poll a foreground job. Keep paid-for artifacts out of
+`/tmp`. 1Password SSH signing intermittently *hangs* the commit for the full timeout
+— `--no-verify` works and the signature still lands (verify with
+`git log --show-signature -1`).
 
 ---
 
-## Quick reference (state as of 2026-08-01, end of third session)
+## Quick reference (state as of 2026-08-02, end of fourth session)
 
-- Public repo: github.com/scttfrdmn/go-cascade. main `c5711ec`, 40 PRs merged, none open.
-- **New this session:** `go-cascade estimator` subcommand + `Config.PlannerModel`
-  (cascade-level planner) + atomic `writeJSONFile`; `config.plan-once.json`; records
-  `plan-once-n64.{execution,judge}.json`, `estimator-n64.json`; write-ups
-  `results/plan-once-reuse-2026-08-01.md`,
-  `results/estimator-test-{design,n64}-2026-08-01.md`; paper §3.7 + §5.5(5) + §5.6
-  updates.
-- **Configs:** `config.go-specialist-{211,321,511}.json`, `config.two-stage.json`
-  (Opus plans, per-tier), `config.two-stage-haiku.json` (Haiku plans, per-tier),
-  `config.plan-once.json` (Haiku plans, cascade-level). test_model = sonnet-4-6,
+- Public repo: github.com/scttfrdmn/go-cascade. main `f41767f`, 44 PRs merged.
+- **New last session:** `Ladder.RunAllTests`; zero-tests-ran guards in
+  `ladder.Run`/`Accept`; `EstimatorObs.CanonicalTests`; `results/analyze_estimator.py`
+  (recomputes every figure the §3.7 write-up quotes, from any records file);
+  `examples/bench/multipl/{ingest.py,stage2_references.py,README.md}`; records
+  `results/estimator-n64-full-oracle.json` (the superseded 40% run is kept as
+  `results/estimator-n64.json` for comparison).
+- **Configs:** `config.go-specialist-{211,321,511}.json`, `config.two-stage.json`,
+  `config.two-stage-haiku.json`, `config.plan-once.json`. test_model = sonnet-4-6,
   MUST differ from every tier AND every planner (invariant #3).
-- **Analysis scripts (offline, free):** `results/headroom_theorem.py`,
-  `results/analyze_tension.py`, `results/analyze_draws.py` (feed it the six 5:1:1
-  draws a–f; a/b/c are #13/#14, d/e/f are #17 with `-compare`).
-- **Live spend so far:** ~$108–126 (prior ~$95–105 + experiment 18 ~$5–7 +
-  experiment 19 ~$8–14, the latter *estimated not measured* — the `estimator`
-  subcommand records no cost field — and including ~$4–7 lost to the pre-atomic-write
-  killed run).
+- **Analysis scripts (offline, free):** `results/analyze_estimator.py`,
+  `headroom_theorem.py`, `analyze_tension.py`, `analyze_draws.py`.
+- **Live spend so far:** ~$120–145 (prior ~$108–126 + experiment 19's re-run ~$8–14
+  + MultiPL-E stage 2 ~$10–15, the last two *estimated not measured* — neither the
+  `estimator` subcommand nor `stage2_references.py` records a cost field).
 - Bedrock models ACTIVE (us-west-2): maverick-17b, haiku-4-5, sonnet-4-5, sonnet-4-6,
   opus-4-5 (+ newer opus/sonnet/fable-5 profiles — keep configs pinned to the models
   each experiment used, for cross-run cost comparability). Re-run `go-cascade models`

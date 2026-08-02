@@ -84,6 +84,26 @@ TESTFN_RE = re.compile(r"^func\s+Test\w*\s*\(t \*testing\.T\)\s*\{", re.M)
 
 CANONICAL_TEST = "TestCanonical"
 
+# One `{actual: candidate(...), expected: ...},` row of the suite's test table.
+# Non-greedy and anchored on `), expected:` because arguments themselves contain
+# parentheses and commas; the trailing `},` bounds the expectation.
+CALL_RE = re.compile(r"candidate\((.*?)\),\s*expected:\s*(.*?)\},", re.S)
+NUM_RE = re.compile(r"-?\b\d+\.?\d*\b")
+
+
+def _norm_literals(s: str) -> str:
+    """Collapse whitespace and rewrite numeric literals to a canonical value form, so
+    `3` and `3.0` compare equal. Used only by `contradiction` — see the reasoning
+    there for why comparing by value rather than spelling is the sound choice."""
+
+    def by_value(m: re.Match[str]) -> str:
+        try:
+            return repr(float(m.group(0)))
+        except ValueError:  # not actually numeric (e.g. part of an identifier)
+            return m.group(0)
+
+    return NUM_RE.sub(by_value, " ".join(s.split()))
+
 
 def camel(snake: str) -> str:
     """has_close_elements -> HasCloseElements; differ_At_One_Bit_Pos -> DifferAtOneBitPos.
@@ -204,6 +224,44 @@ def parses_as_go(src: str) -> bool:
     return res.returncode == 0
 
 
+def contradiction(suite: str) -> str:
+    """Does the suite demand two different answers for the same arguments? Returns ""
+    or a description of the contradiction.
+
+    A third gate, and unlike the first two it is about *semantics*: such a suite
+    type-checks perfectly and parses fine, but no implementation can satisfy it,
+    because a function is a function. Exactly one of the 489 problems that clear the
+    other two gates fails this one — `he_92_any_int`, whose table asserts both
+    `candidate(3, 4, 7) -> true` and `candidate(3.0, 4, 7) -> false`. Upstream the
+    distinction is real (`isinstance(3.0, int)` is False in Python); through Go's
+    `func AnyInt(x float64, y float64, z float64) bool` the two calls are *the same
+    call*, so the transpilation destroyed the only thing the problem was testing.
+
+    Numeric literals are compared by **value**, not by spelling: `3` and `3.0` must
+    normalise to the same argument, since that is precisely the collision that makes
+    the suite unsatisfiable. This is sound only because the signature has already
+    type-checked against the suite, so a literal's spelling carries no type
+    information the parameter list does not already fix.
+
+    One member is not a reason to skip the gate. It costs one pass over text already
+    in memory, and the failure it prevents is the expensive kind: a problem no
+    implementation can pass, silently scored as a model failure. It is deliberately
+    conservative — it reports only exact-duplicate argument lists with differing
+    expectations, never a *suspected* inconsistency. `mbpp_802_count_rotation`, whose
+    expectations follow no rule (`[3,2,1] -> 1` and `[1,3,2] -> 2`, though neither
+    list can be rotated into sorted order at all), passes this gate and should: its
+    arguments are all distinct, so a lookup table satisfies it. Unsatisfiable and
+    merely-wrong are different defects, and only the first is decidable here.
+    """
+    seen: dict[str, str] = {}
+    for args, exp in CALL_RE.findall(suite):
+        a, e = _norm_literals(args), _norm_literals(exp)
+        if a in seen and seen[a] != e:
+            return f"candidate({a[:60]}) expected both {seen[a][:30]} and {e[:30]}"
+        seen[a] = e
+    return ""
+
+
 def typechecks(d: pathlib.Path, sig: str) -> str:
     """Does the suite type-check against the pinned signature? Returns "" or the error.
 
@@ -297,7 +355,7 @@ def main() -> int:
     out = pathlib.Path(args.out)
     (out / "refs").mkdir(parents=True, exist_ok=True)
 
-    ingested, skipped, unparseable = [], [], []
+    ingested, skipped, unparseable, contradictory = [], [], [], []
     for row in rows:
         got = ingest_row(row)
         if got is None:
@@ -305,6 +363,10 @@ def main() -> int:
             continue
         if not parses_as_go(got["suite"]):
             unparseable.append(got["id"])
+            continue
+        # Free text check, so it runs before the subprocess gates below.
+        if c := contradiction(got["suite"]):
+            contradictory.append((got["id"], c))
             continue
         ingested.append(got)
         if args.limit and len(ingested) >= args.limit:
@@ -376,6 +438,10 @@ def main() -> int:
         # Named in full, not truncated: these are the benchmark's known holes and a
         # reader comparing n against the published 528 needs to see all of them.
         print(f"skipped {len(unparseable)} (upstream suite does not parse as Go): {', '.join(unparseable)}")
+    if contradictory:
+        print(f"skipped {len(contradictory)} (upstream suite is unsatisfiable):")
+        for i, c in contradictory:
+            print(f"    {i}: {c}")
     if untyped:
         print(f"skipped {len(untyped)} (upstream suite does not type-check):")
         for i, e in untyped:

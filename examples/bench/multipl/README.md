@@ -29,12 +29,15 @@ Stage 1 emits `problems.jsonl` (the query stream), `manifest.json` (pinned
 signatures), and per problem `refs/<id>/{go.mod,solution_test.go}`. Stage 2 adds
 `refs/<id>/solution.go` and a `references.json` report.
 
-**489 of 528 problems ingest**, and the 39 exclusions are all upstream defects in
+## Three gates
+
+**488 of 528 problems ingest**, and the 40 exclusions are all upstream defects in
 MultiPL-E's Go transpilation, not artifacts of this script. A problem whose canonical
-suite cannot compile has no oracle, so it must be dropped and *counted*: shipping it
-would hand the estimator a problem it can never label, which reads as a model failure
-rather than a benchmark defect. Both gates run the Go toolchain rather than a
-hand-rolled check, and both name every exclusion in the output.
+suite cannot compile — or cannot be satisfied — has no usable oracle, so it must be
+dropped and *counted*: shipping it would hand the estimator a problem it can never
+label, which reads as a model failure rather than a benchmark defect. Every exclusion
+is named in the output, and the first two gates delegate the judgement to the Go
+toolchain rather than a hand-rolled check.
 
 **2 do not parse** (`gofmt -e`): `mbpp_563_extract_values` and
 `mbpp_725_extract_quotation` emit Go string literals containing unescaped double
@@ -58,16 +61,38 @@ link, which is the same reason vet is a rung on the verifier ladder. Three shape
   transpiler failed to infer one and emitted its placeholder), and
   `mbpp_67_bell_number` expects a 55-digit integer constant that overflows `int`.
 
-This gate is what makes stage 2's bill honest. Without it, those 39 problems are paid
-for twice — once in tokens spent generating a reference that can never compile, and
-again as permanently-red directories in the tree.
+**1 is unsatisfiable** (`contradiction`, a pure text check): `he_92_any_int`'s table
+asserts both `candidate(3, 4, 7)` → `true` and `candidate(3.0, 4, 7)` → `false`. Through
+`func AnyInt(x float64, y float64, z float64) bool` those are *the same call*, so no
+function can satisfy the suite — Python's `isinstance(3.0, int)` distinction did not
+survive transpilation, taking with it the only thing the problem tested.
 
-**n = 489 still clears the §5.5 bar of n ≥ 300 comfortably**, which is the only
-threshold that matters here; the exclusions cost margin, not the experiment. Any
-write-up must report 489/528 and why, not the headline 528 — a reader comparing
-against published pass@k numbers on this benchmark needs to know 39 problems are
-absent and that the absences are not random with respect to difficulty (they cluster
-in MBPP's tuple-heavy problems, which transpile worst to Go).
+This gate was added after stage 2 paid three generation attempts to discover the same
+fact empirically, and it is the one exclusion class that a *semantically* aware check
+finds and the toolchain cannot: the suite parses and type-checks perfectly. It compares
+numeric literals by **value** rather than spelling (`3` and `3.0` must collide — that is
+the whole defect), which is sound because the signature has already type-checked against
+the suite. It is deliberately conservative: only exact-duplicate argument lists with
+differing expectations, never a *suspected* inconsistency. Verified against all 489
+suites that clear the other gates — it fires on exactly one.
+
+`mbpp_802_count_rotation` shows why the conservatism matters. Its expectations follow no
+rule (`[3,2,1]` → 1 and `[1,3,2]` → 2, though **neither list can be rotated into sorted
+order at all**, so the question its statement asks is not defined on those inputs). It
+passes this gate and should: its arguments are all distinct, so a lookup table satisfies
+it. Unsatisfiable and merely-wrong are different defects and only the first is decidable
+here; `mbpp_802` is caught by stage 2 instead, as a problem no reference validates.
+
+These gates are what make stage 2's bill honest. Without them those 40 problems are paid
+for twice — once in tokens spent generating a reference that can never pass, and again as
+permanently-red directories in the tree.
+
+**n = 488 still clears the §5.5 bar of n ≥ 300 comfortably** — as do the 467 that survive
+stage 2 (see below). That bar is the only threshold that matters here; the exclusions cost
+margin, not the experiment. Any write-up must report 488/528 and why, not the headline 528
+— a reader comparing against published pass@k numbers on this benchmark needs to know 40
+problems are absent and that the absences are not random with respect to difficulty (they
+cluster in MBPP's tuple-heavy problems, which transpile worst to Go).
 
 ## Why references have to be generated, and what that costs in rigour
 
@@ -95,9 +120,87 @@ benchmark already carries, but it is a real difference from the hand-written set
 must not be blurred.
 
 Problems whose reference fails after `--attempts` tries keep **no** `solution.go` and
-are named in the output. Running §5.5 at n=450 with sound references beats n=489 with
-39 quiet lies; `loadReferences` tolerates a missing reference per problem, and such an
+are named in the output. Running §5.5 at n=470 with sound references beats n=488 with
+18 quiet lies; `loadReferences` tolerates a missing reference per problem, and such an
 id simply carries no oracle-soundness gate.
+
+## Stage 2 result: 470 of 488, and what the 18 failures actually are
+
+Measured, Opus 4.5: **467 validated at `--attempts 3`, then 470 after re-running the
+failures at `--attempts 6`** — 96.3% of 488. All consistency checks pass:
+`manifest.json`, `problems.jsonl`, and `refs/` list the same 488 ids; the 18 ids without
+a `solution.go` are exactly the 18 the report marks unvalidated; the tree is `gofmt`
+clean.
+
+**Raising `--attempts` is worth doing before diagnosing anything.** Three problems that
+looked defective at 3 attempts validated at 6 (`mbpp_468_max_product` at attempt 2,
+`mbpp_617_min_Jumps` at attempt 4, `mbpp_260_newman_prime` at attempt 1 on a re-draw).
+Sampling variance, not oracle defects. One of the three had been filed below as an
+upstream reference bug on the strength of a plausible-looking off-by-one, and it was
+simply wrong — see the note on `mbpp_260` below.
+
+**Only one of the remaining 18 is a clear model failure.** That distinction is
+load-bearing, so each was diagnosed rather than filed as "hard". Reproducing an
+expectation exactly from a wrong formula localises the defect: a model error does not
+match the oracle on every case.
+
+- **Self-inconsistent oracle** (1) — `mbpp_802_count_rotation` asks for the rotations
+  needed to *generate a sorted list*, but `[3,2,1]` → `1` and `[1,3,2]` → `2` while
+  **neither list can be rotated into sorted order at all**. The question is undefined on
+  those inputs, so the expected values are arbitrary. Satisfiable only by a lookup table,
+  which is why the ingestion-time `contradiction` gate correctly leaves it alone.
+- **The oracle encodes an upstream reference bug** (5) — `mbpp_461_upper_ctr` ("count the
+  upper case characters"; `"PYthon"` → **1**, though the answer is 2 — iterating from
+  index 1 reproduces every case), `mbpp_430_parabola_directrix` (expectations are exactly
+  `c-((b*b)+1)*4*a`, not a directrix by any definition), `mbpp_264_dog_age` (expectations
+  are exactly `10.5*2 + (age-2)*4`), `mbpp_83_get_Char` (`"abc"` sums to 294, 294 mod 26
+  = 8 → `'i'`, but the oracle wants `'f'`), `mbpp_87_merge_dictionaries_three` (the
+  expected map omits a key present in the inputs). A candidate that is *correct* fails
+  these; one that reproduces the bug passes.
+- **Statement contradicts the oracle** (3) — `mbpp_638_wind_chill` says "rounded to the
+  **next** integer" but every expectation matches `round`, not `ceil`;
+  `mbpp_164_are_equivalent` says "sum of the divisors" but needs *proper* divisors
+  (23/47 → both 1); `mbpp_777_find_sum` asks for a sum of non-repeated elements but
+  expects the sum of *distinct* elements.
+- **Under-specified ordering** (4) — `mbpp_579_find_dissimilar`, `mbpp_769_Diff`,
+  `mbpp_788_new_tuple`, `mbpp_229_re_arrange_array`. The statement asks for a set-like
+  result; the oracle demands Python's incidental iteration order.
+- **Float last-bit disagreement** (1) — `mbpp_742_area_tetrahedron`. `math.Sqrt(3)*a*a`
+  in Go differs from CPython's expectation in the final ULP (`…894` vs `…896`). The
+  suite compares `fmt.Sprintf("%v")` output, so there is no tolerance to widen.
+- **Genuinely hard, and satisfiable** (1) — `he_116_sort_array` needs Python's
+  `bin(-4) == "-0b100"` semantics (popcount of the *magnitude*, not two's complement).
+  Verified satisfiable by hand: a `math/bits` + `sort.SliceStable` reference passes the
+  full canonical suite. Opus failed **all six** attempts with the byte-identical
+  diagnostic each time, so this is reliably hard rather than unlucky — the one clean
+  model failure in the set.
+- **Unclassified** (3) — `mbpp_408_k_smallest_pairs`, `mbpp_452_loss_amount`,
+  `mbpp_749_sort_numeric_strings` show the same shapes (ordering, or a disputed formula)
+  but were not each run to ground, so they are left unassigned rather than bucketed on
+  resemblance.
+
+A correction worth keeping, because it is the same mistake this benchmark invites
+everywhere: `mbpp_260_newman_prime` was first classified here as an oracle off-by-one
+("expects 7 where 17 is the term the statement describes"). It is not. The
+Newman–Shanks–Williams primes really are 7, 41, 239, …; what is ambiguous is the
+*indexing convention*, and the model picked a different one on each draw. The oracle was
+right and the diagnosis was wrong. **Distinguishing "oracle is buggy" from "problem is
+ambiguous and the model guessed" needs more than one draw**, which is exactly why the
+five bullets above cite a reproduced formula rather than a single failing case.
+
+**Consequence for any §5.5 number.** These 18 must be *excluded*, not counted as cascade
+failures — most are problems where being correct and passing the oracle are opposite.
+They carry no reference and therefore no oracle-soundness gate, which already keeps them
+out of calibration (invariant #4), but a *pass rate* reported over all 488 would silently
+charge the router for upstream defects. **n = 470** is the number to quote, and it still
+clears the §5.5 bar of n ≥ 300.
+
+This also sharpens the "model-written, human-test-validated" caveat above. The upstream
+suite is not merely *incomplete* as an oracle on this benchmark — on a measurable
+fraction of problems it is **wrong**, and it is wrong in the direction that rewards
+reproducing a Python bug. Stage 2's validation gate silently filtered those out, which
+is the right behaviour and worth knowing: the 467 references are, by construction,
+solutions that agree with the upstream oracle *including* wherever it is mistaken.
 
 ## Divergences from upstream MultiPL-E
 
