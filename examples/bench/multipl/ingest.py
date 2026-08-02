@@ -58,6 +58,7 @@ results incomparable to everyone else's, which costs more than the oddity does.
 """
 
 import argparse
+import concurrent.futures as cf
 import json
 import pathlib
 import re
@@ -203,6 +204,54 @@ def parses_as_go(src: str) -> bool:
     return res.returncode == 0
 
 
+def typechecks(d: pathlib.Path, sig: str) -> str:
+    """Does the suite type-check against the pinned signature? Returns "" or the error.
+
+    `parses_as_go` only asks whether the suite is *syntactically* Go. 37 of the 526
+    that clear it do not *type-check*, and every one is an upstream defect that would
+    otherwise be paid for twice — once in stage-2 tokens spent generating a reference
+    that can never compile, and again as a permanently-red directory that reads as
+    model failure rather than benchmark defect. All 37 come from MultiPL-E's
+    Python-to-Go transpiler, in three shapes:
+
+      * **Heterogeneous arguments** (12). The prompt declares `[]interface{}` but the
+        suite passes `[]int{...}` in one case and `[]string{...}` in the next
+        (`mbpp_390_add_string`). Go has no implicit conversion to `[]interface{}`, so
+        *no* signature satisfies both cases — this is not a signature-extraction bug
+        and cannot be fixed by extracting the type from the tests instead, because the
+        tests disagree with each other.
+      * **Internally invalid literals** (23). `[][]int{[]interface{}{3, 4}}`
+        (`mbpp_400_extract_freq`): the outer and inner element types contradict each
+        other, so the literal is invalid whatever the function's signature is.
+      * **Two one-offs.** `mbpp_105_count` contains a literal `UNKNOWN` type (the
+        transpiler's placeholder for an inference failure), and `mbpp_67_bell_number`
+        expects a 55-digit constant that overflows `int`.
+
+    `go vet`, not `go build`: build does not compile `_test.go` files, so a
+    signature/suite mismatch clears build and only fails later at test-binary link.
+    That is the same reason vet is a rung on the verifier ladder (see CLAUDE.md).
+
+    The stub body is `panic(...)`, which type-checks for *any* return type and so
+    needs no zero-value table — one less thing to get wrong for the 53 problems
+    returning `[]interface{}`.
+    """
+    stub = d / "stub.go"
+    stub.write_text(f"package solution\n\n{sig} {{\n\tpanic(\"typecheck stub\")\n}}\n")
+    try:
+        res = subprocess.run(
+            ["go", "vet", "./..."], cwd=d, capture_output=True, text=True, check=False, timeout=120
+        )
+        if res.returncode == 0:
+            return ""
+        # Last line is the actionable one; the preceding lines are package banners.
+        out = (res.stderr or res.stdout).strip().splitlines()
+        return out[-1].strip() if out else "go vet failed with no output"
+    except subprocess.TimeoutExpired:
+        return "go vet timed out"
+    finally:
+        stub.unlink(missing_ok=True)
+
+
 def gofmt(paths: list[pathlib.Path]) -> str:
     """Format the emitted Go files in place.
 
@@ -232,6 +281,7 @@ def main() -> int:
     ap.add_argument("--parquet", nargs="+", required=True, help="MultiPL-E Go parquet files")
     ap.add_argument("--out", required=True, help="output benchmark directory")
     ap.add_argument("--limit", type=int, default=0, help="ingest at most N problems (smoke tests)")
+    ap.add_argument("--jobs", type=int, default=8, help="parallel go vet invocations for the type-check gate")
     args = ap.parse_args()
 
     try:
@@ -271,6 +321,40 @@ def main() -> int:
             return 1
         seen[r["id"]] = True
 
+    # Write the per-problem directories first, because the type-check gate needs a
+    # real module on disk to run `go vet` in. Anything it rejects is removed again
+    # below, before problems.jsonl and manifest.json are written — so those two
+    # files never list a problem whose suite cannot compile.
+    written = []
+    for r in ingested:
+        d = out / "refs" / r["id"]
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "go.mod").write_text(f"module bench/{r['id']}\n\ngo 1.26\n")
+        p = d / "solution_test.go"
+        p.write_text(r["suite"])
+        written.append(p)
+
+    # gofmt before type-checking, not after: a rejected problem's directory is
+    # deleted, and formatting a file that is about to be removed wastes the work.
+    warn = gofmt(written)
+
+    untyped = []
+    if shutil.which("go") is None:
+        print(
+            "WARNING: go not on PATH — skipping the type-check gate. Expect ~37 of "
+            "526 problems to have suites that cannot compile; re-run with a Go "
+            "toolchain before spending anything on stage 2.",
+            file=sys.stderr,
+        )
+    else:
+        with cf.ThreadPoolExecutor(max_workers=args.jobs) as ex:
+            errs = list(ex.map(lambda r: typechecks(out / "refs" / r["id"], r["sig"]), ingested))
+        untyped = [(r["id"], e) for r, e in zip(ingested, errs) if e]
+        bad = {i for i, _ in untyped}
+        for i in bad:
+            shutil.rmtree(out / "refs" / i, ignore_errors=True)
+        ingested = [r for r in ingested if r["id"] not in bad]
+
     with (out / "problems.jsonl").open("w") as fh:
         for r in ingested:
             fh.write(json.dumps({"id": r["id"], "problem": r["problem"]}, ensure_ascii=False) + "\n")
@@ -285,23 +369,18 @@ def main() -> int:
         )
         fh.write("\n")
 
-    written = []
-    for r in ingested:
-        d = out / "refs" / r["id"]
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "go.mod").write_text(f"module bench/{r['id']}\n\ngo 1.26\n")
-        p = d / "solution_test.go"
-        p.write_text(r["suite"])
-        written.append(p)
-
     print(f"ingested {len(ingested)} of {len(rows)} problems -> {out}")
     if skipped:
         print(f"skipped {len(skipped)} (unexpected prompt shape): {', '.join(skipped[:8])}")
     if unparseable:
         # Named in full, not truncated: these are the benchmark's known holes and a
         # reader comparing n against the published 528 needs to see all of them.
-        print(f"skipped {len(unparseable)} (upstream suite is not valid Go): {', '.join(unparseable)}")
-    if warn := gofmt(written):
+        print(f"skipped {len(unparseable)} (upstream suite does not parse as Go): {', '.join(unparseable)}")
+    if untyped:
+        print(f"skipped {len(untyped)} (upstream suite does not type-check):")
+        for i, e in untyped:
+            print(f"    {i}: {e}")
+    if warn:
         print(f"WARNING: {warn}", file=sys.stderr)
     print("no solution.go written yet — run stage2_references.py to generate and validate them")
     return 0

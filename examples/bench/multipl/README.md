@@ -29,12 +29,45 @@ Stage 1 emits `problems.jsonl` (the query stream), `manifest.json` (pinned
 signatures), and per problem `refs/<id>/{go.mod,solution_test.go}`. Stage 2 adds
 `refs/<id>/solution.go` and a `references.json` report.
 
-**526 of 528 problems ingest.** The two exclusions are `mbpp_563_extract_values` and
-`mbpp_725_extract_quotation`, whose upstream suites contain Go string literals with
-unescaped double quotes and so are not valid Go. They are detected with `gofmt -e`,
-reported by name, and left without files — a problem whose canonical suite cannot
-compile has no oracle, and shipping it would hand the estimator a problem it can
-never label, which reads as a model failure rather than a benchmark defect.
+**489 of 528 problems ingest**, and the 39 exclusions are all upstream defects in
+MultiPL-E's Go transpilation, not artifacts of this script. A problem whose canonical
+suite cannot compile has no oracle, so it must be dropped and *counted*: shipping it
+would hand the estimator a problem it can never label, which reads as a model failure
+rather than a benchmark defect. Both gates run the Go toolchain rather than a
+hand-rolled check, and both name every exclusion in the output.
+
+**2 do not parse** (`gofmt -e`): `mbpp_563_extract_values` and
+`mbpp_725_extract_quotation` emit Go string literals containing unescaped double
+quotes (`candidate("Cortex "A53" Based"…)`).
+
+**37 do not type-check** (`go vet` against a `panic()` stub with the pinned
+signature). `go vet` and not `go build`, because build does not compile `_test.go`
+files — a signature/suite mismatch clears build and only fails later at test-binary
+link, which is the same reason vet is a rung on the verifier ladder. Three shapes:
+
+- **Heterogeneous arguments** (12). The prompt declares `[]interface{}` but the suite
+  passes `[]int{…}` in one case and `[]string{…}` in the next — e.g.
+  `mbpp_390_add_string`. Go has no implicit conversion to `[]interface{}`, so **no**
+  signature satisfies both cases. Worth stating because it looks like a
+  signature-extraction bug and is not: extracting the type from the tests instead
+  cannot fix it, since the tests disagree with each other.
+- **Internally invalid literals** (23). `[][]int{[]interface{}{3, 4}}` in
+  `mbpp_400_extract_freq` — invalid regardless of the function's signature, since the
+  outer and inner element types contradict each other.
+- **Two one-offs.** `mbpp_105_count`'s suite contains a literal `UNKNOWN` type (the
+  transpiler failed to infer one and emitted its placeholder), and
+  `mbpp_67_bell_number` expects a 55-digit integer constant that overflows `int`.
+
+This gate is what makes stage 2's bill honest. Without it, those 39 problems are paid
+for twice — once in tokens spent generating a reference that can never compile, and
+again as permanently-red directories in the tree.
+
+**n = 489 still clears the §5.5 bar of n ≥ 300 comfortably**, which is the only
+threshold that matters here; the exclusions cost margin, not the experiment. Any
+write-up must report 489/528 and why, not the headline 528 — a reader comparing
+against published pass@k numbers on this benchmark needs to know 39 problems are
+absent and that the absences are not random with respect to difficulty (they cluster
+in MBPP's tuple-heavy problems, which transpile worst to Go).
 
 ## Why references have to be generated, and what that costs in rigour
 
@@ -62,8 +95,8 @@ benchmark already carries, but it is a real difference from the hand-written set
 must not be blurred.
 
 Problems whose reference fails after `--attempts` tries keep **no** `solution.go` and
-are named in the output. Running §5.5 at n=480 with sound references beats n=526 with
-46 quiet lies; `loadReferences` tolerates a missing reference per problem, and such an
+are named in the output. Running §5.5 at n=450 with sound references beats n=489 with
+39 quiet lies; `loadReferences` tolerates a missing reference per problem, and such an
 id simply carries no oracle-soundness gate.
 
 ## Divergences from upstream MultiPL-E

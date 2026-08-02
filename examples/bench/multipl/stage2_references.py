@@ -26,11 +26,11 @@ strength, which is exactly the same bound the published pass@k numbers carry.
 
 A problem whose reference cannot be validated within `--attempts` tries is **left
 without a solution.go** and reported. It is better to run the §5.5 experiment at
-n=480 with sound references than at n=526 with 46 quiet lies: `loadReferences`
+n=450 with sound references than at n=489 with 39 quiet lies: `loadReferences`
 already tolerates a missing reference per problem, and the id simply carries no
 oracle-soundness gate.
 
-Cost: one to a few frontier calls per problem. At 526 problems this is the expensive
+Cost: one to a few frontier calls per problem. At 489 problems this is the expensive
 step of ingestion, so it checkpoints after every problem and `--resume` skips any id
 that already has a validated solution.go. Kill it freely.
 """
@@ -73,6 +73,14 @@ def validate(refdir: pathlib.Path, src: str, timeout: int) -> tuple[bool, str]:
 
     On failure the solution.go is REMOVED, so a half-validated reference can never
     be picked up by loadReferences on a later run.
+
+    `gofmt -w` runs first, on a *passing* candidate only. Models reliably emit
+    trailing whitespace on blank lines inside a function body, which `gofmt -l`
+    reports — and CI runs `gofmt -l .` over the whole tree, so an unformatted
+    reference would fail the build for every unrelated change once this benchmark is
+    committed. Formatting cannot change semantics, so doing it before the test run
+    would be equally sound; doing it after keeps the validated artifact byte-identical
+    to what actually passed, minus whitespace.
     """
     sol = refdir / "solution.go"
     sol.write_text(src if src.endswith("\n") else src + "\n")
@@ -85,6 +93,9 @@ def validate(refdir: pathlib.Path, src: str, timeout: int) -> tuple[bool, str]:
                 sol.unlink(missing_ok=True)
                 out = (res.stdout + res.stderr).strip()
                 return False, f"{args[1]}: {out[:600]}"
+        subprocess.run(
+            ["gofmt", "-w", str(sol)], capture_output=True, text=True, timeout=timeout, check=False
+        )
         return True, ""
     except subprocess.TimeoutExpired:
         sol.unlink(missing_ok=True)
