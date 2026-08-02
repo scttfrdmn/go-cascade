@@ -46,6 +46,13 @@ type EstimatorObs struct {
 	MutationScore  float64 `json:"mutation_score"`
 	MutationValid  int     `json:"mutation_valid"`
 	MutationKilled int     `json:"mutation_killed"`
+	// CanonicalTests is how many canonical tests actually EXECUTED for this row.
+	// Recorded because the first run of this experiment measured η_fa against only
+	// the ^TestV subset of each canonical suite (the ladder's visible-stage filter
+	// leaked in), silently dropping the adversarial TestH* half. A zero here now
+	// means no label rather than a vacuous pass, and the number makes the oracle's
+	// strength auditable from the records instead of assumed.
+	CanonicalTests int `json:"canonical_tests"`
 	// CanonicalDiag is the reference suite's refutation output on a false accept,
 	// kept so the defect class can be inspected rather than only counted.
 	CanonicalDiag string `json:"canonical_diag,omitempty"`
@@ -115,8 +122,8 @@ func (r *Router) EstimateOracleGap(ctx context.Context, id, problem string, muta
 
 		// Y: the INDEPENDENT label from the human-authored canonical suite. Run the
 		// candidate against the reference's own tests, not the generated ones.
-		ran, correct, diag := r.canonicalVerdict(ctx, rep.Source, canon)
-		obs.CanonicalRan, obs.CanonicalCorrect = ran, correct
+		ran, correct, ntests, diag := r.canonicalVerdict(ctx, rep.Source, canon)
+		obs.CanonicalRan, obs.CanonicalCorrect, obs.CanonicalTests = ran, correct, ntests
 		// Keep the diagnostic whenever the canonical suite had something to say: a
 		// false-acceptance refutation (the finding) OR a compile mismatch that
 		// explains why no label was produced (needed to tell an API mismatch from a
@@ -148,23 +155,26 @@ func (r *Router) EstimateOracleGap(ctx context.Context, id, problem string, muta
 // match) and, if so, whether it PASSED. A compile failure is reported as
 // ran=false, not as an incorrect verdict: a name mismatch says nothing about
 // correctness, exactly as the oracle-soundness gate treats the mirror case.
-func (r *Router) canonicalVerdict(ctx context.Context, src, canonicalTests string) (ran, correct bool, diag string) {
+func (r *Router) canonicalVerdict(ctx context.Context, src, canonicalTests string) (ran, correct bool, ntests int, diag string) {
 	ws, err := r.runner.NewWorkspace(src, canonicalTests, "")
 	if err != nil {
-		return false, false, fmt.Sprintf("workspace: %v", err)
+		return false, false, 0, fmt.Sprintf("workspace: %v", err)
 	}
 	defer ws.Remove() //nolint:errcheck // scratch dir
 
-	rep := r.ladder.Run(ctx, ws, src, r.verifyOpts())
-	if !rep.OK {
-		// A behavioural refutation (test ran and failed) is a genuine incorrect
-		// verdict. A compile-stage failure means the candidate does not fit the
-		// canonical API — no independent label is available, so ran=false.
-		if rep.FailedAt >= verify.StageTest {
-			return true, false, rep.Diagnostic
-		}
-		return false, false, fmt.Sprintf("candidate does not compile against canonical tests (%s): %s",
-			rep.FailedAt, rep.Diagnostic)
+	// The WHOLE canonical suite must run. Going through ladder.Run would apply
+	// `-run ^TestV` and skip every TestH* function in the human-authored suite —
+	// on this benchmark that is 222 of 370 tests, and precisely the adversarial
+	// ones, so the "independent oracle" would be measuring η_fa at a fraction of
+	// its real strength. RunAllTests applies no filter.
+	ran, passed, n, d := r.ladder.RunAllTests(ctx, ws, r.verifyOpts())
+	if !ran {
+		// d already names which no-label cause applies (compile mismatch vs a suite
+		// that executed nothing), which is the distinction needed to read the records.
+		return false, false, 0, "no canonical label: " + d
 	}
-	return true, true, ""
+	if !passed {
+		return true, false, n, d
+	}
+	return true, true, n, ""
 }

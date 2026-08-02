@@ -219,6 +219,179 @@ func LongestIncreasingRun(xs []int) int {
 	}
 }
 
+// A partition whose test functions do not match the stage's -run filter executes
+// nothing and `go test` exits 0. That is a *vacuous* pass and must be reported as a
+// refutation: an oracle that runs nothing cannot refute anything, so treating it as
+// OK would clear every candidate through that rung (invariant #4) and, at the
+// acceptance stage, certify a risk bound against an oracle that never ran
+// (invariant #6). The misnamed suite below is not hypothetical — it is exactly
+// MultiPL-E's naming (`TestHas_Close_Elements`), which starts with "TestH" and so
+// slips past ^TestV while looking like a normal suite.
+func TestEmptyPartitionIsRefutedNotPassed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and executes candidates")
+	}
+
+	const misnamedVisible = `package solution
+
+import "testing"
+
+func TestHas_Close_Elements(t *testing.T) {
+	if got := LongestIncreasingRun([]int{1, 2, 3}); got != 3 {
+		t.Fatalf("got %d, want 3", got)
+	}
+}`
+	// Named so it matches neither ^TestV nor ^TestH.
+	const misnamedHidden = `package solution
+
+import "testing"
+
+func TestX_Plateau(t *testing.T) {
+	if got := LongestIncreasingRun([]int{1, 2, 2, 3}); got != 2 {
+		t.Fatalf("got %d, want 2", got)
+	}
+}`
+
+	r := newTestRunner(t)
+	l := NewLadder()
+
+	t.Run("visible", func(t *testing.T) {
+		ws, err := r.NewWorkspace(goodSrc, misnamedVisible, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ws.Remove() //nolint:errcheck // scratch
+		rep := l.Run(context.Background(), ws, goodSrc, opts())
+		if rep.OK {
+			t.Fatal("a visible partition that executed zero tests reported a pass; " +
+				"every candidate would clear this rung against an oracle that never ran")
+		}
+		if rep.FailedAt != StageTest {
+			t.Errorf("refuted at %s, want %s", rep.FailedAt, StageTest)
+		}
+		if !strings.Contains(rep.Diagnostic, "no tests") {
+			t.Errorf("diagnostic does not name the cause: %q", firstLine(rep.Diagnostic))
+		}
+	})
+
+	t.Run("hidden", func(t *testing.T) {
+		ws, err := r.NewWorkspace(goodSrc, visibleSrc, misnamedHidden)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ws.Remove() //nolint:errcheck // scratch
+		if rep := l.Run(context.Background(), ws, goodSrc, opts()); !rep.OK {
+			t.Fatalf("the visible partition is well-named and should pass: %s", rep.Diagnostic)
+		}
+		acc := l.Accept(context.Background(), ws, opts())
+		if acc.OK {
+			t.Fatal("acceptance against a partition that executed zero tests succeeded; " +
+				"a certificate over this oracle would be vacuous")
+		}
+		if acc.FailedAt != StageAccept {
+			t.Errorf("failed at %s, want %s", acc.FailedAt, StageAccept)
+		}
+		// The recorded stage must carry the failure too: calibration reads the stage
+		// vector, not just Report.OK.
+		last := acc.Stages[len(acc.Stages)-1]
+		if last.OK {
+			t.Error("Report.OK is false but the recorded accept stage still says OK")
+		}
+		if !strings.Contains(last.Diagnostic, "no tests") {
+			t.Errorf("stage diagnostic does not name the cause: %q", firstLine(last.Diagnostic))
+		}
+	})
+}
+
+// RunAllTests is the estimator's independent-oracle entry point. Its defining
+// property is the one the first run of experiment 19 got wrong: it must execute the
+// TestH* half of a human-authored suite as well as the TestV* half. Going through
+// the ladder's visible stage applied `-run ^TestV` and silently dropped the
+// adversarial tests, measuring η_fa at a fraction of the oracle's real strength.
+func TestRunAllTestsRunsEveryTest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and executes candidates")
+	}
+
+	r := newTestRunner(t)
+	l := NewLadder()
+
+	// The defect in `subtle` is caught ONLY by TestH_Plateau. If RunAllTests still
+	// filtered on ^TestV this would report passed=true with one test — which is
+	// precisely how a weakened oracle looks from the outside.
+	const subtle = `package solution
+
+func LongestIncreasingRun(xs []int) int {
+	if len(xs) == 0 {
+		return 0
+	}
+	best, cur := 1, 1
+	for i := 1; i < len(xs); i++ {
+		if xs[i] >= xs[i-1] {
+			cur++
+		} else {
+			cur = 1
+		}
+		if cur > best {
+			best = cur
+		}
+	}
+	return best
+}`
+
+	cases := []struct {
+		name             string
+		src              string
+		visible, hidden  string
+		wantRan, wantPas bool
+		wantN            int
+		wantDiag         string
+	}{
+		{"correct", goodSrc, visibleSrc, hiddenSrc, true, true, 2, ""},
+		{"wrong only under TestH", subtle, visibleSrc, hiddenSrc, true, false, 2, ""},
+		{"does not compile", `package solution
+
+func LongestIncreasingRun(xs []int) int { return "no" }`, visibleSrc, hiddenSrc, false, false, 0, "does not compile"},
+		// The signature mismatch matters more than the syntax error: `go build` does
+		// not compile _test.go files, so this one gets PAST the build check and only
+		// fails when the test binary links. Without the exit-status branch it is
+		// reported as "suite executed no tests" — an API mismatch dressed up as a
+		// vacuous oracle, which is exactly the distinction the estimator's records
+		// need in order to separate a benchmark defect from an oracle defect.
+		{"wrong signature", `package solution
+
+func LongestIncreasingRun(xs []string) int { return 0 }`, visibleSrc, hiddenSrc, false, false, 0, "does not compile"},
+		{"empty suite", goodSrc, "", "", false, false, 0, "executed no tests"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ws, err := r.NewWorkspace(c.src, c.visible, c.hidden)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ws.Remove() //nolint:errcheck // scratch
+			ran, passed, n, diag := l.RunAllTests(context.Background(), ws, opts())
+			if ran != c.wantRan || passed != c.wantPas {
+				t.Errorf("ran=%v passed=%v, want ran=%v passed=%v (%s)",
+					ran, passed, c.wantRan, c.wantPas, firstLine(diag))
+			}
+			if n != c.wantN {
+				t.Errorf("executed %d tests, want %d — the whole suite must run, both partitions", n, c.wantN)
+			}
+			if c.wantDiag != "" && !strings.Contains(diag, c.wantDiag) {
+				t.Errorf("diagnostic %q does not contain %q", firstLine(diag), c.wantDiag)
+			}
+			// A compile failure must not be reported as "ran nothing", so the two
+			// no-label paths stay distinguishable to the caller.
+			if c.wantDiag == "does not compile" && strings.Contains(diag, "executed no tests") {
+				t.Error("a compile failure was reported as an empty suite; " +
+					"the estimator could not tell an API mismatch from a vacuous run")
+			}
+		})
+	}
+}
+
 func TestRaceGateAndDetection(t *testing.T) {
 	if testing.Short() {
 		t.Skip("compiles and executes candidates")
