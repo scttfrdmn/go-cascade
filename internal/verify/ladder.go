@@ -305,13 +305,23 @@ func (l *Ladder) RunAllTests(ctx context.Context, ws *Workspace, opts Options) (
 	// Compile first and separately, so "does not compile" is distinguishable from
 	// "compiled and failed" — the caller reports those as different verdicts.
 	if res := ws.run(ctx, 60*time.Second, false, "build", "./..."); res.Err != nil {
-		return false, false, 0, summariseTestOutput(res.Output, res.Err.Error())
+		return false, false, 0, "candidate does not compile against the suite: " +
+			summariseTestOutput(res.Output, res.Err.Error())
 	}
 	res := ws.run(ctx, opts.TestTimeout, true, "test", "-json", "-count=1", "./...")
 	tests := parseTestJSON(res.Output)
 	diag = summariseTestOutput(res.Output, "")
 	if len(tests) == 0 {
-		// Exit 0 with nothing executed is a vacuous pass; treat it as "no label".
+		// Two different no-label causes, told apart by the exit status rather than by
+		// matching on go's output. `go build` above does not compile _test.go files,
+		// so a solution/suite signature mismatch reaches here: the test binary fails
+		// to link, nothing reports, and the exit is non-zero. An actually-empty suite
+		// exits ZERO having executed nothing. Conflating them would report an API
+		// mismatch as a vacuous suite, which is the one distinction a reader of the
+		// records needs in order to tell a benchmark defect from an oracle defect.
+		if res.Err != nil {
+			return false, false, 0, "candidate does not compile against the suite: " + diag
+		}
 		return false, false, 0, "suite executed no tests: " + diag
 	}
 	return true, res.Err == nil, len(tests), diag

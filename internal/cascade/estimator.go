@@ -169,8 +169,9 @@ func (r *Router) canonicalVerdict(ctx context.Context, src, canonicalTests strin
 	// its real strength. RunAllTests applies no filter.
 	ran, passed, n, d := r.ladder.RunAllTests(ctx, ws, r.verifyOpts())
 	if !ran {
-		return false, false, 0, fmt.Sprintf("no canonical label (candidate did not compile against the "+
-			"canonical suite, or it ran no tests): %s", d)
+		// d already names which no-label cause applies (compile mismatch vs a suite
+		// that executed nothing), which is the distinction needed to read the records.
+		return false, false, 0, "no canonical label: " + d
 	}
 	if !passed {
 		return true, false, n, d

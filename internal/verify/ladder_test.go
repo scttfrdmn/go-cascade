@@ -351,7 +351,16 @@ func LongestIncreasingRun(xs []int) int {
 		{"wrong only under TestH", subtle, visibleSrc, hiddenSrc, true, false, 2, ""},
 		{"does not compile", `package solution
 
-func LongestIncreasingRun(xs []int) int { return "no" }`, visibleSrc, hiddenSrc, false, false, 0, ""},
+func LongestIncreasingRun(xs []int) int { return "no" }`, visibleSrc, hiddenSrc, false, false, 0, "does not compile"},
+		// The signature mismatch matters more than the syntax error: `go build` does
+		// not compile _test.go files, so this one gets PAST the build check and only
+		// fails when the test binary links. Without the exit-status branch it is
+		// reported as "suite executed no tests" — an API mismatch dressed up as a
+		// vacuous oracle, which is exactly the distinction the estimator's records
+		// need in order to separate a benchmark defect from an oracle defect.
+		{"wrong signature", `package solution
+
+func LongestIncreasingRun(xs []string) int { return 0 }`, visibleSrc, hiddenSrc, false, false, 0, "does not compile"},
 		{"empty suite", goodSrc, "", "", false, false, 0, "executed no tests"},
 	}
 
@@ -375,7 +384,7 @@ func LongestIncreasingRun(xs []int) int { return "no" }`, visibleSrc, hiddenSrc,
 			}
 			// A compile failure must not be reported as "ran nothing", so the two
 			// no-label paths stay distinguishable to the caller.
-			if c.name == "does not compile" && strings.Contains(diag, "executed no tests") {
+			if c.wantDiag == "does not compile" && strings.Contains(diag, "executed no tests") {
 				t.Error("a compile failure was reported as an empty suite; " +
 					"the estimator could not tell an API mismatch from a vacuous run")
 			}
