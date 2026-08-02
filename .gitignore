@@ -13,6 +13,10 @@ records.json
 /tmp/
 *.log
 
+# Python bytecode from the benchmark-ingestion scripts
+__pycache__/
+*.pyc
+
 # Editors / OS
 .DS_Store
 .idea/
