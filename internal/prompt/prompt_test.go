@@ -1,6 +1,11 @@
 package prompt
 
 import (
+	"go/ast"
+	"go/importer"
+	"go/parser"
+	"go/token"
+	"go/types"
 	"strings"
 	"testing"
 )
@@ -43,9 +48,143 @@ func helper() int { return 42 }
 	if !strings.Contains(api, "Fibonacci returns the nth") {
 		t.Errorf("kept declaration lost its doc comment:\n%s", api)
 	}
-	// The import must survive because a signature could reference it.
-	if !strings.Contains(api, `"context"`) {
-		t.Errorf("import was dropped:\n%s", api)
+	// "context" must NOT survive: nothing that remains refers to it, and in Go an
+	// unused import is a compile error. This assertion was previously inverted —
+	// it required the import to be kept, which is what made ExtractAPI emit
+	// non-compiling API blocks for 28.3% of the MultiPL-E benchmark. Whether an
+	// import is *needed* is the question, not whether one existed.
+	if strings.Contains(api, `"context"`) {
+		t.Errorf("unused import must be pruned or the API block will not compile:\n%s", api)
+	}
+}
+
+// The API block ExtractAPI emits must COMPILE, which is a stronger property than
+// any assertion about its text and is the one that actually matters: the block is
+// pasted into the spec prompt under "use exactly this API", so a block that does
+// not compile propagates into spec.API, breaks testsCompileAgainstOwnAPI, and
+// makes validateOracle flag a sound oracle as OracleUnsound (invariant #4).
+//
+// Type-checked with go/types rather than by shelling out to the toolchain, so it
+// runs under -short like the rest of this package.
+func TestExtractAPICompiles(t *testing.T) {
+	cases := []struct {
+		name, src string
+		wantKept  []string // imports that must survive because something still uses them
+		wantGone  []string // imports whose only use was in a body
+	}{{
+		name: "import used only by a body",
+		src: `package solution
+
+import (
+	"math"
+	"strings"
+)
+
+func Area(r float64) float64 { return math.Pi * r * r }
+
+func Shout(s string) string { return strings.ToUpper(s) }
+`,
+		wantGone: []string{"math", "strings"},
+	}, {
+		name: "import used by a signature",
+		src: `package solution
+
+import (
+	"context"
+	"strings"
+)
+
+func Fetch(ctx context.Context, url string) (string, error) {
+	return strings.TrimSpace(url), nil
+}
+`,
+		wantKept: []string{"context"}, // parameter type
+		wantGone: []string{"strings"}, // body only
+	}, {
+		name: "import used by a surviving struct field",
+		src: `package solution
+
+import (
+	"sync"
+	"time"
+)
+
+type Limiter struct {
+	mu sync.Mutex
+}
+
+func (l *Limiter) Wait(d time.Duration) { time.Sleep(d) }
+`,
+		wantKept: []string{"sync", "time"}, // field type; parameter type
+	}, {
+		name: "aliased import used by a signature",
+		src: `package solution
+
+import (
+	ttime "time"
+	"unicode/utf8"
+)
+
+func Deadline() ttime.Duration { return 0 }
+
+func Runes(s string) int { return utf8.RuneCountInString(s) }
+`,
+		// The alias is referenced by a signature; the other only by a body. Pins
+		// that pruning keys off the LOCAL name (ttime) rather than the path's last
+		// element (time) — a name-based check that ignored the alias would drop it.
+		wantKept: []string{`ttime "time"`},
+		wantGone: []string{"utf8"},
+	}, {
+		name: "blank and dot imports are never dropped",
+		src: `package solution
+
+import (
+	_ "embed"
+	"math"
+)
+
+func Zero() int { return int(math.Abs(0)) }
+`,
+		// A blank import exists for its side effect and has no textual use, so it
+		// cannot be tracked by name and must be kept.
+		wantKept: []string{"embed"},
+		wantGone: []string{"math"},
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			api, err := ExtractAPI(tc.src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range tc.wantKept {
+				if !strings.Contains(api, w) {
+					t.Errorf("needed import %q was pruned:\n%s", w, api)
+				}
+			}
+			for _, w := range tc.wantGone {
+				if strings.Contains(api, w) {
+					t.Errorf("unused import %q survived:\n%s", w, api)
+				}
+			}
+			mustTypeCheck(t, api)
+		})
+	}
+}
+
+// mustTypeCheck fails unless src is a well-formed, fully type-correct package.
+// An unused import is reported here exactly as the compiler would report it,
+// which is the whole point: that is the error class ExtractAPI used to emit.
+func mustTypeCheck(t *testing.T, src string) {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "solution.go", src, 0)
+	if err != nil {
+		t.Fatalf("emitted API block does not parse: %v\n%s", err, src)
+	}
+	conf := types.Config{Importer: importer.Default()}
+	if _, err := conf.Check("solution", fset, []*ast.File{f}, nil); err != nil {
+		t.Errorf("emitted API block does not type-check: %v\n%s", err, src)
 	}
 }
 
