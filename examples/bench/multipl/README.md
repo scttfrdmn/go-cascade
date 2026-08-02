@@ -29,12 +29,15 @@ Stage 1 emits `problems.jsonl` (the query stream), `manifest.json` (pinned
 signatures), and per problem `refs/<id>/{go.mod,solution_test.go}`. Stage 2 adds
 `refs/<id>/solution.go` and a `references.json` report.
 
-**489 of 528 problems ingest**, and the 39 exclusions are all upstream defects in
+## Three gates
+
+**488 of 528 problems ingest**, and the 40 exclusions are all upstream defects in
 MultiPL-E's Go transpilation, not artifacts of this script. A problem whose canonical
-suite cannot compile has no oracle, so it must be dropped and *counted*: shipping it
-would hand the estimator a problem it can never label, which reads as a model failure
-rather than a benchmark defect. Both gates run the Go toolchain rather than a
-hand-rolled check, and both name every exclusion in the output.
+suite cannot compile — or cannot be satisfied — has no usable oracle, so it must be
+dropped and *counted*: shipping it would hand the estimator a problem it can never
+label, which reads as a model failure rather than a benchmark defect. Every exclusion
+is named in the output, and the first two gates delegate the judgement to the Go
+toolchain rather than a hand-rolled check.
 
 **2 do not parse** (`gofmt -e`): `mbpp_563_extract_values` and
 `mbpp_725_extract_quotation` emit Go string literals containing unescaped double
@@ -58,17 +61,38 @@ link, which is the same reason vet is a rung on the verifier ladder. Three shape
   transpiler failed to infer one and emitted its placeholder), and
   `mbpp_67_bell_number` expects a 55-digit integer constant that overflows `int`.
 
-This gate is what makes stage 2's bill honest. Without it, those 39 problems are paid
-for twice — once in tokens spent generating a reference that can never compile, and
-again as permanently-red directories in the tree.
+**1 is unsatisfiable** (`contradiction`, a pure text check): `he_92_any_int`'s table
+asserts both `candidate(3, 4, 7)` → `true` and `candidate(3.0, 4, 7)` → `false`. Through
+`func AnyInt(x float64, y float64, z float64) bool` those are *the same call*, so no
+function can satisfy the suite — Python's `isinstance(3.0, int)` distinction did not
+survive transpilation, taking with it the only thing the problem tested.
 
-**n = 489 still clears the §5.5 bar of n ≥ 300 comfortably** — as does the 467 that
-survive stage 2 (see below). That bar is the only threshold that matters here; the
-exclusions cost margin, not the experiment. Any write-up must report 489/528 and why,
-not the headline 528 — a reader comparing against published pass@k numbers on this
-benchmark needs to know 39 problems are absent and that the absences are not random
-with respect to difficulty (they cluster in MBPP's tuple-heavy problems, which
-transpile worst to Go).
+This gate was added after stage 2 paid three generation attempts to discover the same
+fact empirically, and it is the one exclusion class that a *semantically* aware check
+finds and the toolchain cannot: the suite parses and type-checks perfectly. It compares
+numeric literals by **value** rather than spelling (`3` and `3.0` must collide — that is
+the whole defect), which is sound because the signature has already type-checked against
+the suite. It is deliberately conservative: only exact-duplicate argument lists with
+differing expectations, never a *suspected* inconsistency. Verified against all 489
+suites that clear the other gates — it fires on exactly one.
+
+`mbpp_802_count_rotation` shows why the conservatism matters. Its expectations follow no
+rule (`[3,2,1]` → 1 and `[1,3,2]` → 2, though **neither list can be rotated into sorted
+order at all**, so the question its statement asks is not defined on those inputs). It
+passes this gate and should: its arguments are all distinct, so a lookup table satisfies
+it. Unsatisfiable and merely-wrong are different defects and only the first is decidable
+here; `mbpp_802` is caught by stage 2 instead, as a problem no reference validates.
+
+These gates are what make stage 2's bill honest. Without them those 40 problems are paid
+for twice — once in tokens spent generating a reference that can never pass, and again as
+permanently-red directories in the tree.
+
+**n = 488 still clears the §5.5 bar of n ≥ 300 comfortably** — as do the 467 that survive
+stage 2 (see below). That bar is the only threshold that matters here; the exclusions cost
+margin, not the experiment. Any write-up must report 488/528 and why, not the headline 528
+— a reader comparing against published pass@k numbers on this benchmark needs to know 40
+problems are absent and that the absences are not random with respect to difficulty (they
+cluster in MBPP's tuple-heavy problems, which transpile worst to Go).
 
 ## Why references have to be generated, and what that costs in rigour
 
@@ -116,9 +140,11 @@ reproduce the oracle's output on every case.
   asserts `candidate(3, 4, 7)` → `true` **and** `candidate(3.0, 4, 7)` → `false`, but
   the signature is `func AnyInt(x float64, y float64, z float64) bool`, so those are the
   *same arguments* with opposite expectations. Python's `isinstance(3.0, int) == False`
-  has no equivalent through a `float64` parameter. **No implementation can pass.** This
-  is a fourth defect class the type-check gate cannot catch: it type-checks perfectly
-  and is semantically contradictory.
+  has no equivalent through a `float64` parameter. **No implementation can pass.**
+  This one turned out to be *mechanically decidable*, so it is now caught at ingestion
+  by a third gate (`contradiction`) rather than discovered by paying for three
+  generation attempts — see "Three gates" below. **The benchmark is therefore 488
+  problems, not 489.**
 - **Self-inconsistent oracle** (1) — `mbpp_802_count_rotation`. `[3,2,1]` → `1` (the
   minimum is at index 2) but `[1,3,2]` → `2` (the minimum is at index 0). No single rule
   satisfies all five cases.
