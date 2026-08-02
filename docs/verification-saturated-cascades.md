@@ -617,8 +617,8 @@ floor, and it is also the step most in need of qualification:
 
 **Update (2026-08-01): the direction has since been measured, on one benchmark.**
 The §5.5(5) estimator test has now been run live (§5.6): measured
-$\eta_{\mathrm{fa}}=0/144$ (95% upper bound 0.021) against a pooled $1-M=0.0996$
-that predicted ≈ 11 false acceptances. On that benchmark the net bias is therefore
+$\eta_{\mathrm{fa}}=0/145$ (95% upper bound 0.020) against a pooled $1-M=0.1014$
+that predicted ≈ 12 false acceptances. On that benchmark the net bias is therefore
 **conservative** — $M$ under-states $1-\eta_{\mathrm{fa}}$, so using it errs toward
 over-estimating risk rather than under-estimating it. Two qualifications keep the
 paragraph above standing rather than superseding it: the result is one benchmark
@@ -627,6 +627,22 @@ candidates by $\eta_{\mathrm{fa}}$ — with zero events in both the high-$M$ and
 low-$M$ buckets that question is untouched. So the claim "we do not claim the bias
 is small" is now sharper in one direction and unchanged in the other: the bias is
 not small, it is large and safe.
+
+One methodological caution belongs here rather than only in the results, because it
+is a property of the measurement and not of this benchmark. The first run of this
+test handed the canonical suite to the verifier's *visible* stage, so its `^TestV`
+filter applied and **222 of 370 canonical tests never executed** — the adversarial
+half, by construction. The run reported the same headline (0 events) from an oracle
+at 40% strength, and nothing in the risk argument flagged it: every stage still
+returned a *sound* verdict on the tests it did run, so soundness (§3.6) is
+preserved while *strength* silently collapses. The re-run against the full suite
+confirmed the headline but changed the secondary findings, and produced three
+canonical refutations the weakened oracle had called correct (an off-by-one at
+`MaxUint64`, an `int64` overflow in a Fibonacci term, an input-mutation check) —
+all from `TestH*`. **An oracle's strength is therefore a quantity to record and
+audit, not to assume from the suite's contents**; the artifact now stores the
+executed test count per row and treats a stage that ran zero tests as a refutation
+rather than a pass.
 
 A further floor: an assertion-free suite still kills some mutants, because
 `i++ → i--` hangs and `< → <=` panics, and a crash is detection. Measured on our
@@ -887,7 +903,8 @@ For the record, the experiment we would want:
 5. **Oracle-gap validation.** Correlation between mutation score and *measured*
    $\eta_{\mathrm{fa}}$ on problems where reference implementations permit
    ground-truth labelling. This is the test that would tell us whether §3.7's
-   estimator is usable. *(Run at n=64 on 2026-08-01 — see §5.6: the bias is
+   estimator is usable. *(Run at n=64 on 2026-08-01, then re-run the same day
+   against a corrected full-strength canonical oracle — see §5.6: the bias is
    measured and conservative; the ranking question needs the n ≥ 300 of (1).)*
 
 Until at least (3) is run, the correct characterization of this work is: a
@@ -998,24 +1015,40 @@ a standard benchmark with all five arms and the two secondary tests — remains 
 (`results/estimator-test-n64-2026-08-01.md`, 2026-08-01). At n = 64 × 3 tiers, with
 mutation score measured against the *generated* suite and correctness against each
 problem's *human-authored canonical* suite (so the estimate is not circular),
-measured η_fa was **0/144** (95% Clopper–Pearson upper bound 0.021) while the pooled
-mutation gap 1 − M = 0.0996 predicted ≈ 11 false acceptances — a discrepancy with
-probability ≈ 2 × 10⁻⁶ under the per-row gaps if M were tight. **So §3.7's "unknown
+measured η_fa was **0/145** (95% Clopper–Pearson upper bound 0.020) while the pooled
+mutation gap 1 − M = 0.1014 predicted ≈ 12 false acceptances — a discrepancy with
+probability ≈ 1 × 10⁻⁶ under the per-row gaps if M were tight. **So §3.7's "unknown
 bias" now has a measured direction on this benchmark: M under-states 1 − η_fa
 substantially, i.e. it errs conservatively**, which is the safe direction for a proxy
 in a risk argument and is worth stating because §3.7 could not previously say which
 way it erred. What the run does **not** settle is whether M *ranks* candidates by
-η_fa: M spanned 0.50–1.00, but with zero events in both the M ≥ 0.90 (n=94) and
-M < 0.90 (n=40) buckets the bounds overlap entirely, and the twelve lowest-M rows
+η_fa: M spanned 0.50–1.00, but with zero events in both the M ≥ 0.90 (n=96) and
+M < 0.90 (n=42) buckets the bounds overlap entirely, and the twelve lowest-M rows
 were all canonically correct (small mutant pools on short functions;
 timing-dependent mutants a concurrency suite cannot deterministically kill). The
 ordering question needs the n ≥ 300 of §5.5(1). The run also surfaced a hazard class
 §3 does not model: the generated oracle's *observed* errors were **all**
-over-rejections — 11 confirmed rejections of canonically-correct candidates (7.1% of
-labeled rows) against 0 false acceptances, plus 37 rows where no candidate survived
-the ladder at all. A generated suite that is sound but *stricter than canonical*
-costs escalations, not risk, so it is invisible to the certificate and visible only
-in the cost column.
+over-rejections — 4 confirmed rejections of canonically-correct candidates (2.6% of
+rows that produced a candidate) against 0 false acceptances, plus 40 rows where no
+candidate survived the ladder at all. A generated suite that is sound but *stricter
+than canonical* costs escalations, not risk, so it is invisible to the certificate
+and visible only in the cost column.
+
+**The same experiment supplies the paper's sharpest caution about its own n, and one
+about oracle strength.** These figures come from a *re-run*: the first pass measured
+η_fa against only the `^TestV` half of each canonical suite (§3.7's methodological
+note), and the corrected run reproduced the headline (0 events) while changing the
+secondary findings — confirmed false rejections fell 11 → 4 on a *disjoint* set of
+problems, and 3 new agreed-wrong rows appeared, every one refuted by a `TestH*`
+function the weakened oracle never ran. Two lessons, both load-bearing for §5.5:
+(i) **oracle strength must be recorded and audited**, since a suite can execute 40%
+of itself and still return sound verdicts on what it ran, so no test fails; and
+(ii) **rejection-side quantities are not stable at n = 64** — the two draws agreed
+on only 159 of 192 rows, with churn in both directions from sampling at temperature
+> 0. The *direction* of the over-rejection asymmetry replicated across draws; its
+magnitude did not. That instability is the concrete form of the §5.5(1) n ≥ 300
+requirement, and it is a reason to read every rate in this section as a bound rather
+than an estimate.
 
 ---
 

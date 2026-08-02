@@ -158,8 +158,8 @@ a test, but the tests will not catch every way of violating them.
   not.
 - **The §3.7 estimator test is run** (`go-cascade estimator`, experiment 19). Mutation
   score M is a **conservative** proxy for 1 − η_fa on this benchmark, not a tight one:
-  measured η_fa 0/144 (95% bound 0.021) against a pooled 1 − M of 0.0996 that predicted
-  ~11 events. Non-circular by construction — M is measured against the *generated*
+  measured η_fa 0/145 (95% bound 0.020) against a pooled 1 − M of 0.1014 that predicted
+  ~12 events. Non-circular by construction — M is measured against the *generated*
   suite, correctness against each problem's *human-authored* `refs/<id>/solution_test.go`,
   which `Router.SetCanonicalTests` supplies **off the acceptance path** (it must never
   become a ladder stage or an oracle; that would break invariants #4/#6). Two live
@@ -167,6 +167,20 @@ a test, but the tests will not catch every way of violating them.
   M bucket), and the generated oracle's observed errors are **all over-rejections** —
   a sound-but-stricter-than-canonical suite costs escalations, not risk, so it is
   invisible to the certificate.
+  **Oracle strength is a measured quantity, not an assumed one.** Experiment 19's first
+  pass ran the canonical suite through the ladder's *visible* stage, so `-run ^TestV`
+  applied and 222 of 370 canonical tests never executed — every stage still returned a
+  *sound* verdict on what it ran, so no test failed and the resulting number looked
+  publishable. The re-run reproduced the 0-event headline but cut confirmed false
+  rejections 11 → 4 on a disjoint problem set and surfaced 3 real `TestH*` refutations
+  (an off-by-one at `MaxUint64`, an int64 overflow) the weak oracle called correct.
+  Hence: `Ladder.RunAllTests` (unfiltered, deliberately off the acceptance path),
+  `EstimatorObs.CanonicalTests` recording the executed count per row, and a
+  zero-tests-ran stage treated as a **refutation** in both `Run` and `Accept`. Do not
+  reintroduce a `-run` filter on an audit oracle. Records:
+  `results/estimator-n64-full-oracle.json`; the superseded 40% run is kept as
+  `results/estimator-n64.json` for comparison. Corollary caution: the two draws agree
+  on only 159/192 rows, so **rejection-side rates are not stable at n=64.**
 - The judge-oracle comparison arm (§5.5c) is implemented **and now run live** (not
   only mock). `calibrate --oracle=judge` and `--compare` swap the acceptance oracle
   for an LLM reviewer (never a ladder stage — invariant #4) and record execution
