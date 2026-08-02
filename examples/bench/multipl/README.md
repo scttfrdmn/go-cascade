@@ -99,6 +99,74 @@ are named in the output. Running §5.5 at n=450 with sound references beats n=48
 39 quiet lies; `loadReferences` tolerates a missing reference per problem, and such an
 id simply carries no oracle-soundness gate.
 
+## Stage 2 result: 467 of 489, and what the 22 failures actually are
+
+Measured, Opus 4.5, `--attempts 3`: **467 validated (95.5%)**. All three consistency
+checks pass — `manifest.json`, `problems.jsonl`, and `refs/` all list the same 489 ids;
+the 22 ids without a `solution.go` are exactly the 22 the report marks unvalidated; and
+the tree is `gofmt` clean.
+
+**Only one of the 22 is a model failure.** That distinction is load-bearing, so all 22
+were diagnosed rather than filed as "hard". Reproducing an expectation exactly from a
+wrong formula is strong evidence about where the defect lives — a model error does not
+reproduce the oracle's output on every case.
+
+- **Unsatisfiable through the pinned signature** (1) — `he_92_any_int`. The suite
+  asserts `candidate(3, 4, 7)` → `true` **and** `candidate(3.0, 4, 7)` → `false`, but
+  the signature is `func AnyInt(x float64, y float64, z float64) bool`, so those are the
+  *same arguments* with opposite expectations. Python's `isinstance(3.0, int) == False`
+  has no equivalent through a `float64` parameter. **No implementation can pass.** This
+  is a fourth defect class the type-check gate cannot catch: it type-checks perfectly
+  and is semantically contradictory.
+- **Self-inconsistent oracle** (1) — `mbpp_802_count_rotation`. `[3,2,1]` → `1` (the
+  minimum is at index 2) but `[1,3,2]` → `2` (the minimum is at index 0). No single rule
+  satisfies all five cases.
+- **The oracle encodes an upstream reference bug** (6) — `mbpp_461_upper_ctr` ("count
+  the upper case characters"; `"PYthon"` → **1**, though the answer is 2 — iterating
+  from index 1 reproduces every case), `mbpp_430_parabola_directrix` (expectations are
+  exactly `c-((b*b)+1)*4*a`, not a directrix by any definition), `mbpp_260_newman_prime`
+  (index off-by-one: expects `7` where `17` is the term the statement describes),
+  `mbpp_264_dog_age` (expectations are exactly `10.5*2 + (age-2)*4`), `mbpp_83_get_Char`
+  (`"abc"` sums to 294, 294 mod 26 = 8 → `'i'`, but the oracle wants `'f'`; no obvious
+  variant reproduces it), `mbpp_87_merge_dictionaries_three` (the expected map omits a
+  key present in the inputs). A candidate that is *correct* fails these; one that
+  reproduces the bug passes.
+- **Statement contradicts the oracle** (3) — `mbpp_638_wind_chill` says "rounded to the
+  **next** integer" but every expectation matches `round`, not `ceil`;
+  `mbpp_164_are_equivalent` says "sum of the divisors" but needs *proper* divisors
+  (23/47 → both 1); `mbpp_777_find_sum` asks for a sum of non-repeated elements but
+  expects the sum of *distinct* elements.
+- **Under-specified ordering** (4) — `mbpp_579_find_dissimilar`, `mbpp_769_Diff`,
+  `mbpp_788_new_tuple`, `mbpp_229_re_arrange_array`. The statement asks for a set-like
+  result; the oracle demands Python's incidental iteration order.
+- **Float last-bit disagreement** (1) — `mbpp_742_area_tetrahedron`. `math.Sqrt(3)*a*a`
+  in Go differs from CPython's expectation in the final ULP (`…894` vs `…896`). The
+  suite compares `fmt.Sprintf("%v")` output, so there is no tolerance to widen.
+- **Genuinely hard, and satisfiable** (1) — `he_116_sort_array` needs Python's
+  `bin(-4) == "-0b100"` semantics (popcount of the *magnitude*). Verified by hand: a
+  `math/bits` + `sort.SliceStable` reference passes the full canonical suite. Opus
+  missed it in 3 attempts. **This is the only one of the 22 that is a real model
+  failure.**
+
+The remaining 5 (`mbpp_408_k_smallest_pairs`, `mbpp_452_loss_amount`,
+`mbpp_468_max_product`, `mbpp_617_min_Jumps`, `mbpp_749_sort_numeric_strings`) show the
+same shapes — ordering or a disputed formula — but were not each run to ground, so they
+are counted as unclassified rather than assigned a bucket.
+
+**Consequence for any §5.5 number.** These 22 must be *excluded*, not counted as
+cascade failures — the majority are problems where correctness and passing the oracle
+are opposite. They carry no reference and therefore no oracle-soundness gate, which is
+the mechanism that already keeps them out of calibration (invariant #4), but a
+*pass-rate* reported over all 489 would silently charge the router for upstream defects.
+**n = 467** is the number to quote, and it still clears the §5.5 bar of n ≥ 300.
+
+This also sharpens the "model-written, human-test-validated" caveat above. The upstream
+suite is not merely *incomplete* as an oracle on this benchmark — on a measurable
+fraction of problems it is **wrong**, and it is wrong in the direction that rewards
+reproducing a Python bug. Stage 2's validation gate silently filtered those out, which
+is the right behaviour and worth knowing: the 467 references are, by construction,
+solutions that agree with the upstream oracle *including* wherever it is mistaken.
+
 ## Divergences from upstream MultiPL-E
 
 These change the published artifact, so they are recorded here and belong in
