@@ -15,7 +15,7 @@ We're continuing the go-cascade study. Before anything else:
    reconciliation, including the corrected §5.5(5) result).
    `AWS_PROFILE=aws` for live Bedrock; `--provider=mock` is free.
 3. **Check whether the MultiPL-E benchmark finished building.** It lives *outside*
-   the repo at `~/mple-bench` (4 MB, 489 problems) — see "The benchmark" below.
+   the repo at `~/mple-bench` (4 MB, 488 problems) — see "The benchmark" below.
 
 ## Where the study stands
 
@@ -51,14 +51,15 @@ session's code threads are run and written up. Last session did two things:
 ## The benchmark (new, and it is not in the repo)
 
 `~/mple-bench` — MultiPL-E Go (HumanEval-Go + MBPP-Go) in the layout `calibrate`,
-`estimator`, and `solve` consume. **489 of 528 problems**, which clears the §5.5
+`estimator`, and `solve` consume. **488 of 528 problems**, which clears the §5.5
 `n ≥ 300` bar. Scripts are at `examples/bench/multipl/`; the *data* is outside the
 repo because it is 4 MB of generated files.
 
-**39 exclusions, all upstream MultiPL-E transpilation defects**, each named in the
-ingester's output: 2 do not parse (`gofmt -e`; unescaped quotes in string literals)
-and **37 do not type-check**. The type-check gate (`go vet` against a `panic()` stub
-carrying the pinned signature — vet not build, because build skips `_test.go`) was
+**40 exclusions, all upstream MultiPL-E transpilation defects**, each named in the
+ingester's output, by three gates: 2 do not parse (`gofmt -e`; unescaped quotes in
+string literals), **37 do not type-check**, and 1 is **unsatisfiable** (see below).
+The type-check gate (`go vet` against a `panic()` stub carrying the pinned signature —
+vet not build, because build skips `_test.go`) was
 added *after* running the ingester on real data caught the problem. Shapes: 12
 heterogeneous arguments (prompt says `[]interface{}`, suite passes `[]int` then
 `[]string` — **no** signature satisfies both, so this is not a signature-extraction
@@ -66,29 +67,39 @@ bug), 23 internally invalid literals, 2 one-offs. Worth knowing when quoting n: 
 exclusions are **not random with respect to difficulty** — they cluster in MBPP's
 tuple-heavy problems, which transpile worst to Go.
 
-**Stage 2 is finished: 467 of 489 references validated (95.5%).** All three consistency
-checks pass — `manifest.json`, `problems.jsonl` and `refs/` list the same 489 ids, the
-22 ids with no `solution.go` are exactly the 22 marked unvalidated, and the tree is
-gofmt-clean. Re-verify cheaply (it re-executes rather than trusting the report):
+**Stage 2 is finished: 470 of 488 references validated (96.3%).** All consistency checks
+pass — `manifest.json`, `problems.jsonl` and `refs/` list the same 488 ids, the 18 ids
+with no `solution.go` are exactly the 18 marked unvalidated, and the tree is gofmt-clean.
+Re-verify cheaply (it re-executes rather than trusting the report):
 
 ```bash
 python3 -c "import json,os;r=json.load(open(os.path.expanduser('~/mple-bench/references.json')));\
 print(sum(1 for v in r.values() if v['validated']),'validated')"
 ```
 
-**Quote n = 467, not 489, and do not count the 22 as cascade failures.** 21 of them are
-upstream oracle defects, diagnosed individually (see the README's stage-2 section for
-the per-problem account): 1 unsatisfiable through the pinned signature
-(`he_92_any_int` demands opposite answers for `3` and `3.0` through a `float64`
-parameter), 1 self-inconsistent, 6 whose oracle encodes a reproducible reference bug,
-3 whose statement contradicts its own oracle, 4 under-specified ordering, 1 float
-last-ULP, 5 left explicitly unclassified. Exactly **one** — `he_116_sort_array`, which
-needs Python's `bin(-4) == "-0b100"` magnitude-popcount semantics — is a real model
-failure, confirmed satisfiable by a hand-written reference that passes its full suite.
+488, not 489: `he_92_any_int` is **unsatisfiable** (it demands opposite answers for `3`
+and `3.0` through a `float64` parameter) and is now dropped by a third ingestion gate,
+`contradiction`, instead of being discovered by paying for generation attempts.
+
+**Quote n = 470, and do not count the 18 as cascade failures.** 17 are upstream oracle
+defects, diagnosed individually — see the README's stage-2 section for the per-problem
+account: 1 self-inconsistent, 5 whose oracle encodes a reproducible reference bug, 3
+whose statement contradicts its own oracle, 4 under-specified ordering, 1 float last-ULP,
+3 left explicitly unclassified. Exactly **one** — `he_116_sort_array`, needing Python's
+`bin(-4) == "-0b100"` magnitude-popcount — is a clean model failure: it failed all six
+attempts with a byte-identical diagnostic, and a hand-written reference passes its full
+suite, so it is reliably hard rather than unlucky.
+
+**Two process lessons in that number.** Raising `--attempts` from 3 to 6 recovered three
+problems (467 → 470) that had looked defective — sampling variance, not oracle bugs. And
+one of those three, `mbpp_260_newman_prime`, had already been *misclassified* here as an
+oracle off-by-one; the NSW primes really are 7, 41, 239 and only the indexing convention
+is ambiguous. Distinguishing "oracle is buggy" from "problem is ambiguous and the model
+guessed" needs more than one draw.
 
 That result strengthens the caveat below rather than just trimming n: on a measurable
 fraction of this benchmark the upstream oracle is **wrong**, in the direction that
-rewards reproducing a Python bug. So the 467 references are, by construction, solutions
+rewards reproducing a Python bug. So the 470 references are, by construction, solutions
 that agree with the upstream suite *including wherever it is mistaken*.
 
 References are **model-written, human-test-validated** — Opus writes each one and it
@@ -97,13 +108,13 @@ is kept *only* if it passes MultiPL-E's own human-derived suite by execution
 which is what the 64-problem set's references are, and any write-up using this
 benchmark must say so: a defect the upstream suite misses passes into the reference
 unnoticed. A problem whose reference cannot be validated in 3 attempts keeps **no**
-`solution.go` and is named — n=467 with sound references beats n=489 with 22 quiet
+`solution.go` and is named — n=470 with sound references beats n=488 with 18 quiet
 lies. `loadReferences` tolerates a missing reference, so such an id simply carries no
 oracle-soundness gate.
 
 Verified free, end-to-end, before spending: correct hand-written solutions **pass**
 the canonical suites and wrong ones are **refuted** (both directions — the pass side
-alone proves nothing); the pinned signature compiles against all 489; and
+alone proves nothing); the pinned signature compiles against all 488; and
 `calibrate --provider=mock -refs ~/mple-bench -pin-api` loads **8/8 references and
 pins 8/8 APIs**. In that mock run the oracle gate reports "inconclusive" for every
 problem, which is a **mock artifact** — `internal/model/mock.go` returns a canned
@@ -114,7 +125,7 @@ Do not read that as a benchmark defect; re-check it on the first live run.
 
 1. **The real §5.5 validation experiment.** n ≥ 300 on a standard benchmark, all five
    arms, plus §5.5(4) cache-warmth. The **ingestion half is now done** — what remains
-   is the run itself, which is real money at 489 problems × 5 arms. **Scope the spend
+   is the run itself, which is real money at 470 problems × 5 arms. **Scope the spend
    with me first; I said "not yet" to this twice before.**
 
    Three n≤64 findings await it: whether **M ranks** candidates by η_fa (experiment 19
