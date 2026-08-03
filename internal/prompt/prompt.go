@@ -14,6 +14,7 @@ import (
 	"go/printer"
 	"go/token"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -144,8 +145,23 @@ func SpecUserPinned(problem, api string) string {
 // body replaced by panic("not implemented"). It is how a validated reference
 // solution is turned into the pinned contract fed to the spec model, so the
 // pinned API is authoritative (it is exactly what the reference compiles as)
-// rather than hand-transcribed. Unexported declarations are dropped; imports are
-// preserved because a signature may reference an imported type (e.g. context).
+// rather than hand-transcribed. Unexported declarations are dropped.
+//
+// Imports are kept only if something that SURVIVES still refers to them. A
+// signature may need one (e.g. context.Context), so they cannot simply be
+// dropped — but replacing every body with panic() removes the only use of any
+// package the implementation needed internally, and in Go an unused import is a
+// compile error, not a warning. Keeping them all therefore emits an API block
+// that does not compile.
+//
+// That is not cosmetic. The block is pasted verbatim into the spec prompt under
+// "use exactly this API", so the spec model faithfully reproduces the unused
+// import in spec.API; testsCompileAgainstOwnAPI then fails to build the stub and
+// validateOracle attributes the failure to the test suite, flagging a sound
+// oracle OracleUnsound and dropping the problem from calibration (invariant #4).
+// Measured on the 470-problem MultiPL-E benchmark, 133 of 470 references (28.3%)
+// produced a non-compiling stub this way, and 4 of the first 8 exclusions in a
+// live §5.5 run were this artifact rather than a real oracle defect.
 func ExtractAPI(src string) (string, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "solution.go", src, parser.ParseComments)
@@ -180,7 +196,7 @@ func ExtractAPI(src string) (string, error) {
 			}
 		}
 	}
-	f.Decls = append(imports, keep...)
+	f.Decls = append(pruneImports(imports, keep), keep...)
 	// Drop file-level doc so the block starts at the package clause, and clear the
 	// file's comment list: the printer would otherwise re-emit orphaned comments
 	// from dropped (unexported) declarations as floating text. Each kept decl still
@@ -192,6 +208,90 @@ func ExtractAPI(src string) (string, error) {
 		return "", fmt.Errorf("print API: %w", err)
 	}
 	return strings.TrimSpace(buf.String()), nil
+}
+
+// pruneImports drops imports nothing in keep refers to, so the emitted API block
+// compiles. See ExtractAPI for why an unretained import is fatal rather than
+// untidy.
+//
+// The test is whether any surviving declaration mentions the package's local
+// name as the X of a selector (pkg.Ident) — which is the only way an import can
+// be used in the signatures and type declarations that survive here. Bodies are
+// already panic(), so nothing else can reference one.
+//
+// Deliberately conservative in two ways. A dot-import (`import . "x"`) makes
+// every use unqualified and therefore untrackable by name, and a blank import
+// (`import _ "x"`) exists precisely for a side effect and has no textual use; in
+// both cases the import is kept, because dropping it could change meaning. Both
+// are vanishingly rare in a single-file stdlib solution, so kept-when-unsure
+// costs nothing in practice while preserving the invariant that this function
+// never alters what the API means.
+func pruneImports(imports, keep []ast.Decl) []ast.Decl {
+	used := map[string]bool{}
+	for _, d := range keep {
+		ast.Inspect(d, func(n ast.Node) bool {
+			if sel, ok := n.(*ast.SelectorExpr); ok {
+				if id, ok := sel.X.(*ast.Ident); ok {
+					used[id.Name] = true
+				}
+			}
+			return true
+		})
+	}
+
+	var out []ast.Decl
+	for _, d := range imports {
+		gen, ok := d.(*ast.GenDecl)
+		if !ok {
+			out = append(out, d)
+			continue
+		}
+		var specs []ast.Spec
+		for _, s := range gen.Specs {
+			imp, ok := s.(*ast.ImportSpec)
+			if !ok {
+				specs = append(specs, s)
+				continue
+			}
+			if importNeeded(imp, used) {
+				specs = append(specs, s)
+			}
+		}
+		if len(specs) == 0 {
+			continue // whole import decl became empty; drop it
+		}
+		// Rewriting Specs invalidates the parenthesised form's Rparen position, which
+		// the printer uses to decide layout. A single remaining spec prints correctly
+		// either way; clearing Lparen/Rparen for it yields the idiomatic one-line form.
+		gen.Specs = specs
+		if len(specs) == 1 {
+			gen.Lparen, gen.Rparen = token.NoPos, token.NoPos
+		}
+		out = append(out, gen)
+	}
+	return out
+}
+
+// importNeeded reports whether an import must be kept. Name-based, matching how
+// pruneImports collects uses; see its comment for the dot/blank-import caveat.
+func importNeeded(imp *ast.ImportSpec, used map[string]bool) bool {
+	if imp.Name != nil {
+		switch imp.Name.Name {
+		case ".", "_":
+			return true // untrackable or side-effecting: never drop
+		default:
+			return used[imp.Name.Name] // explicit alias
+		}
+	}
+	path, err := strconv.Unquote(imp.Path.Value)
+	if err != nil {
+		return true // unparseable path: keep rather than silently alter the API
+	}
+	// Default local name is the last path element. This is a convention, not a
+	// guarantee (a package may declare a different name than its directory), but it
+	// holds across the stdlib, which is all a single-file stdlib-only solution can
+	// import.
+	return used[path[strings.LastIndex(path, "/")+1:]]
 }
 
 const codeSystem = `You write Go implementations. You are given a fixed API and
