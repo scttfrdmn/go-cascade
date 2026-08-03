@@ -7,13 +7,15 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be at `0b3f79b` (PR #48, the §5.5 run at
-   n=409). 48 PRs merged. If a PR *is* open, confirm CI green and I'll tell you
-   whether to merge — don't merge unilaterally.
+1. **Check git state.** `main` should be at `b3f4e91` (PR #58, the §5.5(4)
+   absorption dial). 58 PRs merged. **PR #59 (arm (e), issue #53's free half) may
+   still be open** — if a PR is open, confirm CI green and I'll tell you whether to
+   merge; don't merge unilaterally.
 2. **Read the project board** —
    https://github.com/users/scttfrdmn/projects/62 — which is now where the open work
    lives, one issue per gap (#49–#53). This file no longer restates the backlog.
-3. **Re-read `results/README.md`** (twenty-one experiments) and
+3. **Re-read `results/README.md`** (twenty-three experiments; 20 live, 3 decided
+   offline for $0) and
    **`docs/verification-saturated-cascades.md` §5.6** (the live-evaluation
    reconciliation). `AWS_PROFILE=aws` for live Bedrock; `--provider=mock` is free.
 4. The MultiPL-E benchmark is built and used. It lives *outside* the repo at
@@ -51,6 +53,38 @@ conflict:**
 **0 concurrency problems**, so the `-race` rung — which caught the study's only
 confirmed judge over-acceptance — never fired in the only large-n run. The
 64-problem hand-written set (11 of 64 are concurrency) is **not obsolete**. Issue #50.
+
+**The two most recent experiments were both free, and both had the same shape:**
+the design check found the experiment as specified would have measured nothing.
+
+- **Experiment 22 — §5.5(4) as a controlled dial** (PR #58, issue #52). Absorption is
+  *injected* into the recorded n=409 stream, so the whole sweep replays offline for $0.
+  Under a head-shaped filter the certificate goes optimistic monotonically (gap +0.0147
+  → +0.1486 as ρ goes 0.2 → 0.8) and at ρ=0.6 promises α=0.10 while delivering 0.134 —
+  a **violated** bound. Three traps, each of which produced a wrong answer first:
+  **uniform absorption is a null** (dropping a random subset of an exchangeable sample
+  leaves one), so #52's own framing would have measured nothing and reported it as
+  evidence — it ships as the explicit control; `Calibrate` **prefers the shadow subset
+  of whatever it is handed** and every profiled record has `Shadow: true`, which made
+  the uncorrected arm silently identical to the corrected one (hence `stripShadowFlags`);
+  and **shadow sampling spends sample size**, so small-ε rows are flagged `Underpowered`
+  rather than dropped (a missing row reads as "not swept"). **The envelope is a
+  multi-seed quantity** — selective patterns are sorts and so seed-exact, but the uniform
+  control is a random draw. Over 10 seeds × 4 rates max |gap| is **0.0389**, not the
+  0.0267 one sweep shows, and by the honest envelope the effect holds at **ρ ≥ 0.6, not
+  ρ ≥ 0.4**. `EstimateNullEnvelope` ships *inside* the output, because a bar left to the
+  reader gets compared against one draw of the control.
+
+- **Experiment 23 — arm (e) feasibility** (PR #59, issue #53). §5.5(2)'s last
+  unimplemented arm. At τ=[1,1] the $0.0101/query matched budget buys median **49 / 2 /
+  1** samples at the profiled 2:1:1 fan-out — below a 3-way vote on **0.0% / 79.2% /
+  99.5%** of problems. The cascade's whole spend is roughly one frontier call, so a
+  frontier arm (e) at matched cost is **always-frontier relabelled**; run as §5.5(2)
+  literally specifies it (tier unnamed) it would have reported a degenerate configuration
+  as a null about self-consistency. `selfconsistency` therefore **refuses `-sample` on a
+  ruled-out tier**. Only the cheap tier is well-posed, and there it is exactly §3.5's
+  contrast: 49 votes on how the code is *written* vs 2 on what it *does*, same money. The
+  paid pass is **$4.12 and unrun**.
 
 Before that, two sessions did this:
 
@@ -230,11 +264,21 @@ and blocks *all* Bash; Read/Grep/Glob keep working, so do read-only work and ret
 
 ---
 
-## Quick reference (state as of 2026-08-03, end of fifth session)
+## Quick reference (state as of 2026-08-03, end of sixth session)
 
-- Public repo: github.com/scttfrdmn/go-cascade. main `0b3f79b`, 48 PRs merged.
-  Project board: https://github.com/users/scttfrdmn/projects/62 (issues #49–#53).
-- **New last session:** `results/analyze_s55.py` (recomputes every figure the n=409
+- Public repo: github.com/scttfrdmn/go-cascade. main `b3f4e91`, 58 PRs merged
+  (PR #59 may be open). Project board:
+  https://github.com/users/scttfrdmn/projects/62. **#49, #51 and #52 are closed;
+  #50 and #53 remain, both `needs-spend-approval`** — #50 concurrency coverage
+  ($2–4), #53's paid arm (e) sampling pass ($4.12, scoped by the shipped tool).
+- **New last session:** `go-cascade absorption` (§5.5(4) dial + multi-seed null
+  envelope, `internal/calibrate/absorb.go`) and `go-cascade selfconsistency` (arm (e)
+  feasibility gate + sampling arm, `internal/calibrate/selfconsistency.go`,
+  `internal/cascade/selfconsistency.go`, `internal/cluster/text.go`); records
+  `results/absorption-n409.json` and `results/arm-e-feasibility-n409.json`. Both
+  subcommands are **free with `-provider=mock`** (they replay recorded costs; mock only
+  builds the router).
+- **From the session before:** `results/analyze_s55.py` (recomputes every figure the n=409
   write-up quotes, from any records pair — usable-only, and it correctly *skips*
   observations lacking `true_correct` rather than falling back to `correct`, which for
   the judge arm would force agreement); `results/absorption_ceiling.py` (bench path is
