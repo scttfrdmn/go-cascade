@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -32,6 +33,7 @@ Usage:
   go-cascade calibrate  [flags] -bench problems.jsonl
   go-cascade estimator  [flags] -bench problems.jsonl -refs dir -pin-api
   go-cascade absorption [flags] -records recs.json     (offline, no cost)
+  go-cascade selfconsistency [flags] -records recs.json (feasibility free; -sample costs)
   go-cascade models     [flags]
   go-cascade cache      [stats|clear] [flags]
 
@@ -62,6 +64,8 @@ func main() {
 		err = cmdEstimator(ctx, os.Args[2:])
 	case "absorption":
 		err = cmdAbsorption(os.Args[2:])
+	case "selfconsistency":
+		err = cmdSelfConsistency(ctx, os.Args[2:])
 	case "models":
 		err = cmdModels(ctx, os.Args[2:])
 	case "cache":
@@ -1226,6 +1230,351 @@ func cmdAbsorption(args []string) error {
 		fmt.Printf("\nwrote %d sweep rows to %s\n", len(rows), *out)
 	}
 	return nil
+}
+
+func cmdSelfConsistency(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("selfconsistency", flag.ExitOnError)
+	var cf commonFlags
+	cf.register(fs)
+	recPath := fs.String("records", "", "profiled calibration records (JSON array); supplies the matched budgets")
+	bench := fs.String("bench", "", "JSONL of {\"id\":..,\"problem\":..}; required only for the paid sampling pass")
+	tier := fs.Int("tier", 0, "tier index to draw self-consistency samples from")
+	tauFlag := fs.String("tau", "", "threshold vector whose realized spend is matched (default: the loaded certificate's)")
+	sample := fs.Bool("sample", false, "run the PAID sampling pass; without this the command only reports feasibility")
+	fanout := fs.String("fanout", "", "configured samples per tier in the profiled run, e.g. small=2,mid=2,large=1 (default: the local config's tiers)")
+	obsOut := fs.String("o", "selfconsistency.json", "output path for the sampling pass (JSON)")
+	feasOut := fs.String("feasibility-out", "", "write the (free) feasibility report to this path as JSON")
+	resume := fs.Bool("resume", false, "skip problems already present in -o and append")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *recPath == "" {
+		return errors.New("-records is required: arm (e)'s budget is the cascade's realized spend, " +
+			"which only the profiled records carry")
+	}
+	recs, err := loadRecords(*recPath)
+	if err != nil {
+		return err
+	}
+	if cf.alpha == 0 && cf.budget == 0 {
+		cf.alpha = 0.05 // config.Validate wants one set; arm (e) has no risk target
+	}
+	cfg, prov, cert, err := cf.build()
+	if err != nil {
+		return err
+	}
+	tau, err := selfConsistencyTau(*tauFlag, cert, recs)
+	if err != nil {
+		return err
+	}
+	perTier, err := selfConsistencyFanout(*fanout, cfg)
+	if err != nil {
+		return err
+	}
+
+	// The feasibility report runs unconditionally, including before a paid pass:
+	// it is free, and it is the check that decides whether the tier being sampled
+	// can seat a vote at all. Arm (e) at the frontier tier degenerates into
+	// always-frontier on 99.5% of the n=409 problems, so a pass that skipped this
+	// would pay to relabel arm (a).
+	rows, err := calibrate.SelfConsistencyBudget(recs, tau, perTier)
+	if err != nil {
+		return err
+	}
+	printSelfConsistencyFeasibility(rows, tau, *recPath)
+	if *feasOut != "" {
+		doc := feasibilityDoc{
+			Note: "Computed from RECORDED costs, no model was queried. The budget is the cascade's " +
+				"realized per-problem spend under tau, matched problem by problem rather than on the " +
+				"mean: matching on the mean would hand every problem the same money and hide that the " +
+				"expensive problems are exactly the degenerate ones. A tier whose matched budget buys " +
+				"fewer than min_vote samples is always-frontier or always-cheapest relabelled, not " +
+				"self-consistency.",
+			Records: *recPath, Tau: tau, Fanout: perTier, MinVote: calibrate.MinVote, Rows: rows,
+		}
+		if err := writeJSONFile(*feasOut, doc); err != nil {
+			return err
+		}
+		fmt.Printf("\nwrote the feasibility report to %s\n", *feasOut)
+	}
+	if !*sample {
+		return nil
+	}
+
+	if *tier < 0 || *tier >= len(cfg.Tiers) {
+		return fmt.Errorf("-tier %d out of range for %d configured tiers", *tier, len(cfg.Tiers))
+	}
+	// Refuse to spend on a tier the free check just ruled out. This is the whole
+	// point of computing feasibility first, so it is an error rather than a warning.
+	for _, row := range rows {
+		if row.Tier != cfg.Tiers[*tier].Name {
+			continue
+		}
+		if row.DegenerateFrac >= 0.5 {
+			return fmt.Errorf("tier %q: %.1f%% of problems afford fewer than %d samples at matched "+
+				"cost, so this arm would be always-%s relabelled rather than self-consistency; "+
+				"pick a cheaper tier with -tier",
+				row.Tier, 100*row.DegenerateFrac, calibrate.MinVote, row.Tier)
+		}
+	}
+	if *bench == "" {
+		return errors.New("-bench is required for -sample: the arm draws new candidates and needs the problems")
+	}
+	probs, err := readBench(*bench)
+	if err != nil {
+		return err
+	}
+	budgets, err := calibrate.SelfConsistencyBudgets(recs, tau)
+	if err != nil {
+		return err
+	}
+
+	// Cache-bypass, for the same reason calibration records are (invariant #8): a
+	// warm cache would return prior solutions instead of the fresh draws the vote
+	// is over, and the fan-out would no longer be what the budget bought.
+	cfg.CacheDir = ""
+	r, err := cascade.New(cfg, prov, nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close() //nolint:errcheck // scratch dir
+
+	obs := []cascade.SelfConsistencyObs{}
+	done := map[string]bool{}
+	if *resume {
+		if prior, lerr := loadSelfConsistencyObs(*obsOut); lerr == nil {
+			obs = prior
+			for _, o := range prior {
+				done[o.ID] = true
+			}
+			if len(done) > 0 {
+				fmt.Fprintf(os.Stderr, "resuming: %d problems already recorded, skipping them\n", len(done))
+			}
+		}
+	}
+	checkpoint := func() error { return writeJSONFile(*obsOut, obs) }
+
+	var spent, budgeted float64
+	interrupted := false
+	for i, p := range probs {
+		if done[p.ID] {
+			continue
+		}
+		budget, ok := budgets[p.ID]
+		if !ok {
+			// Silently sampling at some default budget would break the cost match on
+			// exactly the problems whose records were excluded, so say so and skip.
+			fmt.Fprintf(os.Stderr, "[%d/%d] %s: no matched budget in the records (excluded, a cache "+
+				"hit, or absent); skipped\n", i+1, len(probs), p.ID)
+			continue
+		}
+		if ctx.Err() != nil {
+			interrupted = true
+			break
+		}
+		fmt.Fprintf(os.Stderr, "[%d/%d] %s (budget $%.5f)\n", i+1, len(probs), p.ID, budget)
+		o, oerr := r.SelfConsistency(ctx, p.ID, p.Problem, *tier, budget)
+		if oerr != nil {
+			if ctx.Err() != nil {
+				interrupted = true
+				break
+			}
+			fmt.Fprintf(os.Stderr, "  skipped: %v\n", oerr)
+			continue
+		}
+		obs = append(obs, *o)
+		spent += o.SpentUSD
+		budgeted += o.BudgetUSD
+		// Checkpointed per problem, like calibrate: a SIGTERM must not discard a paid
+		// run (issue #21).
+		if err := checkpoint(); err != nil {
+			return err
+		}
+	}
+	if err := checkpoint(); err != nil {
+		return err
+	}
+	if interrupted {
+		fmt.Fprintf(os.Stderr, "INTERRUPTED (context cancelled). Observations checkpointed to %s; "+
+			"re-run with -resume to finish.\n", *obsOut)
+	}
+	printSelfConsistencySummary(obs, spent, budgeted)
+	return nil
+}
+
+// selfConsistencyTau resolves the threshold vector whose spend arm (e) matches.
+// It has to be the policy the profiled cascade was actually running, because the
+// budget is that policy's realized cost — a different tau describes a cascade
+// whose spend was never recorded. Hence the preference order: an explicit -tau, a
+// loaded certificate's thresholds, then a stated fallback.
+func selfConsistencyTau(flagVal string, cert *calibrate.Certificate, recs []calibrate.Record) ([]float64, error) {
+	if flagVal != "" {
+		return parseFloatList(flagVal)
+	}
+	if cert != nil && len(cert.Thresholds) > 0 {
+		fmt.Fprintf(os.Stderr, "matching the certificate's policy tau=%v\n", cert.Thresholds)
+		return cert.Thresholds, nil
+	}
+	// No policy given: fall back to accept-at-the-first-tier-that-clears-1.0, which
+	// is the strictest vector and so the largest realized spend. Stated rather than
+	// silent, because it sets the budget.
+	n := 0
+	for _, r := range recs {
+		if len(r.Tiers) > 0 {
+			n = len(r.Tiers) - 1
+			break
+		}
+	}
+	if n < 1 {
+		return nil, errors.New("cannot infer a threshold vector: no multi-tier records and no -thresholds")
+	}
+	tau := make([]float64, n)
+	for i := range tau {
+		tau[i] = 1
+	}
+	fmt.Fprintf(os.Stderr, "no -thresholds and none in the config; assuming tau=%v (the strictest "+
+		"vector, hence the largest matched budget)\n", tau)
+	return tau, nil
+}
+
+// selfConsistencyFanout resolves each tier's configured fan-out in the PROFILED
+// run. It cannot be defaulted away: a TierObs cost covers the whole fan-out, so
+// getting this wrong scales every budget by the fan-out factor.
+func selfConsistencyFanout(spec string, cfg *config.Config) (map[string]int, error) {
+	if spec == "" {
+		out := make(map[string]int, len(cfg.Tiers))
+		for _, t := range cfg.Tiers {
+			out[t.Name] = t.Samples
+		}
+		return out, nil
+	}
+	out := map[string]int{}
+	for _, kv := range strings.Split(spec, ",") {
+		kv = strings.TrimSpace(kv)
+		if kv == "" {
+			continue
+		}
+		name, n, ok := strings.Cut(kv, "=")
+		if !ok {
+			return nil, fmt.Errorf("-fanout %q: want tier=samples pairs, e.g. small=2,mid=2,large=1", kv)
+		}
+		v, err := strconv.Atoi(strings.TrimSpace(n))
+		if err != nil || v < 1 {
+			return nil, fmt.Errorf("-fanout %q: samples must be a positive integer", kv)
+		}
+		out[strings.TrimSpace(name)] = v
+	}
+	return out, nil
+}
+
+func loadSelfConsistencyObs(path string) ([]cascade.SelfConsistencyObs, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var obs []cascade.SelfConsistencyObs
+	if err := json.Unmarshal(b, &obs); err != nil {
+		return nil, err
+	}
+	return obs, nil
+}
+
+func printSelfConsistencyFeasibility(rows []calibrate.SelfConsistencyFeasibility, tau []float64, recPath string) {
+	fmt.Printf("\n§5.5(2) arm (e) feasibility — self-consistency at matched cost, from %s\n", recPath)
+	fmt.Printf("policy tau %v; the budget is that cascade's realized per-problem spend\n", tau)
+	fmt.Printf("\n  %-8s %-4s %-11s %-11s %-8s %-8s %s\n",
+		"tier", "fan", "budget/q", "unit", "samples", "degen", "n")
+	fmt.Println("  " + strings.Repeat("-", 72))
+	for _, r := range rows {
+		fmt.Printf("  %-8s %-4d $%-10.5f $%-10.6f %-8s %-8s %d\n",
+			r.Tier, r.Samples, r.MeanBudgetUSD, r.MeanUnitUSD,
+			fmt.Sprintf("%d (%d-%d)", r.MedianFanout, r.P10Fanout, r.P90Fanout),
+			fmt.Sprintf("%.1f%%", 100*r.DegenerateFrac), r.N)
+	}
+	for _, r := range rows {
+		fmt.Printf("\n  %s: %s\n", r.Tier, r.Verdict)
+	}
+	// Stated once, not per tier: arm (e) spends exactly what arm (b) spent, so the
+	// figure is the same at every tier by construction. Printing it three times reads
+	// as three costs.
+	if len(rows) > 0 {
+		fmt.Printf("\nA paid pass costs about $%.2f at ANY tier — the matched budget is the same number\n",
+			rows[0].EstimatedRunUSD)
+		fmt.Println("by construction; only the fan-out it buys differs. That is the figure to approve.")
+	}
+	fmt.Println("\nHow to read this. 'samples' is the fan-out the matched budget buys, median with")
+	fmt.Printf("the p10-p90 spread; 'degen' is the share of problems below a %d-sample vote, where\n",
+		calibrate.MinVote)
+	fmt.Println("a plurality is a coin flip or a single draw. A high share means")
+	fmt.Println("the arm at that tier is always-frontier or always-cheapest relabelled, and running")
+	fmt.Println("it would report a degenerate configuration as a result about self-consistency.")
+}
+
+func printSelfConsistencySummary(obs []cascade.SelfConsistencyObs, spent, budgeted float64) {
+	fmt.Printf("\narm (e) sampling pass: %d problems, spent $%.4f against a matched budget of $%.4f\n",
+		len(obs), spent, budgeted)
+	if len(obs) == 0 {
+		return
+	}
+	// Degenerate and abstained rows are reported separately, never pooled: a
+	// two-sample "vote" is not self-consistency, and a cluster abstention is an
+	// escalation rather than a wrong answer (invariant #4).
+	var nText, nCluster, nAgree, nDegen, nAbstain, scored int
+	var fanSum int
+	for _, o := range obs {
+		if o.Skipped != "" {
+			continue
+		}
+		fanSum += o.Fanout
+		if o.Degenerate {
+			nDegen++
+			continue
+		}
+		scored++
+		if o.TextCorrect {
+			nText++
+		}
+		if o.ClusterAbstained {
+			nAbstain++
+		} else {
+			if o.ClusterCorrect {
+				nCluster++
+			}
+			if o.Agreed {
+				nAgree++
+			}
+		}
+	}
+	fmt.Printf("mean fan-out %.1f; %d rows below a %d-sample vote (reported separately, not pooled)\n",
+		float64(fanSum)/float64(len(obs)), nDegen, calibrate.MinVote)
+	if scored == 0 {
+		fmt.Println("no row seated a real vote; nothing here is a measurement of self-consistency")
+		return
+	}
+	fmt.Printf("on %d rows with a real vote:\n", scored)
+	fmt.Printf("  arm (e), text vote:        %d/%d correct (%.3f)\n", nText, scored, float64(nText)/float64(scored))
+	if cl := scored - nAbstain; cl > 0 {
+		fmt.Printf("  §3.5, behavioural cluster: %d/%d correct (%.3f), %d abstentions excluded\n",
+			nCluster, cl, float64(nCluster)/float64(cl), nAbstain)
+		fmt.Printf("  the two selectors agreed on %d/%d\n", nAgree, cl)
+	}
+	fmt.Println("\nBoth selectors saw the SAME candidates at the SAME cost, so this isolates the")
+	fmt.Println("selector rather than the sampling budget. The text vote never consults the ladder;")
+	fmt.Println("an abstention is not scored as a wrong answer for the cluster arm, because nothing")
+	fmt.Println("surviving is a sound refutation of the whole sample and an escalation in a cascade.")
+}
+
+// feasibilityDoc wraps the arm (e) feasibility rows with the provenance that makes
+// them readable later: which records, which policy, and which profiled fan-out the
+// per-sample costs were divided by. Without the fan-out the unit costs cannot be
+// checked, and a wrong one scales every budget by that factor.
+type feasibilityDoc struct {
+	Note    string                                 `json:"_note"`
+	Records string                                 `json:"source_records"`
+	Tau     []float64                              `json:"tau"`
+	Fanout  map[string]int                         `json:"profiled_fanout"`
+	MinVote int                                    `json:"min_vote"`
+	Rows    []calibrate.SelfConsistencyFeasibility `json:"rows"`
 }
 
 // absorptionDoc wraps a sweep with the provenance a bare row array cannot carry.

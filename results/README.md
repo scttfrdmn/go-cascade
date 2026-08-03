@@ -16,7 +16,7 @@ was a small-sample artifact; the real model-accuracy floor is 0.0538), and the
 certifiable-α-vs-cost-win tension **reproduces** rather than dissolving. Read the rest of
 this file with that correction in mind.
 
-**One-line summary:** across twenty live experiments (plus two decided offline for $0)
+**One-line summary:** across twenty live experiments (plus three decided offline for $0)
 the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
@@ -104,6 +104,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 20 | [absorption ceiling](absorption-ceiling-2026-08-02.md) | the **last** unrun secondary experiment — §5.5(4) cache-warmth (the direct §2.9 test), scoped at ~$7. Asks first whether the benchmark *can* exhibit the effect | **not runnable here, decided offline for $0 — and the reason is a stronger result than the experiment would have been.** On MultiPL-E Go: retrieval candidacy **464/488 (95.1%)** vs absorption ceiling **2/488 (0.4%)**, three orders of magnitude apart. §2.9's effect is driven by *absorption* (arm zero re-executes — invariant #5), so a 0.4% cache shifts no distribution and the paid run would have reported a **benchmark artifact as a null**. Ceiling is **exact, not sampled**: a differing signature cannot compile, so `manifest.json` reduces 118,828 pairs to 10 ordered transfers, all executed; 4 pass = 2 bidirectional pairs, both **upstream MBPP duplicates**. The finding: at the high end similarity is **anti-correlated** with transferability — the top pairs are *antonyms* (`minimum`~`maximum` **0.949**, the highest of all 118,828; `first_Digit`~`last_Digit`; `even_position`~`odd_position`), and the top same-signature pair `he_56`~`he_61` `CorrectBracketing` (0.836) is **retrieved and refuted** (`<>` vs `()`). **Invariant #5 measured, not asserted.** §2.9 itself is untouched; running §5.5(4) needs **duplicate injection** (absorption as a dial), not a bigger corpus — **done in experiment 22** |
 | 21 | [§5.5 at n=409](s55-multipl-n409-2026-08-03.md) | **the §5.5(1) bar itself** — n ≥ 300 on a *standard* benchmark (MultiPL-E Go: HumanEval-Go + MBPP-Go, 488 problems, 409 usable), all arms paired. The one gap between "demonstrated" and "validated" | **the primary claim replicates and the margin widens monotonically with n: execution certifies α=0.084, the judge only α=0.226** (δ=0.10, identical candidates) — the exec/judge ratio goes 1.19× (n=28) → 1.58× (n=64) → **2.69×**, and the absolute gap 0.050 → 0.110 → **0.142**. Execution sound again and now emphatically: **1096/1096** tier observations agree with ground truth, 0 over-accept, 0 over-reject. **η_fa is finally more than one data point — 11/1096 over-acceptances**, with a cheap-tier gradient (small 8, mid 2, large 1) exactly as §3.1 predicts; but *this run's* records keep no candidate source, so its *defect classes are unrecoverable* and the reading-invisible mechanism stays **argued, not confirmed** — fixed going forward by `TierObs.DisagreementSource` (issue #49), which retains the program on every oracle/truth disagreement, readable via `classify_disagreements.py`. **α=0.05 does NOT certify here** (floor 0.0538 is genuine model accuracy, not oracle noise) — the n=64 "α=0.05 certifies" was a 0/52 small-sample artifact, and this is the more trustworthy result. Cost tension **reproduces at 6× scale**: `[1,1]` (1.6× pricier than frontier) below α=0.11, `[0.1,1]` (**2.2× cheaper**) at or above it. Exclusions are load-bearing — the 79 dropped have **frontier risk 0.785**. **Coverage gap: 0 concurrency problems, so the `-race` rung never ran.** $8.15, 488/488, no kill |
 | 22 | [§5.5(4) absorption dial](README.md#experiment-22--554-the-29-shift-measured-as-a-controlled-dial-0-offline) | §5.5(4) proper: make absorption a **controlled dial** over the n=409 records and measure how the certificate degrades, with and without shadow sampling. Offline, $0, 60 rows | **§2.9 tested rather than assumed.** Under a head-shaped filter the certificate goes optimistic monotonically — gap **+0.0147 → +0.1486** as ρ goes 0.2 → 0.8, and at ρ=0.6 it promises α=0.10 and delivers **0.134**, an actually *violated* bound. **Uniform absorption is a null** (acc 0.7702 → 0.7439 across all rates, noise in both directions), so #52's own framing — inject duplicates uniformly — would have measured nothing and reported it as evidence; it ships as the explicit control, and its envelope — measured over **10 seeds × 4 rates**, **max |gap| = 0.0389**, not the 0.0267 a single sweep shows — is the yardstick. By it the effect is established at **ρ ≥ 0.6, not ρ ≥ 0.4**; the selective rows are seed-exact (a sort), but the control is not, and the control sets the bar. Cleanest row holds n **fixed** at 327: uniform certifies `[1,1]`, both selective patterns refuse — same n, α, δ, grid, so only the shift can explain it. Shadow sampling drives the gap to **exactly 0** and converts a silent violation into a visible **refusal to certify**, which is the correction working, not failing. Limit stated not buried: α=0.10 at δ=0.10 needs **n ≥ 22 even at zero errors**, so 3 small-ε rows are flagged `underpowered` rather than reported |
+| 23 | [arm (e) feasibility](README.md#experiment-23--552-arm-e-self-consistency-at-matched-cost-0-so-far-offline) | §5.5(2)'s last unimplemented arm — self-consistency at matched cost. Asks first, for $0, what the matched budget actually buys | **the arm is implemented and the free check rules it out at every tier but the cheapest.** Matched budget $0.0101/q under τ=[1,1]; at the profiled 2:1:1 fan-out that buys median **49** cheap-tier samples (0.0% below a 3-vote), **2** mid (79.2% below), **1** frontier (**99.5%** below). So a frontier arm (e) at matched cost is **always-frontier relabelled** and a mid-tier one is a coin flip — run as §5.5(2) literally specifies it (tier unnamed) it would have **reported a degenerate configuration as a null about self-consistency**, the same trap as experiment 22's uniform absorption. Only the cheap tier is well-posed, and there it is exactly §3.5's contrast: **49 votes on how the code is written vs 2 on what it does**, same money. Built as a fair foil, not a strawman — normalised-source vote (formatting/comments/import order do not split it), **raw plurality mass** not the Wilson bound (invariant #9 governs the *routing* score; arm (e) crosses no threshold), and it never consults the verifier to pick a winner. Both selectors scored on the **same candidates at the same cost**, so the selector is isolated; cluster abstentions reported separately, not scored wrong (invariant #4). `selfconsistency` **refuses `-sample` on a ruled-out tier.** Paid pass scoped **$4.12, unrun** |
 
 ### How each run answered the previous one's limitation
 
@@ -374,6 +375,57 @@ uniform,easy-first,cheap-accept -epsilon 0,0.2,0.5,1.0`. The printed table's `si
 column marks each selective row `*` or `-` against the envelope; the envelope's own
 seeds are derived from `-seed`, so a published number is reproducible from the command
 that printed it.
+
+## Experiment 23 — §5.5(2) arm (e), self-consistency at matched cost ($0 so far, offline)
+
+**Arm (e) is implemented, and the free design check rules it out at every tier but the
+cheapest — before any spend.** Arms (a), (b) and (d) are recoverable from the profiled
+records because every tier ran on every problem. Arm (e) is not: "matched cost" means a
+sampling budget equal to the cascade's realized spend, and self-consistency votes over
+candidates the cascade never drew. It needs its own sampling pass. What *is* recoverable
+for $0 is whether the arm is well-posed at all.
+
+Matched per problem, not on the mean — averaging would fund every problem alike and hide
+that the expensive problems are exactly the degenerate ones. Under τ=[1,1] the budget is
+**$0.0101/query**; dividing each tier's recorded cost by its profiled 2:1:1 fan-out gives
+per-sample costs of $0.000174 / $0.003579 / $0.006155.
+
+| tier | median fan-out (p10–p90) | below a 3-sample vote |
+|---|---|---|
+| small (Maverick) | **49** (38–81) | 0/409 (0.0%) |
+| mid (Sonnet 4.5) | **2** (2–3) | 324/409 (**79.2%**) |
+| large (Opus 4.5) | **1** (1–1) | 407/409 (**99.5%**) |
+
+The cascade's whole spend is roughly one frontier call, because escalation to the frontier
+tier is most of what the spend *is*. So a frontier-model arm (e) at matched cost is
+**always-frontier relabelled** on 99.5% of problems, and a mid-tier one is a two-way vote
+on 79% — and two samples either agree unanimously or tie, carrying nothing a single draw
+does not. Run as §5.5(2) literally specifies it, with the tier unnamed, arm (e) would have
+**reported a degenerate configuration as a null result about self-consistency.**
+
+That is the same trap as experiment 22's uniform absorption, caught the same way: compute
+what the design can exhibit before paying. So the feasibility report ships as a
+first-class part of the arm rather than a footnote — `go-cascade selfconsistency` prints
+it, **refuses `-sample` on a tier it has ruled out**, and costs nothing.
+
+Only the cheap tier is well-posed, and there it is exactly §3.5's comparison: **49 votes
+on how the code is written against 2 on what it does**, for the same money. The arm is
+built to be a fair foil, not a strawman — the vote is over normalised source (comments,
+formatting and import order do not split agreeing candidates) and reports **raw plurality
+mass**, not the Wilson bound invariant #9 requires of the *routing* score, because arm (e)
+crosses no threshold and bounding it below would handicap it for nothing. It never
+consults the verifier to pick a winner; a text vote that peeked at execution would be
+behavioural clustering with extra steps. Both selectors are scored on the **same
+candidates at the same cost**, which isolates the selector rather than the budget, and a
+cluster abstention (nothing survived the ladder) is reported separately rather than scored
+wrong — it is a sound refutation of the whole sample (invariant #4) and an escalation in a
+real cascade.
+
+Records: `results/arm-e-feasibility-n409.json`. Reproduce with `go-cascade
+selfconsistency -records results/s55-fixed.records.execution.json -config
+examples/bench/config.go-specialist-211.json -tau 1,1 -provider=mock` (mock only builds
+the router; nothing is queried). **The paid sampling pass is scoped at $4.12 — the matched
+budget, by construction — and is unrun pending spend approval.**
 
 ## What is NOT established (open, honest)
 
