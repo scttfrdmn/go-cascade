@@ -51,10 +51,22 @@ type SelfConsistencyObs struct {
 	Tier string `json:"tier"`
 	// BudgetUSD is the cascade's realized spend on this problem — the cost arm (e)
 	// was given to match. SpentUSD is what the sampling actually cost, which can
-	// undershoot (the last sample would have exceeded the budget) but must not
+	// undershoot (the next sample would have exceeded the budget) but must not
 	// overshoot, or the arms are not matched.
 	BudgetUSD float64 `json:"budget_usd"`
 	SpentUSD  float64 `json:"spent_usd"`
+	// OverBudgetUSD is any residual overshoot, which is bounded but not zero: a
+	// batch's per-sample cost is only known after it returns, so the final batch can
+	// come in above its estimate. Recorded rather than swallowed — an arm that
+	// quietly outspends the arm it is "matched" to is a rigged comparison, and this
+	// is the number that says whether it did.
+	OverBudgetUSD float64 `json:"over_budget_usd,omitempty"`
+	// SpecUSD is the shared-oracle cost: the spec (and cascade plan, if configured)
+	// this problem needed. Deliberately NOT charged to BudgetUSD — arm (b)'s recorded
+	// spend excludes it too, so charging one arm alone would shift the match by a
+	// constant. Recorded because it is still real money on the bill, and the figure
+	// that gets approved should be the bill rather than the matched portion.
+	SpecUSD float64 `json:"spec_usd"`
 	// Fanout is how many candidates the budget bought. Below calibrate.MinVote the
 	// row is Degenerate: a plurality among two is a coin flip and among one is a
 	// single draw, so such rows must be reported separately rather than pooled.
@@ -103,16 +115,18 @@ func (r *Router) SelfConsistency(ctx context.Context, id, problem string, tierId
 	tier := r.cfg.Tiers[tierIdx]
 	obs := &SelfConsistencyObs{ID: id, Tier: tier.Name, BudgetUSD: budgetUSD}
 
-	spec, err := r.spec(ctx, problem, r.pinnedAPI[id], &Result{})
-	if err != nil {
-		return nil, fmt.Errorf("spec phase: %w", err)
-	}
 	// The spec is the shared oracle every arm is scored against, so its cost is NOT
 	// charged to the budget: arm (b)'s recorded spend excludes it too (Profile
 	// attributes only tier sampling and the plan), and charging it to one arm alone
-	// would make the "matched" budgets differ by a constant.
-
-	plan, _, _, _ := r.cascadePlan(ctx, problem, spec)
+	// would make the "matched" budgets differ by a constant. It is still recorded, in
+	// SpecUSD, because it is real money.
+	specRes := &Result{}
+	spec, err := r.spec(ctx, problem, r.pinnedAPI[id], specRes)
+	if err != nil {
+		return nil, fmt.Errorf("spec phase: %w", err)
+	}
+	plan, _, _, planUSD := r.cascadePlan(ctx, problem, spec)
+	obs.SpecUSD = specRes.Cost.TotalUSD + planUSD
 
 	// One probe sample establishes the per-sample cost for this problem, then the
 	// remaining budget decides the fan-out. Estimating from the recorded mean
@@ -130,20 +144,33 @@ func (r *Router) SelfConsistency(ctx context.Context, id, problem string, tierId
 	}
 	obs.SpentUSD = probe.spent
 
-	want := int(math.Floor(budgetUSD / probe.spent))
-	if want < 1 {
-		want = 1 // the probe is already drawn; reporting a 0-sample arm would be a lie
-	}
+	// Fan-out is sized off the budget remaining after the probe, which is the same
+	// count as floor(budget/unit) — the probe is one of the samples, not an extra.
+	//
+	// The overshoot this arm actually exhibits comes from somewhere else: the probe's
+	// cost is an ESTIMATE of the unit cost, and the remaining samples are drawn in one
+	// batch whose true cost is only known once it returns. Output length varies per
+	// sample, so a batch priced off a cheap probe comes in above budget. Measured live
+	// at 1.7%-17.8% of the matched budget, always upward — because a short probe buys
+	// a larger fan-out AND underprices it, so the two errors compound in the same
+	// direction. That is recorded (OverBudgetUSD) rather than swallowed: an arm that
+	// quietly outspends the arm it is "matched" to is a rigged comparison, and this is
+	// the number that says whether it did. Eliminating it would mean drawing one sample
+	// at a time and re-pricing after each, which serialises ~50 calls per problem for a
+	// few tenths of a cent.
 	cands := probe.cands
-	if want > 1 {
+	if want := int(math.Floor((budgetUSD - probe.spent) / probe.spent)); want > 0 {
 		// Seeds continue from the probe so the extra draws are distinct samples rather
 		// than repeats of seed 0.
-		more, err := r.sampleN(ctx, tierIdx, problem, spec, plan, want-1, 1)
+		more, err := r.sampleN(ctx, tierIdx, problem, spec, plan, want, 1)
 		if err != nil {
 			return nil, err
 		}
 		cands = append(cands, more.cands...)
 		obs.SpentUSD += more.spent
+	}
+	if obs.SpentUSD > budgetUSD {
+		obs.OverBudgetUSD = obs.SpentUSD - budgetUSD
 	}
 	obs.Fanout = len(cands)
 	obs.Degenerate = obs.Fanout < minVote
