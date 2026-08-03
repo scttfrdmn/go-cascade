@@ -149,11 +149,25 @@ a test, but the tests will not catch every way of violating them.
 
 ## Known gaps (contributions welcome)
 
-- **Live evaluation has been run** (17 experiments against Bedrock; see `results/`
-  and paper §5.6). It is **demonstrated, not validated**: n ≤ 64, far below the
-  §5.5 bar of n ≥ 300, on a small non-standard single-file/stdlib benchmark. The
-  full §5.5 experiment (n ≥ 300, standard benchmark, all five arms) remains unrun —
-  that is the open gap, not "no live run." Of the two secondary tests, §5.5(5) (the
+- **§5.5(1) is met (experiment 21).** The paired comparison has been run at **n=409
+  usable on a standard benchmark** (MultiPL-E Go, 488 problems): **execution certifies
+  α=0.084, the judge α=0.226** at δ=0.10 on identical candidates, so the margin *widens*
+  with scale (1.19× at n=28 → 1.58× at n=64 → **2.69×**). Execution sound on
+  **1096/1096** observations. **η_fa measured for the first time: 11/1096**, gradient
+  8/2/1 across cheap/mid/frontier — but the records keep no candidate source, so the
+  defect classes are unrecoverable and the *reading-invisible* mechanism is still
+  argued. **Two n=64 headlines do not survive:** α=0.05 does **not** certify at n=409
+  (floor 0.0538 is real model accuracy, not oracle noise — the n=64 "0/52 errors" was
+  too small a sample to contain the model's errors), and the certifiable-α-vs-cost-win
+  tension **reproduces** (`[1,1]` below α=0.11, `[0.1,1]` and 2.2× cheaper at or above).
+  Prefer the n=409 figure wherever it conflicts with an n≤64 one. **New coverage gap:**
+  MultiPL-E Go has **0 concurrency problems**, so the `-race` rung was never exercised
+  at scale — the 64-problem hand-written set is not obsolete. Still open: arm (e)
+  self-consistency, §5.5(4), single-file/stdlib-only (§5.4).
+- **Earlier live evaluation** (20 experiments against Bedrock; see `results/` and paper
+  §5.6). Those are **demonstrated, not validated**: n ≤ 64, below the §5.5 bar of
+  n ≥ 300, on a small non-standard single-file/stdlib benchmark. Of the two secondary
+  tests, §5.5(5) (the
   §3.7 estimator test) **has** now been run; §5.5(4) (cache-warmth sensitivity) has
   not — and **cannot be run on a benchmark of this construction**. Measured offline for
   $0 (`results/absorption_ceiling.py`, experiment 20): retrieval candidacy 464/488
