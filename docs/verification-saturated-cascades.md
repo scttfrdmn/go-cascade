@@ -37,11 +37,19 @@ cost is approximately $4\times10^{-3}$, and report an implementation
 falsified two of our own design assumptions, which we report as results. We
 conclude with an explicit account of what the artifact establishes and — at
 greater length — what it does not. The body of that account was written before any
-live query; a dated reconciliation (§5.6) then maps seventeen subsequent Bedrock
+live query; a dated reconciliation (§5.6) then maps twenty-one subsequent Bedrock
 runs onto it. In brief: the central comparative claim — that an executable oracle
-certifies materially lower than a judge — is now **demonstrated at n ≤ 64** (α 0.19
-vs 0.30 at n = 64, δ = 0.10) rather than only argued, but **not validated**, the n
-being far below the paper's own n ≥ 300 bar and the benchmark not yet standard.
+certifies materially lower than a judge — is now **measured at the paper's own bar**:
+**α 0.084 versus 0.226** (δ = 0.10, identical candidates) on **n = 409** usable
+problems from a standard benchmark (MultiPL-E Go), where the same comparison at
+n = 64 gave 0.19 versus 0.30. The margin widens with scale, from a factor of 1.6 to
+**2.7**, and the executable oracle agreed with ground truth on **1096 of 1096**
+observations. Two qualifications belong in the same breath: the deployable **α = 0.05
+does not certify** at that n — the binding floor is genuine model accuracy (0.0538),
+and the n = 64 run that did certify rested on a sample too small to contain the errors
+the model makes — and the benchmark contains **no concurrency problems**, so the
+`-race` verifier stage, which caught this study's only confirmed judge
+false-acceptance, was never exercised at scale.
 Every cost-saving figure in the earlier informal treatment of this design remains
 structural estimation rather than measurement, and should still not be cited.
 
@@ -924,24 +932,31 @@ parts of §5.3–§5.4 that remain true; where a limitation still stands, it is 
 here rather than quietly dropped. The pre-live text is left intact above as the
 honest record of what was and was not known before the evaluation.
 
-**The overriding caveat, stated once and load-bearing for everything below.** The
-live calibration sets reached **n = 28 and n = 64** — far below the **n ≥ 300** that
-§5.5(1) names as the bar for an α = 0.05 certificate to *mean* something, and the
-benchmark is still the small, single-file, stdlib-only family §5.3 and §5.4 (external
-validity) criticize, now expanded to 64 problems across three families
-(`problems`/`hard`/`scale`) but not a standard benchmark. **No claim below should be
-read as the §5.5 validation experiment.** What the runs establish is narrower and
-specific: the mechanisms behave on live models the way the design predicts, and two
-of the paper's hedges can be tightened while two others must be *widened*.
+**The overriding caveat, stated once and load-bearing for everything below — and now
+scoped, because one run escapes it.** Experiments 1–20 used live calibration sets of
+**n = 28 and n = 64**, far below the **n ≥ 300** that §5.5(1) names as the bar for an
+α = 0.05 certificate to *mean* something, on the small single-file stdlib-only family
+§5.3 and §5.4 criticize (64 problems across `problems`/`hard`/`scale`, not a standard
+benchmark). **No claim below drawn from those runs should be read as the §5.5 validation
+experiment.** What they establish is narrower and specific: the mechanisms behave on live
+models the way the design predicts, and two of the paper's hedges can be tightened while
+two others must be *widened*.
+
+**Experiment 21 is the exception and does clear §5.5(1)**: n = 409 usable on MultiPL-E Go
+(a standard benchmark), reported at the end of this subsection. Where its figures and an
+n ≤ 64 figure disagree, the n = 409 figure supersedes — and in one case it does, retiring
+the n = 64 "α = 0.05 certifies" result. It carries its own limitation instead: the
+benchmark has **no concurrency problems**, so it exercises the statistics at scale but
+not the `-race` rung.
 
 **§3.1 / §5.3 central comparative claim — now demonstrated at this scale, not merely
 argued.** §5.3 said the claim that an executable oracle certifies lower than a judge
 was "argued analytically (§3.1) but not demonstrated empirically," because arm (c) —
 a judge-scored variant of the identical architecture — had never been run. It has now
 been run on identical candidates (the `--compare` / `--oracle=judge` path). The
-executable oracle certified a strictly lower risk bound than the judge at both scales,
-and the gap widened with n: **α 0.27 vs 0.32 at n = 28; 0.19 vs 0.30 at n = 64**
-(δ = 0.10). β = 0 held on every run — the execution arm's realized (ground-truth)
+executable oracle certified a strictly lower risk bound than the judge at every scale,
+and the gap widened monotonically with n: **α 0.27 vs 0.32 at n = 28; 0.19 vs 0.30 at
+n = 64; 0.084 vs 0.226 at n = 409** (δ = 0.10 throughout). β = 0 held on every run — the execution arm's realized (ground-truth)
 risk equalled its empirical risk every time, so (11)/(12) are not just a construction.
 **Refinement the paper underweights:** the certification gap is driven *mostly by the
 judge's false-rejection rate* (β > 0 inflating its empirical risk), not by the
@@ -1001,16 +1016,60 @@ codes from the plan) was tested with both an Opus and a Haiku planner: it is an
 on every cheap-tier query makes the cascade 2.1–3.1× *pricier* than always-frontier.
 Neither is claimed in §1.2; both are reported so the design space is mapped honestly.
 
-**What still stands from §5.3–§5.5, unchanged.** The n is still far below §5.5(1);
-the benchmark is still not a standard one (HumanEval-Go/MBPP-Go/repo-level unrun);
-§5.4's external-validity restriction to single-file stdlib-only Go is unchanged;
-§5.5(4) (cache-warmth sensitivity, the direct §2.9 test) has **not** been run —
-and see below, it *cannot* be run on a benchmark of this construction.
-Adaptive conformal inference (9), non-nested ordering (§2.6), and boundary
-randomization (§2.4) remain unimplemented. So the correct one-line update to the
-closing sentence of §5.5 is: *arm (c) has now been run at n ≤ 64 and the central
-comparative claim is demonstrated at that scale; the full §5.5 experiment — n ≥ 300 on
-a standard benchmark with all five arms and the two secondary tests — remains unrun.*
+**What still stands from §5.3–§5.5, unchanged.** §5.4's external-validity restriction to
+single-file stdlib-only Go is unchanged; §5.5(4) (cache-warmth sensitivity, the direct
+§2.9 test) has **not** been run — and see below, it *cannot* be run on a benchmark of
+this construction. Adaptive conformal inference (9), non-nested ordering (§2.6), and
+boundary randomization (§2.4) remain unimplemented. Arm (e), self-consistency, is
+unimplemented and unrun. **What no longer stands is the sample-size and
+benchmark-standardness caveat**, which §5.5(1) made the gating one; see immediately
+below. So the correct one-line update to the closing sentence of §5.5 is: *arms (a)–(d)
+have now been run at n = 409 on a standard benchmark and the central comparative claim
+is **measured** at the paper's own bar; arm (e), §5.5(4), and the concurrency coverage
+the benchmark lacks remain open.*
+
+**§5.5(1) has been met, and meeting it costs two earlier headlines**
+(`results/s55-multipl-n409-2026-08-03.md`, 2026-08-03). The paired comparison ran on
+**MultiPL-E Go** (HumanEval-Go + MBPP-Go, 488 problems; **409 usable** after
+oracle-soundness exclusions, 0 contaminated) at δ = 0.10, both arms ruling on an
+identical candidate stream. The executable oracle certifies **α = 0.084**; the judge
+oracle, on the same candidates, only **α = 0.226**. The margin over the judge therefore
+*widens* with scale — a factor of 1.6 at n = 64 becomes **2.7** at n = 409 — which is the
+direction the §3.1 argument predicts and the opposite of what a small-sample artifact
+would do. Soundness held at scale: **1096 of 1096** comparable tier observations agreed
+with execution ground truth (β = 0, zero over-acceptances, zero over-rejections).
+
+The judge's error budget is again dominated by the *safe* direction — 155
+over-rejections against 11 over-acceptances, a ratio of 14 : 1 — so its realized risk
+(0.0587) is *lower* than the empirical risk it certifies against (0.1883), and that
+inflation is the mechanism that pushes its α to 0.226. But **η_fa is now a measured
+quantity rather than a single anecdote**: 11 over-acceptances out of 1096, distributed
+across tiers as 8 (cheap) / 2 (mid) / 1 (frontier). A false-acceptance rate that rises
+as candidate quality falls is exactly the §3.1 hazard. The *mechanism* nevertheless
+remains argued: the records retain per-tier verdicts but not candidate source, so the
+defect class behind each over-acceptance cannot be recovered, and the claim that the
+judge's blind spot is specifically *reading-invisible* code is not confirmed by this run.
+
+Two corrections to §5.6's earlier text. First, **α = 0.05 does not certify at n = 409**.
+The n = 64 pinned run that did certify recorded 0 errors in 52 problems; at 409 problems
+the empirical risk is 0.0538 and the oracle is provably clean, so this is a genuine
+model-accuracy floor rather than the oracle noise that explained away the earlier ~0.11.
+The larger sample is the trustworthy one, and the honest claim is *α ≈ 0.08 certifies,
+α = 0.05 does not.* Second, the **tension between a deployable α and the cost win
+reproduces at 6× the scale** rather than dissolving: certified thresholds are `[1, 1]`
+(full escalation, 1.6× *pricier* than always-frontier) below α = 0.11 and `[0.1, 1]`
+(**2.2× cheaper** than always-frontier at matched risk) at or above it. The transition is
+sharp and sits above the tightest certifiable α.
+
+Finally, a coverage limitation this benchmark introduces and the 64-problem set did not
+have: MultiPL-E Go contains **no concurrency problems at all**, so the `-race` stage —
+the rung that caught this study's only confirmed judge false-acceptance, and the one
+whose cost motivates the AST gate of §4.2 — was never exercised in the only large-n run.
+The n = 409 result validates the statistical machinery at the paper's bar while leaving
+the most expensive verifier stage covered only at n ≤ 64. Exclusions are load-bearing
+here and should be reported with their denominator: the 79 problems the `-refs` gate
+dropped have a **frontier-model risk of 0.785**, so a risk quoted over all 488 (0.176)
+charges the router for oracle defects rather than model errors.
 
 **§5.5(5) has now been run, and it *widens* one caveat while closing another**
 (`results/estimator-test-n64-2026-08-01.md`, 2026-08-01). At n = 64 × 3 tiers, with

@@ -6,7 +6,17 @@ never sent a query to a real model — every number came from the deterministic
 mock. These runs replace that gap with measurements, and with an honest account
 of what they do and do not establish.
 
-**One-line summary:** across nineteen live experiments (plus one decided offline for $0)
+**§5.5(1) is now met.** Experiment 21 ran the paired comparison at **n=409 usable on a
+standard benchmark** (MultiPL-E Go), the bar every earlier run fell short of. The primary
+claim replicates and strengthens — **execution certifies α=0.084, the judge α=0.226**
+(1.6× → **2.7×** the n=64 margin) — execution was sound on **1096/1096** observations,
+and **η_fa is measurable for the first time (11/1096)**. Two earlier headlines do not
+survive the scale-up: **α=0.05 does not certify** at n=409 (the n=64 "0/52 errors" floor
+was a small-sample artifact; the real model-accuracy floor is 0.0538), and the
+certifiable-α-vs-cost-win tension **reproduces** rather than dissolving. Read the rest of
+this file with that correction in mind.
+
+**One-line summary:** across twenty live experiments (plus one decided offline for $0)
 the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
@@ -92,6 +102,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 18 | [plan-once-reuse](plan-once-reuse-2026-08-01.md) | the last untested two-stage variant — **one** plan/query threaded into **every** tier (PR #35), not per-tier | **negative, and it explains why: at 2:1:1 the amortisation the design targets never happens.** Tier-0 accuracy 0.885 ≈ no-plan 0.88 (*below* both per-tier arms — one general plan loses the per-tier specificity that carried the nudge); cost collapses to per-tier's (~2× pricier at certified α=0.15, 1.19× at α≤0.10). Plan-once pays off only if the cheap tier *accepts* (avoiding escalation + plan re-charges), but the 2-sample Wilson ceiling (0.425) is below every certifiable threshold, so tier 0 always escalates and the one plan buys nothing. **Three planner points now close the question: no plan-placement variant reverses "accuracy lever, not cost lever."** Ran clean, no external kill |
 | 19 | [§3.7 estimator test](estimator-test-n64-2026-08-01.md) | the paper's other unrun secondary experiment — is **mutation score M a usable proxy for η_fa** on the *model's* defect distribution? Non-circular: M vs the **generated** suite, correctness vs the **human-authored canonical** suite. **Run twice**: the first pass's canonical oracle ran only its `^TestV` half (40% of tests); figures below are the **full-oracle re-run** (PR #42) | **M is loose by an order of magnitude, and the oracle's real error is over-rejection.** Measured η_fa = **0/145** (95% upper bound **0.020**) while pooled 1−M = **0.1014** predicted **~12** false acceptances (P(0 events \| M tight) ≈ 1×10⁻⁶). So §3.7's "unknown bias" has a measured **direction — conservative**, the safe way for a risk proxy to err; M was never affected by the oracle bug (`Mutate` uses no `-run` filter), so the predicted side is unchanged. But the *discriminative* question is **unresolved**: M spans 0.50–1.00 yet both buckets (M≥0.90 n=96, M<0.90 n=42) have 0 events, so bounds overlap — the 12 lowest-M rows are all canonically **correct** (small mutant pools, timing-dependent mutants), i.e. low M was an artifact, not a signal. Flip side: **4 confirmed false rejections (2.6% of rows with a candidate) vs 0 false acceptances**, plus 40 rows where the ladder left no candidate — a **new** hazard class, "sound-but-stricter-than-canonical", that neither §3 nor the `-refs` gate models, and which costs money not risk. **Two further findings from the re-run:** the corrected oracle produced **3** canonical refutations (all `TestH*` — an off-by-one at `MaxUint64`, an int64 overflow, an input-mutation check) that the 40% oracle called **correct**, so *oracle strength must be recorded, not assumed*; and the two draws agree on only **159/192 rows**, so **rejection-side rates are not stable at n=64** — the asymmetry's direction replicated, its magnitude (11→4) did not. First live proof of the **atomic-checkpoint fix** (PR #39): killed twice, resumed with 0 loss (first pass); re-run finished 64/64 uninterrupted |
 | 20 | [absorption ceiling](absorption-ceiling-2026-08-02.md) | the **last** unrun secondary experiment — §5.5(4) cache-warmth (the direct §2.9 test), scoped at ~$7. Asks first whether the benchmark *can* exhibit the effect | **not runnable here, decided offline for $0 — and the reason is a stronger result than the experiment would have been.** On MultiPL-E Go: retrieval candidacy **464/488 (95.1%)** vs absorption ceiling **2/488 (0.4%)**, three orders of magnitude apart. §2.9's effect is driven by *absorption* (arm zero re-executes — invariant #5), so a 0.4% cache shifts no distribution and the paid run would have reported a **benchmark artifact as a null**. Ceiling is **exact, not sampled**: a differing signature cannot compile, so `manifest.json` reduces 118,828 pairs to 10 ordered transfers, all executed; 4 pass = 2 bidirectional pairs, both **upstream MBPP duplicates**. The finding: at the high end similarity is **anti-correlated** with transferability — the top pairs are *antonyms* (`minimum`~`maximum` **0.949**, the highest of all 118,828; `first_Digit`~`last_Digit`; `even_position`~`odd_position`), and the top same-signature pair `he_56`~`he_61` `CorrectBracketing` (0.836) is **retrieved and refuted** (`<>` vs `()`). **Invariant #5 measured, not asserted.** §2.9 itself is untouched; running §5.5(4) needs **duplicate injection** (absorption as a dial), not a bigger corpus |
+| 21 | [§5.5 at n=409](s55-multipl-n409-2026-08-03.md) | **the §5.5(1) bar itself** — n ≥ 300 on a *standard* benchmark (MultiPL-E Go: HumanEval-Go + MBPP-Go, 488 problems, 409 usable), all arms paired. The one gap between "demonstrated" and "validated" | **the primary claim replicates and the gap nearly triples: execution certifies α=0.084, the judge only α=0.226** (δ=0.10, identical candidates) — vs 0.19/0.30 at n=64, so a factor of 1.6 becomes **2.7**. Execution sound again and now emphatically: **1096/1096** tier observations agree with ground truth, 0 over-accept, 0 over-reject. **η_fa is finally more than one data point — 11/1096 over-acceptances**, with a cheap-tier gradient (small 8, mid 2, large 1) exactly as §3.1 predicts; but the records keep no candidate source, so the *defect classes are unrecoverable* and the reading-invisible mechanism stays **argued, not confirmed**. **α=0.05 does NOT certify here** (floor 0.0538 is genuine model accuracy, not oracle noise) — the n=64 "α=0.05 certifies" was a 0/52 small-sample artifact, and this is the more trustworthy result. Cost tension **reproduces at 6× scale**: `[1,1]` (1.6× pricier than frontier) below α=0.11, `[0.1,1]` (**2.2× cheaper**) at or above it. Exclusions are load-bearing — the 79 dropped have **frontier risk 0.785**. **Coverage gap: 0 concurrency problems, so the `-race` rung never ran.** $8.15, 488/488, no kill |
 
 ### How each run answered the previous one's limitation
 
@@ -213,8 +224,18 @@ underweights, but one that still favours the executable oracle.
 
 ## What is NOT established (open, honest)
 
-- **Deployable-α certification is REACHED (experiments 12–13), and the cost win
-  survives it.** Experiment 8's "α=0.05 is unreachable; the floor is model accuracy
+- **Deployable-α certification was reached at n=64 and does NOT hold at n=409
+  (experiment 21 supersedes 12–13 on this point).** Read the paragraph below as the
+  n=64 story: at n=409 on MultiPL-E Go the lowest certifiable α is **0.084**, not 0.05,
+  and the floor (empirical risk 0.0538) is **genuine model accuracy** — execution's
+  oracle agreed with ground truth on 1096/1096 observations, so there is no noise left
+  to blame. The n=64 result rested on **0/52 errors**, i.e. on a sample too small to
+  contain the errors the model actually makes; at 6× the problems it makes them. The
+  n=409 number is the trustworthy one, and the honest claim is **"α≈0.08 certifies,
+  α=0.05 does not."** The cost tension below also reproduces at n=409 rather than
+  dissolving (`[1,1]` below α=0.11, `[0.1,1]` and a 2.2× win at or above it).
+- **(n=64 history, retained because the mechanism analysis is still correct.)**
+  Experiment 8's "α=0.05 is unreachable; the floor is model accuracy
   (~0.11)" was an artifact of oracle noise. With the `-refs -pin-api` gate removing
   spec-model test noise, the completed n=64 pinned run has genuine model errors
   **0/52** and **certifies α=0.05** (valid=true, 0 empirical risk) — the first
@@ -291,8 +312,18 @@ underweights, but one that still favours the executable oracle.
 - **Judge β depends on the prompt.** The judge ran with "when in doubt, FAIL";
   its false-rejection counts would move under a different operating point. The
   strictness knob exists (`--judge-strictness`) but was only exercised on small n.
-- **Small n throughout.** Every count here has a wide interval. Treat directions,
-  not magnitudes, as the finding.
+- **Small n in experiments 1–20** (n ≤ 64). Those counts have wide intervals; treat
+  directions, not magnitudes, as the finding. **Experiment 21 is the exception** (n=409
+  usable on a standard benchmark) and is where a magnitude can be quoted.
+- **The `-race` rung is untested at scale.** MultiPL-E Go has **0** concurrency problems,
+  so experiment 21 — the only large-n run — never exercised the ladder stage that caught
+  the study's sole confirmed judge over-acceptance. The n=409 result therefore validates
+  the *statistics* at scale while leaving the *most expensive verifier stage* covered only
+  by the 64-problem hand-written set. That set is not obsolete.
+- **η_fa's mechanism is still argued.** Experiment 21 measures 11 over-acceptances but
+  the records store no candidate source, so the defect classes cannot be recovered.
+  "The judge's blind spot is reading-invisible defects" needs a run that retains the
+  accepted program for disagreeing observations — a disk cost, not a money cost.
 
 ## The honesty line this work holds
 
