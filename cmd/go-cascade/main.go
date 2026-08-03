@@ -1187,12 +1187,43 @@ func cmdAbsorption(args []string) error {
 	}
 	printAbsorption(rows, base, *recPath)
 	if *out != "" {
-		if err := writeJSONFile(*out, rows); err != nil {
+		// Wrapped with provenance rather than written as a bare array. A row carries
+		// rho but not the fact that rho was *injected*, and these files outlive the
+		// terminal session that explains them — the caveat has to travel with the
+		// data or someone reads a stipulated rate as an observed one.
+		doc := absorptionDoc{
+			Note: "Absorption is INJECTED, not observed: rho is a dial applied to recorded " +
+				"observations, so these rows measure the certificate's sensitivity to a shift of " +
+				"known shape and size, NOT how any real cache warms. The uniform pattern is a null " +
+				"control and SHOULD show no shift; its largest |risk_gap| is the envelope the " +
+				"selective patterns must exceed to count. Rows with underpowered=true calibrated on " +
+				"too few records for the bound to mean anything — read n_calibration, not risk_gap.",
+			Records:  *recPath,
+			Alpha:    *alpha,
+			Delta:    *delta,
+			Seed:     *seed,
+			MinCalN:  calibrate.MinCalibrationSize(*alpha, *delta),
+			Baseline: base,
+			Rows:     rows,
+		}
+		if err := writeJSONFile(*out, doc); err != nil {
 			return err
 		}
 		fmt.Printf("\nwrote %d sweep rows to %s\n", len(rows), *out)
 	}
 	return nil
+}
+
+// absorptionDoc wraps a sweep with the provenance a bare row array cannot carry.
+type absorptionDoc struct {
+	Note     string                      `json:"_note"`
+	Records  string                      `json:"source_records"`
+	Alpha    float64                     `json:"alpha"`
+	Delta    float64                     `json:"delta"`
+	Seed     uint64                      `json:"seed"`
+	MinCalN  int                         `json:"min_calibration_n"`
+	Baseline *calibrate.Certificate      `json:"unshifted_baseline"`
+	Rows     []calibrate.AbsorptionSweep `json:"rows"`
 }
 
 func printAbsorption(rows []calibrate.AbsorptionSweep, base *calibrate.Certificate, recPath string) {
