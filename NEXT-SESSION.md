@@ -180,14 +180,22 @@ Do not re-derive the backlog from prose here; read the issues.
 
 | # | gap | cost | why it matters |
 |---|-----|------|----------------|
-| [#49](https://github.com/scttfrdmn/go-cascade/issues/49) | Retain candidate source for **disagreeing** observations | free | Unblocks the paper's η_fa *mechanism* claim. 11 events measured, defect classes unrecoverable. ~30 lines in `internal/cascade/judge.go`. **Start here.** |
+| ~~[#49](https://github.com/scttfrdmn/go-cascade/issues/49)~~ | ~~Retain candidate source for **disagreeing** observations~~ | free | **DONE** (PR #55). `TierObs.DisagreementSource` + `results/classify_disagreements.py`. Forensic only — nothing on the acceptance path reads it. |
 | [#50](https://github.com/scttfrdmn/go-cascade/issues/50) | Concurrency coverage — `-race` never fired at large n | **$2–4** | The rung that caught the only confirmed judge over-acceptance was skipped on all 488. |
-| [#51](https://github.com/scttfrdmn/go-cascade/issues/51) | Scar-free race operator | free | Sync-*deletion* leaves a visible scar, so 20/20 measured the wrong class. |
+| ~~[#51](https://github.com/scttfrdmn/go-cascade/issues/51)~~ | ~~Scar-free race operator~~ | free | **GENERATOR DONE**, measurement NOT run. `-seed-kind=scar-free-race`: three operators (RWMutex downgrade, escape past `Unlock`, `defer wg.Wait()`), all validated `-race`-refuted. The **sweep needs #50's problems** — MultiPL-E Go has no concurrency. Loop-var capture is obsolete (Go 1.22 per-iteration vars). |
 | [#52](https://github.com/scttfrdmn/go-cascade/issues/52) | §5.5(4) via **duplicate injection** | free harness | Absorption must become a dial; the corpus cannot supply it. |
 | [#53](https://github.com/scttfrdmn/go-cascade/issues/53) | Arm (e), self-consistency at matched cost | **$6–10** | Last unimplemented arm of §5.5(2). Lowest priority — a comparison arm, not a load-bearing claim. |
 
 #50 and #53 are labelled `needs-spend-approval` and are **filed, not scheduled**.
 **Scope the spend with me first** — I said "not yet" to a live run twice before.
+
+**#49 and #51 are merged, and together they leave exactly one blocker on the η_fa
+mechanism claim: #50.** The forensic field records the programs behind each
+disagreement, and the scar-free generator can now seed the reading-invisible class —
+but neither has produced a measurement, because the only large-n benchmark has zero
+concurrency problems. The next move on the mechanism is the **$2–4 sweep over the 11
+`conc_*`/`hard_conc_*` problems**, comparing scar-free η_fa against the sync-deletion
+20/20. That needs your spend approval.
 
 Two n≤64 questions the n=409 run did *not* settle, and one it did: whether **M ranks**
 candidates by η_fa is **still open** (experiment 19 had no events in either M bucket);

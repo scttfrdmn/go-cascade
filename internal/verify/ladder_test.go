@@ -1,7 +1,11 @@
 package verify
 
 import (
+	"bytes"
 	"context"
+	"go/parser"
+	"go/printer"
+	"go/token"
 	"strings"
 	"testing"
 	"time"
@@ -611,6 +615,304 @@ func TestV_Sum(t *testing.T) {
 		race := ws.run(ctx, 90*time.Second, true, "test", "-race", "-count=3", "./...")
 		if race.Err == nil && !race.TimedOut {
 			t.Errorf("mutant %q passed under -race; RaceKilledMutants must return only race-refuted candidates", m.Desc)
+		}
+		_ = ws.Remove()
+	}
+}
+
+// scarFreeSrc is race-free and exercises all three scar-free operators: an
+// RWMutex write under Lock/Unlock (downgrade), a two-statement critical section
+// (escape), and a wg.Wait() with reads after it (defer).
+const scarFreeSrc = `package solution
+
+import "sync"
+
+// Tally sums xs concurrently and also counts the contributions.
+func Tally(xs []int) (int, int) {
+	parts := make([]int, len(xs))
+	var mu sync.RWMutex
+	var wg sync.WaitGroup
+	count := 0
+	for i := range xs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			mu.Lock()
+			count++
+			parts[i] = xs[i]
+			mu.Unlock()
+		}(i)
+	}
+	wg.Wait()
+	total := 0
+	for _, p := range parts {
+		total += p
+	}
+	return total, count
+}`
+
+const scarFreeVisible = `package solution
+
+import "testing"
+
+func TestV_Tally(t *testing.T) {
+	xs := make([]int, 256)
+	want := 0
+	for i := range xs {
+		xs[i] = i
+		want += i
+	}
+	got, n := Tally(xs)
+	if got != want || n != len(xs) {
+		t.Fatalf("got (%d,%d) want (%d,%d)", got, n, want, len(xs))
+	}
+}`
+
+// The three scar-free operators must all be found, since each targets a
+// different construct and a silently-missing one would shrink the seed set
+// without any test failing.
+func TestScarFreeRaceSitesCoverAllThreeOperators(t *testing.T) {
+	sites, _, _, err := collectScarFreeRaceSites(scarFreeSrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"RLock/RUnlock", "out of the mu critical section", "defer wg.Wait()"} {
+		found := false
+		for _, s := range sites {
+			if strings.Contains(s.desc, want) {
+				found = true
+			}
+		}
+		if !found {
+			var descs []string
+			for _, s := range sites {
+				descs = append(descs, s.desc)
+			}
+			t.Errorf("no site matching %q; got %v", want, descs)
+		}
+	}
+}
+
+// The defining property: every scar-free mutant keeps its synchronization
+// scaffolding intact. Deletion-based mutants fail this by construction, which is
+// precisely why the judge catches them by imbalance rather than by reasoning
+// about interleaving. Asserted on the printed source, since that is what a judge
+// would read.
+func TestScarFreeMutantsKeepScaffoldingBalanced(t *testing.T) {
+	sites, fset, f, err := collectScarFreeRaceSites(scarFreeSrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sites) == 0 {
+		t.Fatal("no scar-free sites; the fixture no longer exercises the operators")
+	}
+	for _, m := range sites {
+		m.apply()
+		var buf bytes.Buffer
+		perr := printer.Fprint(&buf, fset, f)
+		m.revert()
+		if perr != nil {
+			t.Fatalf("%s: print: %v", m.desc, perr)
+		}
+		mutant := buf.String()
+		if _, err := parser.ParseFile(token.NewFileSet(), "m.go", mutant, 0); err != nil {
+			t.Errorf("%s: mutant does not parse: %v", m.desc, err)
+			continue
+		}
+		// Wait survives (possibly deferred), and lock/unlock stay paired: these
+		// are the imbalances a reviewer spots without reasoning about the race.
+		if !strings.Contains(mutant, "wg.Wait()") {
+			t.Errorf("%s: wg.Wait() disappeared — that is a scar\n%s", m.desc, mutant)
+		}
+		if got, want := strings.Count(mutant, "mu.Lock()"), strings.Count(mutant, "mu.Unlock()"); got != want {
+			t.Errorf("%s: %d Lock vs %d Unlock — unbalanced\n%s", m.desc, got, want, mutant)
+		}
+		if got, want := strings.Count(mutant, "mu.RLock()"), strings.Count(mutant, "mu.RUnlock()"); got != want {
+			t.Errorf("%s: %d RLock vs %d RUnlock — unbalanced\n%s", m.desc, got, want, mutant)
+		}
+		if strings.Count(mutant, "wg.Add(1)") != 1 || strings.Count(mutant, "wg.Done()") != 1 {
+			t.Errorf("%s: Add/Done scaffolding altered\n%s", m.desc, mutant)
+		}
+	}
+}
+
+// revert must restore the AST exactly, or later mutants in the same harvest
+// would stack edits and the descriptions would stop matching the programs. The
+// swap operator is the one at risk, since it mutates a slice rather than a field.
+func TestScarFreeRaceSitesRevertCleanly(t *testing.T) {
+	sites, fset, f, err := collectScarFreeRaceSites(scarFreeSrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	print := func() string {
+		var buf bytes.Buffer
+		if err := printer.Fprint(&buf, fset, f); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+	before := print()
+	for _, m := range sites {
+		m.apply()
+		if during := print(); during == before {
+			t.Errorf("%s: apply() changed nothing", m.desc)
+		}
+		m.revert()
+		if after := print(); after != before {
+			t.Errorf("%s: revert() did not restore the source\nwant:\n%s\ngot:\n%s", m.desc, before, after)
+		}
+	}
+}
+
+// A comment inside the statements being reordered is itself a tell (it would end
+// up describing the wrong line), so the escape operator must decline that site
+// rather than emit a mutant with a misplaced comment.
+func TestScarFreeEscapeSkipsCommentedCriticalSection(t *testing.T) {
+	const src = `package solution
+
+import "sync"
+
+func F(xs []int) int {
+	var mu sync.Mutex
+	total, count := 0, 0
+	var wg sync.WaitGroup
+	for _, x := range xs {
+		wg.Add(1)
+		go func(x int) {
+			defer wg.Done()
+			mu.Lock()
+			count++
+			// accumulate under the lock
+			total += x
+			mu.Unlock()
+		}(x)
+	}
+	wg.Wait()
+	_ = count
+	return total
+}`
+	sites, _, _, err := collectScarFreeRaceSites(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range sites {
+		if strings.Contains(s.desc, "out of the") {
+			t.Errorf("emitted a reordering site across a comment: %s", s.desc)
+		}
+	}
+	// The downgrade operator does not move anything, so it must still be offered.
+	found := false
+	for _, s := range sites {
+		if strings.Contains(s.desc, "RLock/RUnlock") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the comment veto should be limited to the reordering operator")
+	}
+}
+
+// A solution with no eligible construct must yield no sites — reported as
+// coverage by the caller, never as a judge result.
+func TestScarFreeRaceSitesEmptyOnSequentialCode(t *testing.T) {
+	sites, _, _, err := collectScarFreeRaceSites(goodSrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sites) != 0 {
+		t.Errorf("sequential code yielded %d scar-free race sites, want 0", len(sites))
+	}
+}
+
+// Go 1.22 made loop variables per-iteration, so the loop-variable-capture
+// operator proposed in results/race-seeded-2026-07-25.md:58-61 no longer races.
+// This pins the fact the operator set relies on: if a future toolchain change
+// made this race again, the operator would be worth adding, and this test is
+// where that would surface.
+func TestLoopVarCaptureDoesNotRaceOnThisToolchain(t *testing.T) {
+	if testing.Short() {
+		t.Skip("executes candidates under -race")
+	}
+	const src = `package solution
+
+import "sync"
+
+// SumParts adds xs concurrently, capturing the loop variable directly.
+func SumParts(xs []int) int {
+	parts := make([]int, len(xs))
+	var wg sync.WaitGroup
+	for i := range xs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			parts[i] = xs[i]
+		}()
+	}
+	wg.Wait()
+	total := 0
+	for _, p := range parts {
+		total += p
+	}
+	return total
+}`
+	const visible = `package solution
+
+import "testing"
+
+func TestV_Sum(t *testing.T) {
+	xs := make([]int, 256)
+	want := 0
+	for i := range xs {
+		xs[i] = i
+		want += i
+	}
+	if got := SumParts(xs); got != want {
+		t.Fatalf("got %d want %d", got, want)
+	}
+}`
+	r := newTestRunner(t)
+	ctx := context.Background()
+	ws, err := r.NewWorkspace(src, visible, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Remove() //nolint:errcheck // scratch dir
+	res := ws.run(ctx, 90*time.Second, true, "test", "-race", "-count=3", "./...")
+	if res.Err != nil || res.TimedOut {
+		t.Errorf("loop-variable capture now races under -race; the operator set should be revisited: %v\n%s",
+			res.Err, res.Output)
+	}
+}
+
+// End to end: the scar-free operators must actually yield mutants that compile
+// and are refuted by the race detector. Without this the operator set could be
+// syntactically valid and behaviourally inert, which is exactly how the
+// loop-variable-capture proposal would have failed silently.
+func TestScarFreeRaceKilledMutantsAreRaceRefuted(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and executes candidates under -race")
+	}
+	r := newTestRunner(t)
+	ctx := context.Background()
+
+	muts, err := ScarFreeRaceKilledMutants(ctx, r, scarFreeSrc, scarFreeVisible, "", 3, 3, 60*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(muts) == 0 {
+		t.Fatal("no scar-free race mutant survived the compile+race filter; the operators are inert")
+	}
+	for _, m := range muts {
+		ws, err := r.NewWorkspace(m.Source, scarFreeVisible, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b := ws.run(ctx, 60*time.Second, false, "build", "./..."); b.Err != nil {
+			t.Errorf("mutant %q does not compile", m.Desc)
+		}
+		race := ws.run(ctx, 90*time.Second, true, "test", "-race", "-count=3", "./...")
+		if race.Err == nil && !race.TimedOut {
+			t.Errorf("mutant %q passed under -race; only race-refuted candidates may be returned", m.Desc)
 		}
 		_ = ws.Remove()
 	}

@@ -300,7 +300,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	judgeStrict := fs.String("judge-strictness", "", "judge PASS/FAIL boundary on doubt: strict|balanced|permissive (default strict)")
 	judgeSweep := fs.Bool("judge-sweep", false, "judge one shared candidate stream at every strictness level to trace the η_fa/β curve")
 	judgeSeed := fs.Int("judge-seed", 0, "seeded dangerous-mode test: judge N known-wrong (killed-mutant) candidates per problem at every strictness level")
-	seedKind := fs.String("seed-kind", "logic", "seeded-defect class: logic (single-edit mutants) or race (sync-deletion mutants, -race-refuted)")
+	seedKind := fs.String("seed-kind", "logic", "seeded-defect class: logic (single-edit mutants), race (sync-deletion, leaves a visible imbalance), or scar-free-race (scaffolding intact, the reading-invisible class)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -375,12 +375,9 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	// models emitting a wrong candidate — wrong candidates are seeded, so η_fa is
 	// directly measurable.
 	if *judgeSeed > 0 {
-		if *seedKind != "logic" && *seedKind != "race" {
-			return fmt.Errorf("unknown -seed-kind %q (want logic or race)", *seedKind)
-		}
-		kind := cascade.SeedLogic
-		if *seedKind == "race" {
-			kind = cascade.SeedRace
+		kind, ok := parseSeedKind(*seedKind)
+		if !ok {
+			return fmt.Errorf("unknown -seed-kind %q (want logic, race, or scar-free-race)", *seedKind)
 		}
 		return runSeededSweep(ctx, cfg, prov, probs, *judgeModel, *judgeSeed, kind)
 	}
@@ -743,6 +740,20 @@ func armRecordPath(recOut, arm string) string {
 // every judged candidate is known-wrong by execution, any PASS is an
 // unambiguous η_fa, and a rate that climbs as the judge loosens is the §3.1
 // danger demonstrated directly rather than left to chance.
+// parseSeedKind maps the -seed-kind flag to a cascade.SeedKind. Split out from
+// the flag handling so the mapping is testable without building a provider.
+func parseSeedKind(s string) (cascade.SeedKind, bool) {
+	switch s {
+	case "logic":
+		return cascade.SeedLogic, true
+	case "race":
+		return cascade.SeedRace, true
+	case "scar-free-race":
+		return cascade.SeedScarFreeRace, true
+	}
+	return cascade.SeedLogic, false
+}
+
 func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider, probs []benchProblem, judgeModel string, nSeed int, seedKind cascade.SeedKind) error {
 	levels := []prompt.JudgeStrictness{prompt.JudgeStrict, prompt.JudgeBalanced, prompt.JudgePermissive}
 	r, err := cascade.New(cfg, prov, nil)
@@ -775,8 +786,8 @@ func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider
 		}
 	}
 
-	fmt.Printf("\nSeeded dangerous-mode test: %d known-wrong candidates from %d problems, judged at each level.\n",
-		totalWrong, usedProblems)
+	fmt.Printf("\nSeeded dangerous-mode test (%s): %d known-wrong candidates from %d problems, judged at each level.\n",
+		seedKindName(seedKind), totalWrong, usedProblems)
 	fmt.Printf("\n%-11s %-8s %-12s %s\n", "strictness", "judged", "false-acc", "η_fa rate")
 	fmt.Println("  " + strings.Repeat("-", 44))
 	for _, lvl := range levels {
@@ -787,11 +798,45 @@ func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider
 		}
 		fmt.Printf("%-11s %-8d %-12d %.3f\n", lvl, t.Judged, t.FalseAccept, rate)
 	}
+	// A zero denominator is a coverage result, not a safety result. Say so
+	// explicitly: the seeded race sweep's whole hazard is reading "0 false
+	// acceptances" off a table where no candidate was ever judged.
+	if totalWrong == 0 {
+		fmt.Printf("\nNO SEEDS: no problem yielded a %s candidate that compiles and is refuted.\n",
+			seedKindName(seedKind))
+		fmt.Println("This measures nothing about the judge — it is a coverage gap in the benchmark or")
+		fmt.Println("the operator set. Do NOT read the zeros above as η_fa = 0.")
+		return nil
+	}
 	fmt.Println("\nEvery candidate is provably wrong (execution refutes it), so every PASS is a")
 	fmt.Println("false acceptance. If the η_fa rate rises as the judge loosens, the §3.1")
 	fmt.Println("dangerous mode is directly demonstrated: a permissive judge certifies code")
 	fmt.Println("the tests reject.")
+	if seedKind == cascade.SeedRace {
+		fmt.Println("\nCAVEAT: sync-DELETION mutants leave a visible imbalance (a WaitGroup with")
+		fmt.Println("Add/Done and no Wait), so a low η_fa here means the judge catches races that")
+		fmt.Println("have a structural tell. Compare against -seed-kind=scar-free-race, which keeps")
+		fmt.Println("the scaffolding intact; that is the reading-invisible class §3.1 is about.")
+	}
+	if seedKind == cascade.SeedScarFreeRace {
+		fmt.Println("\nThese mutants keep every sync call present and paired, so nothing is missing")
+		fmt.Println("on the page. A rate ABOVE the -seed-kind=race rate on the same problems is the")
+		fmt.Println("§3.1 mechanism demonstrated rather than argued.")
+	}
 	return nil
+}
+
+// seedKindName labels the defect class in the report. The class has to appear in
+// the output: a scar-free rate and a sync-deletion rate are not comparable
+// numbers, and an unlabelled table invites pooling them.
+func seedKindName(k cascade.SeedKind) string {
+	switch k {
+	case cascade.SeedRace:
+		return "sync-deletion race"
+	case cascade.SeedScarFreeRace:
+		return "scar-free race"
+	}
+	return "logic"
 }
 
 // runJudgeSweep traces the judge oracle's false-acceptance (η_fa) /
