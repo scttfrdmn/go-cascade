@@ -736,6 +736,13 @@ This makes the statistic monotone in *evidence* rather than in sample luck, so a
 tier that has not earned confidence escalates. Empirical risk fell from 0.278 to
 0.000 on the same data.
 
+The correction has a consequence we then missed for the whole evaluation, and it is
+recorded in §5.6: because the reported score is a lower bound, it never reaches $1.0$,
+and *any* fixed threshold compared against it must sit below the ceiling of the widest
+fan-out in the cascade or it can never fire. Our cache-admission threshold did not, so
+that branch was dead code in every run. Replacing a raw proportion with a bound changes
+what the downstream constants mean; we changed the statistic and left them alone.
+
 The general lesson: (MLR) is not a formality to be assumed. It is a property of a
 specific score that can fail, and when it fails the framework correctly refuses
 to certify rather than silently degrading.
@@ -1146,6 +1153,35 @@ does not weaken the §2.9 correction or the exchangeability requirement it enfor
 says that testing §2.9 empirically requires a **duplicate-injection** stream in which
 absorption is a controlled dial, which is a benchmark-construction problem and remains
 open.
+
+Building that dial surfaced a second, more embarrassing reason §5.5(4) was not runnable,
+and one worth recording because it was invisible to every test in the suite. Admission to
+arm zero compares the routing score against a threshold (`cache_admit_score`), and that
+score is the Wilson lower bound (14) of §4.3, not the raw cluster mass. Its value for a
+*unanimous* tier of $n$ samples is 0.2698 at $n{=}1$, 0.4249 at $n{=}2$ and 0.6488 at
+$n{=}5$ — the same table §4.3 gives — while the shipped threshold was 0.90, which
+requires $n{=}25$. Every configuration used in this section runs a fan-out of 1–5, so the
+admission branch was **unreachable** and the solutions layer of arm zero held no entry in
+any run reported here. Nothing failed, because an empty cache escalates and that is
+indistinguishable from a cold one.
+
+No number in this section changes: calibration runs bypass the cache by construction
+(§2.9), so every records file has zero cache hits, and the spec/failure layers are keyed
+exactly rather than score-gated. What it invalidates is the *readiness* of the §5.5(4)
+harness — a paid run through that configuration would have reported a null from a setup
+that could not exhibit the effect, which is the failure mode this experiment was designed
+to avoid, one layer further down. The default is now derived from the cascade's narrowest
+fan-out rather than fixed, and a threshold no tier can attain is rejected at
+configuration time. It cannot be keyed to the *widest* fan-out, which is the natural
+reflex: acceptance predominantly occurs at the final tier, which is simultaneously the
+narrowest and the one carrying no threshold at all — the calibrated vector is
+$(\tau_1,\dots,\tau_{K-1})$, so tier $K$ accepts unconditionally (§2.5) — and so a higher
+bar admits nothing on precisely the fully-escalated queries where reuse has value.
+Admitting on weak evidence is sound regardless: the gate $g$ of Proposition 3 (§2.8) is
+sound because it re-executes, not because the score is high, so a weak entry costs a
+wasted verification and adds no risk term. The corollary is that admission cannot be
+uniformly "stricter than acceptance", as we had described it — tier $K$ accepts
+unconditionally, and nothing is stricter than that.
 
 ---
 

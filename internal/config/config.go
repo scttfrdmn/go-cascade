@@ -10,8 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"time"
+
+	"github.com/scttfrdmn/go-cascade/internal/cluster"
 )
 
 // Tier is one rung of the model cascade. Costs are in USD per million tokens.
@@ -148,6 +151,12 @@ type Config struct {
 // Verify against your account with `go-cascade models`, which calls
 // ListInferenceProfiles, and override with --tier-model or a config file.
 func Default() *Config {
+	c := defaults()
+	c.CacheAdmitAt = c.DefaultAdmitScore()
+	return c
+}
+
+func defaults() *Config {
 	return &Config{
 		Region: "us-west-2",
 		Tiers: []Tier{
@@ -180,10 +189,19 @@ func Default() *Config {
 		Mutants:     24,
 		StdlibOnly:  true,
 
-		CacheDir:     defaultCacheDir(),
-		CacheTopK:    5,
-		CacheMinSim:  0.35,
-		CacheAdmitAt: 0.90,
+		CacheDir:    defaultCacheDir(),
+		CacheTopK:   5,
+		CacheMinSim: 0.35,
+		// Admission has a ceiling, and the old default of 0.90 was above it. The
+		// routing score is a Wilson lower bound, not raw cluster mass (invariant #9),
+		// so a *unanimous* tier of n samples reports 0.2698 at n=1 and 0.6488 at n=5,
+		// never 1.0 — which silently made PutSolution unreachable and the arm-zero
+		// solutions layer dead in every experiment in results/. Nothing failed: an
+		// empty cache just escalates, indistinguishable from a cold one.
+		//
+		// Derived, not fixed: see DefaultAdmitScore (and Load, for a config file that
+		// replaces the tiers). Validate rejects an explicit value no tier can reach.
+		CacheAdmitAt: 0, // set by Default(), from the tiers just defined
 		ShadowRate:   0.05,
 
 		ThresholdsPath: "thresholds.json",
@@ -249,7 +267,103 @@ func (c *Config) Validate() error {
 				i, t.Name)
 		}
 	}
-	return nil
+	return c.checkAdmissionReachable()
+}
+
+// MaxAttainableScore is the largest routing score this config can ever produce:
+// the Wilson lower bound of a *unanimous* tier, maximised over tiers.
+//
+// The routing score is a lower confidence bound, not the raw cluster mass
+// (invariant #9), so it is strictly below 1 at every finite sample count and is
+// bounded by the widest fan-out in the cascade. That makes any threshold
+// comparison against it checkable in advance, rather than only observable as an
+// event that never happens.
+func (c *Config) MaxAttainableScore() float64 {
+	best := 0.0
+	for _, t := range c.Tiers {
+		if s := cluster.UnanimousScore(t.Samples); s > best {
+			best = s
+		}
+	}
+	return best
+}
+
+// DefaultAdmitScore is unanimity at the *narrowest* fan-out in the cascade.
+//
+// The tempting choice is the widest fan-out, but it is wrong, and the way it is
+// wrong is instructive. Acceptance most often lands on the *final* tier — which is
+// both the narrowest (typically one sample) and the one with no threshold at all,
+// by construction (invariant #6). Keying admission to the widest tier's ceiling
+// therefore admits nothing whenever the cascade escalates all the way, which is
+// exactly the case where a cached solution would have paid for itself. Observed on
+// the mock cascade: tiers [5,2,1] escalate to "large" and accept at 0.2698, against
+// a widest-fan-out ceiling of 0.6488.
+//
+// So the floor over tiers is the only setting under which every tier can admit on
+// unanimity. Admitting on thin evidence is safe here in a way it would not be on
+// the acceptance path: a retrieved solution is re-executed against the new query's
+// tests (invariant #5), so a weak admission costs one wasted verification, never a
+// wrong answer. Retrieval quality is a cost question, not a risk one.
+//
+// The corollary is worth stating plainly, because README once claimed otherwise:
+// admission cannot be uniformly "stricter than acceptance". The final tier accepts
+// unconditionally, so nothing is stricter than that.
+func (c *Config) DefaultAdmitScore() float64 {
+	narrowest := 0
+	for _, t := range c.Tiers {
+		if narrowest == 0 || t.Samples < narrowest {
+			narrowest = t.Samples
+		}
+	}
+	return cluster.UnanimousScore(narrowest)
+}
+
+// checkAdmissionReachable rejects a config whose cache_admit_score exceeds the
+// highest routing score the cascade can attain, because the solutions layer of
+// the cache would then never be written and arm zero could never hit.
+//
+// This is not hypothetical, and it is why the default is now derived rather than
+// fixed. Every config in examples/bench uses a fan-out of 1-5, whose unanimous
+// Wilson bounds are 0.2698-0.6488, against the former default cache_admit_score
+// of 0.90 — so the PutSolution call in Router.finish was unreachable in all of
+// them and the arm-zero *solutions* layer was dead in every live experiment in
+// results/. Nothing failed: an empty cache simply escalates, which is
+// indistinguishable from a cold one. The spec and failure layers are unaffected —
+// they are keyed exactly and not score-gated — which is why the measured
+// spec-cache saving is real while solution reuse was not.
+//
+// Rejecting up front rather than warning is deliberate and matches the
+// invariant #3 checks above: a silently unreachable threshold turns §5.5(4)'s
+// absorption dial into a no-op, and a measurement taken through it would report
+// "no §2.9 effect" from a configuration that cannot exhibit one. Only an
+// *explicit* over-tight value can now reach this error, since an unset one is
+// derived from the tiers.
+func (c *Config) checkAdmissionReachable() error {
+	// A disabled cache has no admission to reach, and an ungated one admits
+	// everything; neither is the misconfiguration this guards against.
+	if c.CacheDir == "" || c.CacheAdmitAt <= 0 {
+		return nil
+	}
+	best := c.MaxAttainableScore()
+	if c.CacheAdmitAt <= best {
+		return nil
+	}
+	widest := 0
+	for _, t := range c.Tiers {
+		if t.Samples > widest {
+			widest = t.Samples
+		}
+	}
+	// Truncate rather than round the suggested replacement. best is an irrational
+	// bound (0.4249871... at n=2), and %.3f would round it *up* to 0.425 — a value
+	// that fails this very check, so the remedy the error suggests would not work.
+	suggest := math.Floor(best*1000) / 1000
+	return fmt.Errorf("cache_admit_score %v exceeds the highest attainable routing score %.4f "+
+		"(widest fan-out is %d samples, and the score is a Wilson lower bound, not raw cluster mass "+
+		"— invariant #9), so no solution could ever be admitted and arm zero would never hit. Lower "+
+		"cache_admit_score to <= %.3f, raise samples to >= %d in some tier, or set cache_dir to \"\" "+
+		"to disable the cache deliberately",
+		c.CacheAdmitAt, best, widest, suggest, cluster.MinSamplesFor(c.CacheAdmitAt))
 }
 
 // TwoStage reports whether a single planner call runs for the whole cascade.
@@ -270,14 +384,24 @@ func (c *Config) PlannerCost(inTok, outTok int) float64 {
 }
 
 // Load reads a JSON config file over the defaults.
+//
+// cache_admit_score is derived, not a constant: the default is unanimity for the
+// widest fan-out, so a file that replaces "tiers" without naming an admit score
+// gets the ceiling for *its* tiers rather than the one for Default()'s. Unmarshal
+// alone cannot express that — an absent key and an explicit 0 are the same zero
+// value — so the field is zeroed before decoding and re-derived if still zero.
 func Load(path string) (*Config, error) {
 	c := Default()
+	c.CacheAdmitAt = 0
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal(b, c); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if c.CacheAdmitAt == 0 {
+		c.CacheAdmitAt = c.DefaultAdmitScore()
 	}
 	return c, nil
 }

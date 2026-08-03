@@ -126,9 +126,17 @@ func (c *Cache) GetSpec(problemHash string) (*Spec, bool) {
 	return &s, true
 }
 
-// PutSolution admits a solution. Admission is deliberately stricter than the
-// acceptance threshold: an entry that will be reused many times should clear a
-// higher bar than one that is returned once.
+// PutSolution admits a solution. The caller gates the call on
+// Config.CacheAdmitAt; this only writes.
+//
+// Admission is not uniformly "stricter than acceptance" — the final tier accepts
+// unconditionally, so nothing is stricter than that, and the score being compared
+// is a Wilson lower bound rather than raw mass (invariant #9), which caps how
+// strict the gate can be at all. See config.DefaultAdmitScore.
+//
+// Admitting on thin evidence is safe regardless: Retrieve's callers re-execute
+// every hit against the new query's tests (invariant #5), so a weak entry costs a
+// wasted verification, never a wrong answer.
 func (c *Cache) PutSolution(e Entry) error {
 	if c.disabled {
 		return nil

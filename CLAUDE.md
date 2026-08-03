@@ -89,7 +89,18 @@ a test, but the tests will not catch every way of violating them.
 5. **Cache hits are verified, never predicted.** A retrieved solution is
    re-executed against the *new* query's tests. Do not add a similarity
    threshold that returns a cached answer without running it. Retrieval quality
-   affects only how often the cache is worth consulting.
+   affects only how often the cache is worth consulting. *Corollary:* because every
+   hit is re-executed, admitting on thin evidence is a **cost** question, not a risk
+   one — which is why `cache_admit_score` defaults to unanimity at the *narrowest*
+   fan-out (`config.DefaultAdmitScore`) and not to something impressive-looking.
+   `res.Score` is a Wilson lower bound (invariant #9), so it never reaches 1.0: the
+   old default of 0.90 was above the ceiling of every shipped fan-out, `PutSolution`
+   was unreachable, and the solutions layer was dead for 21 experiments with nothing
+   failing — an empty cache escalates, indistinguishable from a cold one.
+   `Config.Validate` now rejects an unreachable threshold. Do not raise
+   `cache_admit_score` past what a tier can actually score, and do not key it to the
+   *widest* fan-out: acceptance usually lands on the final tier, which is the
+   narrowest and has no threshold at all (invariant #6).
 
 6. **Never claim certification without a valid certificate.** `Result.Certified`
    comes from `Router.calibrated()`, which requires a loaded certificate with
@@ -113,6 +124,13 @@ a test, but the tests will not catch every way of violating them.
 
 ## Gotchas discovered the hard way
 
+- **A threshold compared against a bounded statistic needs its ceiling checked.**
+  Swapping raw cluster mass for a Wilson lower bound (§4.3) made the score
+  never reach 1.0, and every constant compared against it kept its old meaning. The
+  cache-admission threshold silently became unsatisfiable. There is no test that
+  fails for this: the gated branch just never runs. If you add a threshold on
+  `res.Score`, compute the reachable ceiling (`cluster.UnanimousScore`) and assert
+  the gated effect actually happens end-to-end, not merely that the code compiles.
 - **`go build` does not compile `_test.go` files.** A solution/oracle signature
   mismatch survives the build stage and is caught by `go vet`. That is why vet is
   in the ladder at all.

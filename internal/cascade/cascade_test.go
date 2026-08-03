@@ -271,6 +271,37 @@ func TestSpecCacheReducesCost(t *testing.T) {
 	}
 }
 
+// The solutions layer must actually fill. This is the regression that motivated
+// Config.checkAdmissionReachable: the shipped cache_admit_score of 0.90 sat above
+// the unanimity ceiling of every shipped fan-out (0.2698 at n=1, 0.6488 at n=5),
+// because the routing score is a Wilson lower bound and not raw cluster mass
+// (invariant #9). So Router.finish never reached PutSolution and the arm-zero
+// solutions layer was dead in every experiment in results/ — and *nothing failed*,
+// because an empty cache simply escalates, which is indistinguishable from a cold
+// one. Only an end-to-end assertion on the admitted count catches that.
+func TestSolutionsLayerIsActuallyReachable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	if cfg.CacheAdmitAt > cfg.MaxAttainableScore() {
+		t.Fatalf("cache_admit_score %v exceeds the attainable %v before the run even starts",
+			cfg.CacheAdmitAt, cfg.MaxAttainableScore())
+	}
+	r := newRouter(t, cfg, nil)
+	res, err := r.Solve(context.Background(), seqProblem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Solved {
+		t.Fatalf("nothing survived; trace: %+v", res.Trace)
+	}
+	if got := r.cache.Stats().Solutions; got == 0 {
+		t.Errorf("solved at score %v with cache_admit_score %v, but 0 solutions were admitted; "+
+			"the solutions layer is unreachable", res.Score, cfg.CacheAdmitAt)
+	}
+}
+
 func TestDisabledCacheStillSolves(t *testing.T) {
 	if testing.Short() {
 		t.Skip("compiles and runs candidates")
