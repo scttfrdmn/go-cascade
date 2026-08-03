@@ -33,7 +33,7 @@ risk budget rather than an uncontrolled error source in front of it.
 
 We instantiate the design for Go, where the ratio of verification cost to model
 cost is approximately $4\times10^{-3}$, and report an implementation
-(`gocascade`, 4,328 lines) with measured per-stage costs. Building the system
+(`gocascade`, ~11,000 lines) with measured per-stage costs. Building the system
 falsified two of our own design assumptions, which we report as results. We
 conclude with an explicit account of what the artifact establishes and — at
 greater length — what it does not. The body of that account was written before any
@@ -664,7 +664,7 @@ comparisons between suites on the same program are.
 
 ### 4.1 Architecture
 
-`gocascade` — 4,328 lines of Go excluding tests, 1,214 lines of tests, Go 1.26,
+`gocascade` — ~11,000 lines of Go excluding tests, ~9,900 lines of tests, Go 1.26,
 AWS Bedrock via the Converse API.
 
 ```
