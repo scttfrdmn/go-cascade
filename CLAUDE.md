@@ -219,8 +219,15 @@ a test, but the tests will not catch every way of violating them.
   0.7439 across all rates, noise in both directions). #52's own framing — inject exact
   duplicates uniformly at random — would have measured nothing and reported it as
   evidence about §2.9. `AbsorbUniform` therefore ships as an explicit **null control**,
-  and its max |gap| (0.0267) is the envelope the selective rows are read against; ρ=0.2
-  does *not* clear it. Do not delete the uniform arm as redundant — it is the yardstick.
+  and its envelope is the yardstick the selective rows are read against. **Measure that
+  envelope over seeds, not from one sweep**: easy-first is a sort and so seed-exact, but
+  the uniform draw is random, and 10 seeds × 4 rates gives max |gap| **0.0389** where a
+  single sweep showed 0.0267 — enough to move the ρ=0.4 verdict. By the honest envelope
+  the effect holds at **ρ ≥ 0.6**, not ρ ≥ 0.4. Do not delete the uniform arm as
+  redundant: the control's spread, not the treatment's magnitude, sets the bar. That
+  estimate is `EstimateNullEnvelope` (`-null-seeds`, default 10) and it ships *inside*
+  the output — a bar left to the reader gets compared against one draw of the control.
+  Exclude underpowered and uncertified rows from it, or trap (c) inflates the yardstick.
   **(b) `Calibrate` prefers the shadow subset of whatever it is handed**, and every
   profiled record has `Shadow: true` (invariant #8). Left set, that preference fires on
   *both* arms and makes the uncorrected arm silently identical to the corrected one —

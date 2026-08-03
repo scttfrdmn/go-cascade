@@ -491,3 +491,160 @@ func TestShadowDrawDoesNotSelectOnDifficulty(t *testing.T) {
 		t.Errorf("a vanishing epsilon drew %d records, want the 1-record minimum", got)
 	}
 }
+
+// The asymmetry that makes the null envelope a per-seed quantity: ordering by difficulty
+// is a sort, so the selective patterns are byte-identical across seeds, while the uniform
+// draw is random and its risk gap moves. Consequence for anyone reading a sweep: a
+// selective row's magnitude is exact, but the *control* it must beat has to be estimated
+// over seeds. Quoting one sweep's max |gap| understates the envelope — measured at n=409,
+// 0.0267 from a single seed against 0.0389 over ten, which is enough to flip the rho=0.4
+// verdict. If this test ever fails because a selective pattern became seed-dependent, the
+// published envelope has to be re-derived.
+func TestSelectivePatternsAreSeedExactAndUniformIsNot(t *testing.T) {
+	recs := synthMix(240, 60, 100)
+	for _, pat := range []AbsorptionPattern{AbsorbEasyFirst, AbsorbCheapAccept} {
+		var first []string
+		for _, seed := range []uint64{1, 7, 99, 12345} {
+			opts := defaultOpts()
+			opts.Seed = seed
+			opts.TauForCheapAccept = []float64{0.5, 0}
+			res, _, err := absorb(recs, pat, 0.5, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ids := make([]string, len(res))
+			for i, r := range res {
+				ids[i] = r.ID
+			}
+			if first == nil {
+				first = ids
+				continue
+			}
+			if len(ids) != len(first) {
+				t.Fatalf("%s: seed %d gave %d records, want %d", pat, seed, len(ids), len(first))
+			}
+			for i := range ids {
+				if ids[i] != first[i] {
+					t.Fatalf("%s: seed %d changed the residual at %d (%s vs %s); a difficulty sort "+
+						"must not depend on the seed", pat, seed, i, ids[i], first[i])
+				}
+			}
+		}
+	}
+	// Uniform must vary, or the null envelope would be a single number and there would
+	// be nothing to estimate over seeds.
+	seen := map[string]bool{}
+	for _, seed := range []uint64{1, 7, 99, 12345} {
+		opts := defaultOpts()
+		opts.Seed = seed
+		res, _, err := absorb(recs, AbsorbUniform, 0.5, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		key := ""
+		for _, r := range res {
+			key += r.ID + ","
+		}
+		seen[key] = true
+	}
+	if len(seen) < 2 {
+		t.Error("the uniform residual was identical across 4 seeds; the draw is not random, " +
+			"so the null envelope cannot be estimated and the seed is inert")
+	}
+}
+
+// The envelope must be a multi-seed quantity, and it must be at least as wide as any
+// single sweep's — that is the whole point of computing it. A one-seed envelope is the
+// bug this function exists to prevent, so the test asserts the estimate dominates a
+// particular draw rather than merely that it is non-zero.
+func TestNullEnvelopeIsWiderThanASingleSweep(t *testing.T) {
+	// The hard class is the irreducible floor, so it has to sit *under* alpha or nothing
+	// certifies, the envelope has zero draws, and the test asserts nothing.
+	recs := synthMix(320, 60, 20)
+	opts := defaultOpts()
+	opts.Rhos = []float64{0, 0.2, 0.4, 0.6}
+	opts.Epsilons = []float64{0}
+	opts.Patterns = []AbsorptionPattern{AbsorbUniform}
+
+	env, err := EstimateNullEnvelope(recs, opts, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env == nil || env.NDraw == 0 {
+		t.Fatal("no certified draws in the envelope; it would report a bar of 0 and every " +
+			"selective row would clear it trivially")
+	}
+	if len(env.Seeds) != 8 {
+		t.Errorf("envelope used %d seeds, want 8", len(env.Seeds))
+	}
+	// rho = 0 is the identity and contributes no sampling spread, so admitting it would
+	// only drag the mean down and misstate how unusual the max is.
+	for _, r := range env.Rhos {
+		if r == 0 {
+			t.Error("rho=0 entered the envelope; the identity transform is not a null draw")
+		}
+	}
+	if env.MeanAbsGap > env.MaxAbsGap {
+		t.Errorf("mean |gap| %.4f exceeds max %.4f", env.MeanAbsGap, env.MaxAbsGap)
+	}
+
+	// Any individual seed's sweep must be bounded by the estimate. If it is not, the
+	// envelope is being computed over a different grid than it claims and a published
+	// bar would be too narrow for the rows it is used to judge.
+	for _, seed := range env.Seeds {
+		one := opts
+		one.Seed = seed
+		one.Rhos = env.Rhos
+		rows, err := SweepAbsorption(recs, one)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			if row.Underpowered || !row.Certified {
+				continue
+			}
+			if g := math.Abs(row.RiskGap); g > env.MaxAbsGap+1e-12 {
+				t.Errorf("seed %d rho %.2f gap %.4f exceeds the envelope %.4f it is supposed to bound",
+					seed, row.Rho, g, env.MaxAbsGap)
+			}
+		}
+	}
+}
+
+// Determinism, so a published envelope is reproducible from the command that printed
+// it. The seeds are derived from opts.Seed rather than drawn, precisely so a reader can
+// re-derive the number rather than take it on faith.
+func TestNullEnvelopeIsDeterministicAndSeedDependent(t *testing.T) {
+	recs := synthMix(320, 60, 20)
+	opts := defaultOpts()
+	opts.Rhos = []float64{0.2, 0.4, 0.6}
+	opts.Epsilons = []float64{0}
+
+	a, err := EstimateNullEnvelope(recs, opts, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := EstimateNullEnvelope(recs, opts, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.MaxAbsGap != b.MaxAbsGap || a.MeanAbsGap != b.MeanAbsGap {
+		t.Errorf("two runs at the same seed disagree: %v vs %v", a, b)
+	}
+
+	opts.Seed = 99
+	c, err := EstimateNullEnvelope(recs, opts, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Seeds[0] == a.Seeds[0] {
+		t.Error("changing opts.Seed did not change the derived seeds; the envelope would be " +
+			"the same 6 draws forever and its width could not be probed")
+	}
+
+	// Zero seeds is "skip", not "an envelope of 0" — a bar of zero would mark every
+	// selective row significant, which is the opposite of the control's purpose.
+	if env, err := EstimateNullEnvelope(recs, opts, 0); err != nil || env != nil {
+		t.Errorf("nSeeds=0 returned (%v, %v), want (nil, nil) so callers can omit the bar", env, err)
+	}
+}

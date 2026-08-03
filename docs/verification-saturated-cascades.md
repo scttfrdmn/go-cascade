@@ -1205,12 +1205,22 @@ count.
 
 Calibrating on the full sample and deploying on the residual — the error §2.9 describes —
 makes the certificate optimistic monotonically in $\rho$: the realized-minus-empirical
-risk gap is $+0.0147$, $+0.0352$, $+0.0755$, $+0.1486$ at the four rates, against a null
-envelope of 0.0267 (the largest absolute gap over all uniform rows). At $\rho = 0.6$ the
-certificate carries $\alpha = 0.10$ and delivers 0.134: not a loose bound but a violated
-one. Absorbing what the *policy* served rather than what an oracle calls easy reproduces
-it ($+0.0117$ to $+0.1364$). Read honestly, $\rho = 0.2$ does not clear the null
-envelope, so on this corpus the effect emerges near 40% absorption rather than at 20%.
+risk gap is $+0.0147$, $+0.0352$, $+0.0755$, $+0.1486$ at the four rates. At $\rho = 0.6$
+the certificate carries $\alpha = 0.10$ and delivers 0.134: not a loose bound but a
+violated one. Absorbing what the *policy* served rather than what an oracle calls easy
+reproduces it ($+0.0117$ to $+0.1364$).
+
+The comparison requires a null envelope, and the envelope must be estimated over
+**seeds** rather than read off a single sweep. The selective patterns are deterministic —
+ordering by difficulty is a sort — but the uniform draw is not, so one run's largest gap
+understates the noise it is meant to bound. Over 10 seeds at the four rates (40 draws) the
+uniform envelope is $\max |{\rm gap}| = 0.0389$ with mean $0.0113$, against 0.0267 from
+the single sweep. By the honest envelope the effect is established at $\rho \ge 0.6$; the
+gaps at $\rho = 0.2$ and $\rho = 0.4$ do **not** clear it. That the control moves while
+the treatment does not is the whole reason to keep the control arm: its spread, not the
+treatment's magnitude, is what sets the bar — so the estimate is computed by the tool
+itself and travels with the rows, rather than being left to a reader who would otherwise
+compare a treatment row against one draw of the control.
 
 The correction behaves as §2.9 predicts, though not in the form one might expect. The
 cleanest comparison holds sample size *fixed*: at $\varepsilon = 1$ and $\rho = 0.2$ all

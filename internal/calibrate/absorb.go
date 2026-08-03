@@ -60,8 +60,12 @@ import (
 // about is real and large, but only under a head-shaped filter.
 //
 // The uniform arm is therefore not redundant: its spread is the null envelope every
-// selective row is read against (max |risk gap| 0.0267 at n=409), and by that yardstick
-// rho = 0.2 does not clear it. Do not drop it as a no-op arm.
+// selective row is read against. Estimate that envelope over SEEDS, not from a single
+// sweep — the selective patterns are sorts and so seed-exact, but the uniform draw is
+// random, and 10 seeds at 4 rates give max |risk gap| 0.0389 where one sweep showed
+// 0.0267. The difference moves a verdict: by the honest envelope the shift is
+// established at rho >= 0.6, not rho >= 0.4. Do not drop this arm as a no-op; the
+// control's spread, not the treatment's magnitude, is what sets the bar.
 type AbsorptionPattern string
 
 const (
@@ -260,6 +264,95 @@ func SweepAbsorption(recs []Record, opts AbsorptionOptions) ([]AbsorptionSweep, 
 		}
 	}
 	return out, nil
+}
+
+// NullEnvelope is the spread of the uniform (null) arm over several seeds. It is
+// the yardstick every selective row is read against: a selective |risk_gap| that
+// does not exceed MaxAbsGap is indistinguishable from sample loss.
+type NullEnvelope struct {
+	Seeds []uint64  `json:"seeds"`
+	Rhos  []float64 `json:"rhos"`
+	NDraw int       `json:"n_draws"`
+	// MaxAbsGap is the largest |risk_gap| the null arm produced anywhere in the
+	// sweep, and MeanAbsGap its average. Max is the honest bar; mean is context for
+	// how unusual the max is.
+	MaxAbsGap  float64 `json:"max_abs_gap"`
+	MeanAbsGap float64 `json:"mean_abs_gap"`
+	AtRho      float64 `json:"max_at_rho"`
+	AtSeed     uint64  `json:"max_at_seed"`
+}
+
+// EstimateNullEnvelope sweeps the uniform pattern over several seeds and reports
+// the spread of its risk gap.
+//
+// One sweep is not enough, and the reason is asymmetric: the selective patterns are
+// sorts, so they are seed-*exact* — easy-first at a given rho returns the identical
+// residual for every seed — while the uniform pattern is a random draw and moves.
+// Estimating the null envelope from a single sweep therefore understates it, and on
+// the n=409 records it understated it enough to move a verdict: one seed gives max
+// |gap| 0.0267, ten give 0.0389, and the difference is exactly the band in which
+// rho=0.4's +0.0352 sits. That the control moves while the treatment does not is the
+// whole reason to keep the control arm — its spread, not the treatment's magnitude,
+// is what sets the bar.
+//
+// Only the uncorrected arm (epsilon = 0) is swept, because that is the arm the
+// selective gaps being judged come from. Seeds are derived deterministically from
+// opts.Seed so a published envelope is reproducible from the command that printed it.
+func EstimateNullEnvelope(recs []Record, opts AbsorptionOptions, nSeeds int) (*NullEnvelope, error) {
+	if nSeeds <= 0 {
+		return nil, nil
+	}
+	var rhos []float64
+	for _, r := range opts.Rhos {
+		// rho = 0 is the identity, so it contributes no information about sampling
+		// spread and would only dilute the mean.
+		if r > 0 {
+			rhos = append(rhos, r)
+		}
+	}
+	if len(rhos) == 0 {
+		return nil, nil
+	}
+
+	env := &NullEnvelope{Rhos: rhos}
+	s := opts.Seed | 1
+	var total float64
+	for range nSeeds {
+		s += 0x9e3779b97f4a7c15
+		z := s
+		z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+		z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+		z ^= z >> 31
+		env.Seeds = append(env.Seeds, z)
+
+		sub := opts
+		sub.Seed = z
+		sub.Rhos = rhos
+		sub.Epsilons = []float64{0}
+		sub.Patterns = []AbsorptionPattern{AbsorbUniform}
+		rows, err := SweepAbsorption(recs, sub)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			// An underpowered row's gap is sample-size noise rather than null
+			// variation, so admitting it would inflate the very envelope it is
+			// supposed to calibrate.
+			if row.Underpowered || !row.Certified {
+				continue
+			}
+			g := math.Abs(row.RiskGap)
+			env.NDraw++
+			total += g
+			if g > env.MaxAbsGap {
+				env.MaxAbsGap, env.AtRho, env.AtSeed = g, row.Rho, z
+			}
+		}
+	}
+	if env.NDraw > 0 {
+		env.MeanAbsGap = total / float64(env.NDraw)
+	}
+	return env, nil
 }
 
 // absorb removes a rho fraction of recs according to pattern, returning the

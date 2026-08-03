@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -1113,6 +1114,7 @@ func cmdAbsorption(args []string) error {
 	epsilons := fs.String("epsilon", "0,0.05,0.20", "shadow-sampling rates to sweep; 0 is the uncorrected arm")
 	patterns := fs.String("pattern", "uniform,easy-first,cheap-accept", "absorption patterns: uniform, easy-first, cheap-accept")
 	seed := fs.Uint64("seed", 1, "seed for the uniform pattern and the shadow draw")
+	nullSeeds := fs.Int("null-seeds", 10, "seeds used to estimate the uniform null envelope; 0 skips it")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1175,17 +1177,28 @@ func cmdAbsorption(args []string) error {
 		return fmt.Errorf("baseline certificate over the unshifted records: %w", err)
 	}
 
-	rows, err := calibrate.SweepAbsorption(recs, calibrate.AbsorptionOptions{
+	sweepOpts := calibrate.AbsorptionOptions{
 		Rhos: rs, Epsilons: es, Patterns: pats, Tiers: tiers, Seed: *seed,
 		TauForCheapAccept: base.Thresholds,
 		LTT: calibrate.Options{
 			Alpha: *alpha, Delta: *delta, Step: *step, Method: calibrate.Method(*method),
 		},
-	})
+	}
+	rows, err := calibrate.SweepAbsorption(recs, sweepOpts)
 	if err != nil {
 		return err
 	}
-	printAbsorption(rows, base, *recPath)
+
+	// The envelope, not the sweep's own uniform rows, is what a selective gap has to
+	// clear. The uniform pattern is a random draw and the selective ones are sorts,
+	// so a single sweep reports the treatment exactly and the control optimistically
+	// — the tool has to do the multi-seed estimate or every reader will compare
+	// against one draw of the null and overstate the effect.
+	env, err := calibrate.EstimateNullEnvelope(recs, sweepOpts, *nullSeeds)
+	if err != nil {
+		return err
+	}
+	printAbsorption(rows, base, *recPath, env)
 	if *out != "" {
 		// Wrapped with provenance rather than written as a bare array. A row carries
 		// rho but not the fact that rho was *injected*, and these files outlive the
@@ -1204,6 +1217,7 @@ func cmdAbsorption(args []string) error {
 			Seed:     *seed,
 			MinCalN:  calibrate.MinCalibrationSize(*alpha, *delta),
 			Baseline: base,
+			NullEnv:  env,
 			Rows:     rows,
 		}
 		if err := writeJSONFile(*out, doc); err != nil {
@@ -1216,28 +1230,50 @@ func cmdAbsorption(args []string) error {
 
 // absorptionDoc wraps a sweep with the provenance a bare row array cannot carry.
 type absorptionDoc struct {
-	Note     string                      `json:"_note"`
-	Records  string                      `json:"source_records"`
-	Alpha    float64                     `json:"alpha"`
-	Delta    float64                     `json:"delta"`
-	Seed     uint64                      `json:"seed"`
-	MinCalN  int                         `json:"min_calibration_n"`
-	Baseline *calibrate.Certificate      `json:"unshifted_baseline"`
-	Rows     []calibrate.AbsorptionSweep `json:"rows"`
+	Note     string                 `json:"_note"`
+	Records  string                 `json:"source_records"`
+	Alpha    float64                `json:"alpha"`
+	Delta    float64                `json:"delta"`
+	Seed     uint64                 `json:"seed"`
+	MinCalN  int                    `json:"min_calibration_n"`
+	Baseline *calibrate.Certificate `json:"unshifted_baseline"`
+	// NullEnv travels with the rows because it is not derivable from them: the rows
+	// hold one seed's uniform draw, and the bar a selective gap must clear is the
+	// null's spread across seeds. Without it a reader compares against one draw.
+	NullEnv *calibrate.NullEnvelope     `json:"null_envelope,omitempty"`
+	Rows    []calibrate.AbsorptionSweep `json:"rows"`
 }
 
-func printAbsorption(rows []calibrate.AbsorptionSweep, base *calibrate.Certificate, recPath string) {
+func printAbsorption(rows []calibrate.AbsorptionSweep, base *calibrate.Certificate, recPath string, env *calibrate.NullEnvelope) {
 	fmt.Printf("\n§5.5(4) absorption sweep — offline replay of %s\n", recPath)
 	fmt.Printf("unshifted baseline: thresholds %v, empirical risk %.4f, valid=%v\n",
 		base.Thresholds, base.EmpiricalRisk, base.Valid)
 	fmt.Println("\nabsorption is INJECTED, not observed: this measures the certificate's")
 	fmt.Println("sensitivity to a shift of known shape, not how any real cache warms.")
 
-	fmt.Printf("\n  %-13s %-5s %-6s %-5s %-6s %-9s %-9s %-9s %-8s %s\n",
-		"pattern", "rho", "n_res", "eps", "n_cal", "acc(res)", "cal-risk", "dep-risk", "gap", "cert")
-	fmt.Println("  " + strings.Repeat("-", 95))
+	if env != nil && env.NDraw > 0 {
+		fmt.Printf("\nnull envelope (uniform pattern, %d seeds x %v = %d certified draws):\n",
+			len(env.Seeds), env.Rhos, env.NDraw)
+		fmt.Printf("  max |gap| %.4f (rho %.2f, seed %d), mean |gap| %.4f\n",
+			env.MaxAbsGap, env.AtRho, env.AtSeed, env.MeanAbsGap)
+		fmt.Println("  a selective gap at or below this is indistinguishable from sample loss.")
+	}
+
+	fmt.Printf("\n  %-13s %-5s %-6s %-5s %-6s %-9s %-9s %-9s %-8s %-4s %s\n",
+		"pattern", "rho", "n_res", "eps", "n_cal", "acc(res)", "cal-risk", "dep-risk", "gap", "sig", "cert")
+	fmt.Println("  " + strings.Repeat("-", 100))
 	for _, r := range rows {
 		gap := fmt.Sprintf("%+.4f", r.RiskGap)
+		// Marked against the multi-seed null, not against this sweep's own uniform
+		// row. Blank rather than "no" where there is no envelope or the row is the
+		// control itself — an absent judgement should not read as a negative one.
+		sig := ""
+		if env != nil && env.NDraw > 0 && r.Pattern != calibrate.AbsorbUniform && r.Certified && !r.Underpowered {
+			sig = "-"
+			if math.Abs(r.RiskGap) > env.MaxAbsGap {
+				sig = "*"
+			}
+		}
 		cert := "no"
 		if r.Certified {
 			cert = "yes"
@@ -1251,9 +1287,9 @@ func printAbsorption(rows []calibrate.AbsorptionSweep, base *calibrate.Certifica
 		// eps=0.05 off a residual of 82 calibrates on 4 records, and a certificate off
 		// 4 records is sampling noise, not evidence about the correction. Without this
 		// column those rows read as findings.
-		fmt.Printf("  %-13s %-5.2f %-6d %-5.2f %-6d %-9.4f %-9.4f %-9.4f %-8s %s\n",
+		fmt.Printf("  %-13s %-5.2f %-6d %-5.2f %-6d %-9.4f %-9.4f %-9.4f %-8s %-4s %s\n",
 			r.Pattern, r.Rho, r.NResidual, r.Epsilon, r.NCalibration,
-			r.Tier0AccuracyResidual, r.CalibratedRisk, r.DeployedRisk, gap, cert)
+			r.Tier0AccuracyResidual, r.CalibratedRisk, r.DeployedRisk, gap, sig, cert)
 		if r.Note != "" {
 			fmt.Printf("      note: %s\n", r.Note)
 		}
@@ -1268,6 +1304,10 @@ func printAbsorption(rows []calibrate.AbsorptionSweep, base *calibrate.Certifica
 	fmt.Println("means the certificate promised less risk than deployment delivers, which is the")
 	fmt.Println("§2.9 failure. The uniform rows are the null control — they SHOULD show no shift,")
 	fmt.Println("which is why a harness injecting duplicates uniformly would have measured nothing.")
+	fmt.Println("sig marks a selective row whose |gap| exceeds the multi-seed null envelope (*) or")
+	fmt.Println("does not (-). Compare against the envelope, not against this sweep's uniform rows:")
+	fmt.Println("the selective patterns are sorts and so seed-exact, while uniform is a random draw,")
+	fmt.Println("so one sweep reports the treatment exactly and the control optimistically.")
 }
 
 func parseFloatList(s string) ([]float64, error) {
