@@ -193,19 +193,56 @@ a test, but the tests will not catch every way of violating them.
   §5.6). Those are **demonstrated, not validated**: n ≤ 64, below the §5.5 bar of
   n ≥ 300, on a small non-standard single-file/stdlib benchmark. Of the two secondary
   tests, §5.5(5) (the
-  §3.7 estimator test) **has** now been run; §5.5(4) (cache-warmth sensitivity) has
-  not — and **cannot be run on a benchmark of this construction**. Measured offline for
+  §3.7 estimator test) **has** now been run; §5.5(4) (cache-warmth sensitivity) is run
+  under an *injected* shift (experiment 22, see below) but **cannot be run on an observed
+  one on a benchmark of this construction**. Measured offline for
   $0 (`results/absorption_ceiling.py`, experiment 20): retrieval candidacy 464/488
   (95.1%) but the **absorption ceiling is 2/488 (0.4%)**, because arm zero re-executes
   (invariant #5) and lexical similarity does not imply transferability. A 0.4% cache
   shifts no distribution, so the paid run would have reported a corpus artifact as a
   null. Do **not** read this as licence to relax invariant #8 — it is a fact about
   independently-sampled benchmarks, not about warm caches; testing §2.9 needs duplicate
-  injection (absorption as a controlled dial). By-product, and the stronger result:
+  injection (absorption as a controlled dial) — which is experiment 22. By-product, and the stronger result:
   similarity is *anti*-correlated with transferability at the high end — the top pairs
   are antonyms (`minimum`~`maximum` 0.949, the highest of 118,828), and the top
   same-signature pair (`he_56`~`he_61` `CorrectBracketing`, 0.836) is retrieved and
   **refuted** (`<>` vs `()`). Invariant #5 measured, not asserted.
+- **§5.5(4) is run as a *dial*, not an observation** (`go-cascade absorption`,
+  `internal/calibrate/absorb.go`, experiment 22). Absorption is injected into the
+  recorded n=409 stream, which makes the whole sweep free — every tier is profiled on
+  every problem, so any pattern × any threshold vector replays offline. Result: under a
+  head-shaped filter the certificate goes optimistic monotonically (+0.0147 → +0.1486 as
+  ρ goes 0.2 → 0.8) and at ρ=0.6 promises α=0.10 while delivering 0.134 — a *violated*
+  bound, not a loose one. Three traps, each of which produced a wrong answer first:
+  **(a) Uniform absorption is a null.** Dropping a random subset of an exchangeable
+  sample leaves an exchangeable sample, so tier-0 accuracy does not move (0.7702 →
+  0.7439 across all rates, noise in both directions). #52's own framing — inject exact
+  duplicates uniformly at random — would have measured nothing and reported it as
+  evidence about §2.9. `AbsorbUniform` therefore ships as an explicit **null control**,
+  and its envelope is the yardstick the selective rows are read against. **Measure that
+  envelope over seeds, not from one sweep**: easy-first is a sort and so seed-exact, but
+  the uniform draw is random, and 10 seeds × 4 rates gives max |gap| **0.0389** where a
+  single sweep showed 0.0267 — enough to move the ρ=0.4 verdict. By the honest envelope
+  the effect holds at **ρ ≥ 0.6**, not ρ ≥ 0.4. Do not delete the uniform arm as
+  redundant: the control's spread, not the treatment's magnitude, sets the bar. That
+  estimate is `EstimateNullEnvelope` (`-null-seeds`, default 10) and it ships *inside*
+  the output — a bar left to the reader gets compared against one draw of the control.
+  Exclude underpowered and uncertified rows from it, or trap (c) inflates the yardstick.
+  **(b) `Calibrate` prefers the shadow subset of whatever it is handed**, and every
+  profiled record has `Shadow: true` (invariant #8). Left set, that preference fires on
+  *both* arms and makes the uncorrected arm silently identical to the corrected one —
+  reading as "shadow sampling has no effect." Hence `stripShadowFlags`: the sweep models
+  the correction explicitly, by choosing which stream to calibrate on.
+  **(c) Shadow sampling spends sample size**, so a small-ε row can look worse for
+  reasons unrelated to any shift. `MinCalibrationSize(α, δ)` is the floor — at r̂=0 the
+  Hoeffding term is exactly (1−α)^n, so certifying needs (1−α)^n ≤ δ, i.e. n ≥ 22 at
+  α=δ=0.10. Rows under it are flagged `Underpowered`, never dropped: a missing row reads
+  as "not swept" and an unflagged one reads as a finding. The clean comparison holds n
+  *fixed* (ε=1, ρ=0.2, n_cal=327 for all three patterns): uniform certifies `[1,1]`,
+  both selective patterns refuse. Note what the correction does and does not buy — it
+  drives the gap to exactly zero and converts a silent violation into a visible
+  **refusal to certify**; it does not rescue the cost win under heavy absorption. None
+  of this licenses relaxing invariant #8; it is the evidence *for* it.
 - **The §3.7 estimator test is run** (`go-cascade estimator`, experiment 19). Mutation
   score M is a **conservative** proxy for 1 − η_fa on this benchmark, not a tight one:
   measured η_fa 0/145 (95% bound 0.020) against a pooled 1 − M of 0.1014 that predicted

@@ -1025,15 +1025,16 @@ Neither is claimed in §1.2; both are reported so the design space is mapped hon
 
 **What still stands from §5.3–§5.5, unchanged.** §5.4's external-validity restriction to
 single-file stdlib-only Go is unchanged; §5.5(4) (cache-warmth sensitivity, the direct
-§2.9 test) has **not** been run — and see below, it *cannot* be run on a benchmark of
-this construction. Adaptive conformal inference (9), non-nested ordering (§2.6), and
+§2.9 test) has now been run under an **injected** shift and *cannot* be run on an
+observed one on a benchmark of this construction — see below for both.
+Adaptive conformal inference (9), non-nested ordering (§2.6), and
 boundary randomization (§2.4) remain unimplemented. Arm (e), self-consistency, is
 unimplemented and unrun. **What no longer stands is the sample-size and
 benchmark-standardness caveat**, which §5.5(1) made the gating one; see immediately
 below. So the correct one-line update to the closing sentence of §5.5 is: *arms (a)–(d)
 have now been run at n = 409 on a standard benchmark and the central comparative claim
-is **measured** at the paper's own bar; arm (e), §5.5(4), and the concurrency coverage
-the benchmark lacks remain open.*
+is **measured** at the paper's own bar; §5.5(4) is answered for an injected shift but not
+an observed one; arm (e) and the concurrency coverage the benchmark lacks remain open.*
 
 **§5.5(1) has been met, and meeting it costs two earlier headlines**
 (`results/s55-multipl-n409-2026-08-03.md`, 2026-08-03). The paired comparison ran on
@@ -1151,8 +1152,7 @@ The highest-similarity *same-signature* pair, `he_56`~`he_61` `CorrectBracketing
 other `()`. A threshold cache without re-execution returns a wrong answer there. This
 does not weaken the §2.9 correction or the exchangeability requirement it enforces; it
 says that testing §2.9 empirically requires a **duplicate-injection** stream in which
-absorption is a controlled dial, which is a benchmark-construction problem and remains
-open.
+absorption is a controlled dial. That dial is now built and run (below).
 
 Building that dial surfaced a second, more embarrassing reason §5.5(4) was not runnable,
 and one worth recording because it was invisible to every test in the suite. Admission to
@@ -1182,6 +1182,67 @@ sound because it re-executes, not because the score is high, so a weak entry cos
 wasted verification and adds no risk term. The corollary is that admission cannot be
 uniformly "stricter than acceptance", as we had described it — tier $K$ accepts
 unconditionally, and nothing is stricter than that.
+
+**With the dial in place, §5.5(4) is answered under an injected shift**
+(`results/absorption-n409.json`, 2026-08-03). Absorption is applied to the *recorded*
+n=409 stream rather than to a live cache, which costs nothing: every tier is profiled on
+every problem, so any absorption pattern crossed with any threshold vector replays
+offline. This measures the certificate's sensitivity to a shift of known shape and
+magnitude — which is what §5.5(4) asks — and not how a real cache warms, a distinction the
+absorption-ceiling result above makes it necessary to keep.
+
+The first result is negative and shaped the rest. **Uniform absorption produces no
+shift at all.** Dropping a subset of an exchangeable sample independently of $x$ leaves
+an exchangeable sample, and cheap-tier accuracy on the residual reads 0.7706, 0.7796,
+0.7500, 0.7439 at $\rho = 0.2, 0.4, 0.6, 0.8$ against 0.7702 on the full stream — noise,
+in both directions. The naive form of duplicate injection, drawing repeats uniformly at
+random, therefore cannot exhibit the §2.9 effect at *any* rate. The premise of §2.9 is
+that the cache absorbs the **head**: recurring queries are the easy, high-volume ones,
+which is a filter selective on difficulty. Under a head-shaped filter at the same four
+rates, residual accuracy is 0.7125, 0.6163, 0.4268, 0.0000. The uniform arm is retained
+as an explicit null control, and its spread bounds what the selective arm must exceed to
+count.
+
+Calibrating on the full sample and deploying on the residual — the error §2.9 describes —
+makes the certificate optimistic monotonically in $\rho$: the realized-minus-empirical
+risk gap is $+0.0147$, $+0.0352$, $+0.0755$, $+0.1486$ at the four rates. At $\rho = 0.6$
+the certificate carries $\alpha = 0.10$ and delivers 0.134: not a loose bound but a
+violated one. Absorbing what the *policy* served rather than what an oracle calls easy
+reproduces it ($+0.0117$ to $+0.1364$).
+
+The comparison requires a null envelope, and the envelope must be estimated over
+**seeds** rather than read off a single sweep. The selective patterns are deterministic —
+ordering by difficulty is a sort — but the uniform draw is not, so one run's largest gap
+understates the noise it is meant to bound. Over 10 seeds at the four rates (40 draws) the
+uniform envelope is $\max |{\rm gap}| = 0.0389$ with mean $0.0113$, against 0.0267 from
+the single sweep. By the honest envelope the effect is established at $\rho \ge 0.6$; the
+gaps at $\rho = 0.2$ and $\rho = 0.4$ do **not** clear it. That the control moves while
+the treatment does not is the whole reason to keep the control arm: its spread, not the
+treatment's magnitude, is what sets the bar — so the estimate is computed by the tool
+itself and travels with the rows, rather than being left to a reader who would otherwise
+compare a treatment row against one draw of the control.
+
+The correction behaves as §2.9 predicts, though not in the form one might expect. The
+cleanest comparison holds sample size *fixed*: at $\varepsilon = 1$ and $\rho = 0.2$ all
+three patterns calibrate on exactly 327 records, and uniform certifies $(1,1)$ while both
+selective patterns certify nothing. Same $n$, $\alpha$, $\delta$ and grid, so only the
+shift can account for the difference. Shadow sampling drives the risk gap to exactly zero
+by construction, since the calibration and deployment streams coincide; what remains is a
+**refusal to certify**. That is the correction working. When the residual's true risk
+exceeds $\alpha$ the sound output is no certificate, and the value of the correction is
+that it converts a silent violation into a visible refusal — it does not restore the cost
+win under heavy absorption.
+
+Two caveats belong with the result. Shadow sampling purchases distributional correctness
+by *spending sample size*, and the purchase has a floor: at $\hat r = 0$ the Hoeffding
+term of §2.5 is exactly $(1-\alpha)^n$, so certification requires $(1-\alpha)^n \le
+\delta$, i.e. $n \ge 22$ at $\alpha = \delta = 0.10$. An $\varepsilon = 0.05$ draw from
+an 82-record residual is 4 records, and such rows are reported with their calibration $n$
+and flagged rather than dropped, because a small-sample gap — several are negative — is
+noise about sample size and not evidence about the correction. And absorption here is
+stipulated rather than observed, so what the sweep establishes is a response curve, not
+the operating point of any deployment. None of it weakens the exchangeability requirement
+of §2.9; it is the direct evidence for it.
 
 ---
 

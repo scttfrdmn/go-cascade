@@ -16,7 +16,7 @@ was a small-sample artifact; the real model-accuracy floor is 0.0538), and the
 certifiable-α-vs-cost-win tension **reproduces** rather than dissolving. Read the rest of
 this file with that correction in mind.
 
-**One-line summary:** across twenty live experiments (plus one decided offline for $0)
+**One-line summary:** across twenty live experiments (plus two decided offline for $0)
 the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
@@ -101,8 +101,9 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 17 | [cost-win frequency](cost-win-frequency-2026-08-01.md) | 3 more 5:1:1 draws **with `-compare`** (β=0), 6 draws total — turns #14's "does not replicate" into a **frequency** | **2 of 6 certify with a cost win; 3 of 6 certify-but-pricier (`[1,1]`); 1 of 6 no cert.** Exact rule: win **iff 0 confident-wrong tier-0 answers in the clean set**. And the catch — **both** wins had confident-wrong answers that were merely **oracle-unsound-excluded** (Maverick's confident mistakes coincided with the spec model's unsound-test problems), so the win rides a two-error-process coincidence, not robustness. `scale_is_palindrome` is the recurring *sound-oracle* confident error. Resume survived 2 more external kills (5 total) |
 | 18 | [plan-once-reuse](plan-once-reuse-2026-08-01.md) | the last untested two-stage variant — **one** plan/query threaded into **every** tier (PR #35), not per-tier | **negative, and it explains why: at 2:1:1 the amortisation the design targets never happens.** Tier-0 accuracy 0.885 ≈ no-plan 0.88 (*below* both per-tier arms — one general plan loses the per-tier specificity that carried the nudge); cost collapses to per-tier's (~2× pricier at certified α=0.15, 1.19× at α≤0.10). Plan-once pays off only if the cheap tier *accepts* (avoiding escalation + plan re-charges), but the 2-sample Wilson ceiling (0.425) is below every certifiable threshold, so tier 0 always escalates and the one plan buys nothing. **Three planner points now close the question: no plan-placement variant reverses "accuracy lever, not cost lever."** Ran clean, no external kill |
 | 19 | [§3.7 estimator test](estimator-test-n64-2026-08-01.md) | the paper's other unrun secondary experiment — is **mutation score M a usable proxy for η_fa** on the *model's* defect distribution? Non-circular: M vs the **generated** suite, correctness vs the **human-authored canonical** suite. **Run twice**: the first pass's canonical oracle ran only its `^TestV` half (40% of tests); figures below are the **full-oracle re-run** (PR #42) | **M is loose by an order of magnitude, and the oracle's real error is over-rejection.** Measured η_fa = **0/145** (95% upper bound **0.020**) while pooled 1−M = **0.1014** predicted **~12** false acceptances (P(0 events \| M tight) ≈ 1×10⁻⁶). So §3.7's "unknown bias" has a measured **direction — conservative**, the safe way for a risk proxy to err; M was never affected by the oracle bug (`Mutate` uses no `-run` filter), so the predicted side is unchanged. But the *discriminative* question is **unresolved**: M spans 0.50–1.00 yet both buckets (M≥0.90 n=96, M<0.90 n=42) have 0 events, so bounds overlap — the 12 lowest-M rows are all canonically **correct** (small mutant pools, timing-dependent mutants), i.e. low M was an artifact, not a signal. Flip side: **4 confirmed false rejections (2.6% of rows with a candidate) vs 0 false acceptances**, plus 40 rows where the ladder left no candidate — a **new** hazard class, "sound-but-stricter-than-canonical", that neither §3 nor the `-refs` gate models, and which costs money not risk. **Two further findings from the re-run:** the corrected oracle produced **3** canonical refutations (all `TestH*` — an off-by-one at `MaxUint64`, an int64 overflow, an input-mutation check) that the 40% oracle called **correct**, so *oracle strength must be recorded, not assumed*; and the two draws agree on only **159/192 rows**, so **rejection-side rates are not stable at n=64** — the asymmetry's direction replicated, its magnitude (11→4) did not. First live proof of the **atomic-checkpoint fix** (PR #39): killed twice, resumed with 0 loss (first pass); re-run finished 64/64 uninterrupted |
-| 20 | [absorption ceiling](absorption-ceiling-2026-08-02.md) | the **last** unrun secondary experiment — §5.5(4) cache-warmth (the direct §2.9 test), scoped at ~$7. Asks first whether the benchmark *can* exhibit the effect | **not runnable here, decided offline for $0 — and the reason is a stronger result than the experiment would have been.** On MultiPL-E Go: retrieval candidacy **464/488 (95.1%)** vs absorption ceiling **2/488 (0.4%)**, three orders of magnitude apart. §2.9's effect is driven by *absorption* (arm zero re-executes — invariant #5), so a 0.4% cache shifts no distribution and the paid run would have reported a **benchmark artifact as a null**. Ceiling is **exact, not sampled**: a differing signature cannot compile, so `manifest.json` reduces 118,828 pairs to 10 ordered transfers, all executed; 4 pass = 2 bidirectional pairs, both **upstream MBPP duplicates**. The finding: at the high end similarity is **anti-correlated** with transferability — the top pairs are *antonyms* (`minimum`~`maximum` **0.949**, the highest of all 118,828; `first_Digit`~`last_Digit`; `even_position`~`odd_position`), and the top same-signature pair `he_56`~`he_61` `CorrectBracketing` (0.836) is **retrieved and refuted** (`<>` vs `()`). **Invariant #5 measured, not asserted.** §2.9 itself is untouched; running §5.5(4) needs **duplicate injection** (absorption as a dial), not a bigger corpus |
+| 20 | [absorption ceiling](absorption-ceiling-2026-08-02.md) | the **last** unrun secondary experiment — §5.5(4) cache-warmth (the direct §2.9 test), scoped at ~$7. Asks first whether the benchmark *can* exhibit the effect | **not runnable here, decided offline for $0 — and the reason is a stronger result than the experiment would have been.** On MultiPL-E Go: retrieval candidacy **464/488 (95.1%)** vs absorption ceiling **2/488 (0.4%)**, three orders of magnitude apart. §2.9's effect is driven by *absorption* (arm zero re-executes — invariant #5), so a 0.4% cache shifts no distribution and the paid run would have reported a **benchmark artifact as a null**. Ceiling is **exact, not sampled**: a differing signature cannot compile, so `manifest.json` reduces 118,828 pairs to 10 ordered transfers, all executed; 4 pass = 2 bidirectional pairs, both **upstream MBPP duplicates**. The finding: at the high end similarity is **anti-correlated** with transferability — the top pairs are *antonyms* (`minimum`~`maximum` **0.949**, the highest of all 118,828; `first_Digit`~`last_Digit`; `even_position`~`odd_position`), and the top same-signature pair `he_56`~`he_61` `CorrectBracketing` (0.836) is **retrieved and refuted** (`<>` vs `()`). **Invariant #5 measured, not asserted.** §2.9 itself is untouched; running §5.5(4) needs **duplicate injection** (absorption as a dial), not a bigger corpus — **done in experiment 22** |
 | 21 | [§5.5 at n=409](s55-multipl-n409-2026-08-03.md) | **the §5.5(1) bar itself** — n ≥ 300 on a *standard* benchmark (MultiPL-E Go: HumanEval-Go + MBPP-Go, 488 problems, 409 usable), all arms paired. The one gap between "demonstrated" and "validated" | **the primary claim replicates and the margin widens monotonically with n: execution certifies α=0.084, the judge only α=0.226** (δ=0.10, identical candidates) — the exec/judge ratio goes 1.19× (n=28) → 1.58× (n=64) → **2.69×**, and the absolute gap 0.050 → 0.110 → **0.142**. Execution sound again and now emphatically: **1096/1096** tier observations agree with ground truth, 0 over-accept, 0 over-reject. **η_fa is finally more than one data point — 11/1096 over-acceptances**, with a cheap-tier gradient (small 8, mid 2, large 1) exactly as §3.1 predicts; but *this run's* records keep no candidate source, so its *defect classes are unrecoverable* and the reading-invisible mechanism stays **argued, not confirmed** — fixed going forward by `TierObs.DisagreementSource` (issue #49), which retains the program on every oracle/truth disagreement, readable via `classify_disagreements.py`. **α=0.05 does NOT certify here** (floor 0.0538 is genuine model accuracy, not oracle noise) — the n=64 "α=0.05 certifies" was a 0/52 small-sample artifact, and this is the more trustworthy result. Cost tension **reproduces at 6× scale**: `[1,1]` (1.6× pricier than frontier) below α=0.11, `[0.1,1]` (**2.2× cheaper**) at or above it. Exclusions are load-bearing — the 79 dropped have **frontier risk 0.785**. **Coverage gap: 0 concurrency problems, so the `-race` rung never ran.** $8.15, 488/488, no kill |
+| 22 | [§5.5(4) absorption dial](README.md#experiment-22--554-the-29-shift-measured-as-a-controlled-dial-0-offline) | §5.5(4) proper: make absorption a **controlled dial** over the n=409 records and measure how the certificate degrades, with and without shadow sampling. Offline, $0, 60 rows | **§2.9 tested rather than assumed.** Under a head-shaped filter the certificate goes optimistic monotonically — gap **+0.0147 → +0.1486** as ρ goes 0.2 → 0.8, and at ρ=0.6 it promises α=0.10 and delivers **0.134**, an actually *violated* bound. **Uniform absorption is a null** (acc 0.7702 → 0.7439 across all rates, noise in both directions), so #52's own framing — inject duplicates uniformly — would have measured nothing and reported it as evidence; it ships as the explicit control, and its envelope — measured over **10 seeds × 4 rates**, **max |gap| = 0.0389**, not the 0.0267 a single sweep shows — is the yardstick. By it the effect is established at **ρ ≥ 0.6, not ρ ≥ 0.4**; the selective rows are seed-exact (a sort), but the control is not, and the control sets the bar. Cleanest row holds n **fixed** at 327: uniform certifies `[1,1]`, both selective patterns refuse — same n, α, δ, grid, so only the shift can explain it. Shadow sampling drives the gap to **exactly 0** and converts a silent violation into a visible **refusal to certify**, which is the correction working, not failing. Limit stated not buried: α=0.10 at δ=0.10 needs **n ≥ 22 even at zero errors**, so 3 small-ε rows are flagged `underpowered` rather than reported |
 
 ### How each run answered the previous one's limitation
 
@@ -258,6 +259,122 @@ for. Thin admission carries no risk because arm zero re-executes every hit again
 new query's tests (invariant #5): it costs a wasted verification, never a wrong
 answer. A test now asserts a solve admits, and one asserts every shipped config can.
 
+## Experiment 22 — §5.5(4), the §2.9 shift measured as a controlled dial ($0, offline)
+
+**§2.9 is now tested rather than assumed, at n=409, for nothing.** The claim under
+test: a warm cache absorbs the head of the query distribution, so the router observes
+`D | x not in H_t` rather than `D`, and a certificate calibrated on `D` is void. That
+had been argued from first principles for the whole study.
+
+Experiment 20 established the direct test cannot be run on this benchmark —
+absorption tops out at 2/488 (0.4%) — and concluded it needs absorption as a
+*controlled dial*. That is `go-cascade absorption` (`internal/calibrate/absorb.go`).
+The dial is applied to *recorded* observations, which is what makes the whole sweep
+free: the n=409 records profile every tier on every problem, so any absorption pattern
+crossed with any threshold vector replays offline with no model queries. 60 rows,
+$0.00, seconds.
+
+**Absorption is injected, not observed.** What this measures is the certificate's
+sensitivity to a shift of *known shape and size* — precisely what §5.5(4) asks — and
+precisely not a claim about how any real cache warms. Reading a number here as "the
+observed effect of cache warmth" would repeat the error experiment 20 caught.
+
+### The finding that reshaped the experiment: uniform absorption is a null
+
+Issue #52's own framing was "inject exact duplicates at known rates." Run that way it
+would have measured **nothing**, and reported the null as evidence about §2.9.
+Dropping a random subset of an exchangeable sample leaves an exchangeable sample:
+
+| ρ | n_res | acc(residual), uniform | acc(residual), easy-first |
+|---|---|---|---|
+| 0.00 | 409 | 0.7702 | 0.7702 |
+| 0.20 | 327 | 0.7706 | 0.7125 |
+| 0.40 | 245 | 0.7796 | 0.6163 |
+| 0.60 | 164 | 0.7500 | 0.4268 |
+| 0.80 | 82 | 0.7439 | **0.0000** |
+
+Uniform absorption moves cheap-tier accuracy by noise, in both directions, at every
+rate. §2.9's premise is a *head*-shaped filter — recurring queries are the easy ones —
+and only a selective pattern produces the shift the section warns about. So
+`AbsorbUniform` ships as an explicit **null control**, not as the main pattern, and
+its spread is what the selective rows are read against.
+
+### The uncorrected arm: the certificate goes optimistic, monotonically
+
+Calibrating on the full recorded sample and deploying those thresholds on the residual
+— the mistake §2.9 describes. The yardstick is the null control's envelope, and it has
+to be measured over **seeds**, not read off one run: the uniform draw is random, so a
+single sweep's max |gap| understates it. Over **10 seeds × 4 rates (40 draws)** the
+uniform envelope is **max |gap| = 0.0389**, mean 0.0113. (The first version of this
+write-up quoted 0.0267 from one seed, which moved the ρ=0.4 verdict — see below.)
+The tool computes this itself — `-null-seeds` (default 10) — and writes it to the
+`null_envelope` block of the JSON, precisely so nobody has to compare a treatment row
+against one draw of the control. Underpowered and uncertified rows are excluded from
+the envelope: their spread is sample-size noise, which would inflate the very bar it
+is supposed to set.
+
+| ρ | acc(res) | calibrated risk | deployed risk | gap | beyond the 40-draw null envelope? |
+|---|---|---|---|---|---|
+| 0.20 | 0.7125 | 0.0587 | 0.0734 | +0.0147 | no |
+| 0.40 | 0.6163 | 0.0587 | 0.0939 | +0.0352 | **no** |
+| 0.60 | 0.4268 | 0.0587 | 0.1341 | +0.0755 | yes |
+| 0.80 | 0.0000 | 0.0587 | 0.2073 | **+0.1486** | yes |
+
+At ρ=0.6 the certificate promises α=0.10 and delivers 0.134 — **an actually violated
+bound**, not merely a loose one. `cheap-accept` (absorbing what the *policy* served,
+the closest analogue to a cache warmed by a running cascade) reproduces it: +0.0117 →
++0.1364 over the same range.
+
+**Read against the honest envelope, the effect is established at ρ ≥ 0.6, not ρ ≥ 0.4.**
+The selective rows are exactly reproducible — `easy-first` is a sort, so its +0.0755
+does not move across seeds at all — but the *control* they are compared against does
+move, and it is the control that sets the bar. This is the second time in this study
+that one draw was not a diagnosis.
+
+### The corrected arm, and the cleanest row in the sweep
+
+The tidiest comparison holds sample size **fixed** and varies only the shift. At
+ε=1.0, ρ=0.2 every pattern calibrates on exactly 327 records:
+
+| pattern | n_cal | acc(res) | risk | certifies |
+|---|---|---|---|---|
+| uniform | 327 | 0.7706 | 0.0612 | **yes, [1, 1]** |
+| easy-first | 327 | 0.7125 | 0.0673 | no |
+| cheap-accept | 327 | 0.7217 | 0.0642 | no |
+
+Same n, same α, same δ, same grid — so sample size cannot explain the difference and
+only the shift can. Shadow sampling drives the risk gap to **exactly zero** at ε=1 by
+construction (calibration stream = deployment stream), and what remains is a *refusal
+to certify*. That is the correction working: when the residual's true risk exceeds α,
+the honest output is no certificate, not a smaller number. §2.9's correction does not
+rescue the cost win under heavy absorption — it converts a silent violation into a
+visible refusal, which is the whole point of having a certificate.
+
+### The limit, stated rather than buried
+
+Shadow sampling buys distributional correctness by **spending sample size**, and the
+sweep's small-ε rows run out of it. Certifying α=0.10 at δ=0.10 needs **n ≥ 22 even
+with zero observed errors** (`calibrate.MinCalibrationSize`: at r̂=0 the
+Hoeffding term is exactly (1−α)^n, so the bound needs (1−α)^n ≤ δ). An ε=0.05 draw
+off an 82-record residual is 4 records. Three rows fall under that floor and are
+flagged `underpowered` in both the JSON and the printed table — their gaps are noise
+about sample size, not evidence about the correction, and several are *negative*.
+Without that column they would read as findings.
+
+**What this does not license.** Invariant #8 stands. The result says the shift is real
+and large under a head-shaped filter, and that calibrating behind a warm cache is
+exactly as unsafe as §2.9 claims — the opposite of a reason to relax it. And because
+absorption here is a dial rather than an observation, the *rates* are stipulated: what
+is measured is the response curve, not where a real deployment sits on it.
+
+Records: `results/absorption-n409.json` (60 rows plus a `null_envelope` block).
+Reproduce with `go-cascade absorption -records
+results/s55-fixed.records.execution.json -alpha 0.10 -pattern
+uniform,easy-first,cheap-accept -epsilon 0,0.2,0.5,1.0`. The printed table's `sig`
+column marks each selective row `*` or `-` against the envelope; the envelope's own
+seeds are derived from `-seed`, so a published number is reproducible from the command
+that printed it.
+
 ## What is NOT established (open, honest)
 
 - **Deployable-α certification was reached at n=64 and does NOT hold at n=409
@@ -342,17 +459,19 @@ answer. A test now asserts a solve admits, and one asserts every shipped config 
   interrupted pinned run reached 40). **Remaining caveat:** the clean floor rests
   on n=40 from an externally-interrupted run; a completed n=64 pinned run is the
   open step (and needs whatever keeps killing long jobs resolved).
-- **§2.9 (calibrating behind a warm cache) is still argued, not tested — and this
-  benchmark cannot test it (experiment 20).** The direct test, §5.5(4), was scoped to
+- **§2.9 is tested under an *injected* shift, not an observed one (experiments 20, 22).**
+  The response curve is measured; where a real deployment sits on it is not. The direct test, §5.5(4), was scoped to
   run live and then measured offline instead: absorption on MultiPL-E Go tops out at
   **2/488 (0.4%)** against **95.1%** retrieval candidacy, because arm zero re-executes
   (invariant #5) and lexical similarity does not imply transferability here. A 0.4%
   cache induces no distribution shift, so the experiment has nothing to detect. **This
   is a statement about the benchmark, not a licence to relax invariant #8** — real
   traffic has genuine repeats; independently-sampled benchmarks are built to avoid them.
-  Testing §2.9 needs **duplicate injection** (absorption as a dial, 10–40%) and then
-  calibration drift as a function of it. Unrun, and now a benchmark-construction task
-  rather than a live-spend one.
+  Testing §2.9 needs **duplicate injection** (absorption as a dial) and then
+  calibration drift as a function of it. **Now run — experiment 22**, offline for $0,
+  and the shift is real: at ρ=0.6 under a head-shaped filter the certificate promises
+  α=0.10 and delivers 0.134. What remains stipulated is the *rate*, since absorption
+  there is a dial rather than an observation.
 - **Judge β depends on the prompt.** The judge ran with "when in doubt, FAIL";
   its false-rejection counts would move under a different operating point. The
   strictness knob exists (`--judge-strictness`) but was only exercised on small n.
