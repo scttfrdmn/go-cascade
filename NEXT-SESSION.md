@@ -239,7 +239,10 @@ and blocks *all* Bash; Read/Grep/Glob keep working, so do read-only work and ret
   `config.go-specialist-211.json`.
 - **Analysis scripts (offline, free):** `results/analyze_s55.py`,
   `analyze_estimator.py`, `absorption_ceiling.py`, `headroom_theorem.py`,
-  `analyze_tension.py`, `analyze_draws.py`. `calibrate -from-records` re-derives a
+  `analyze_tension.py`, `analyze_draws.py`, `classify_disagreements.py` (reads the
+  `disagreement_source` field added by issue #49 and dumps the program behind each
+  oracle/truth disagreement for defect classification; on pre-#49 records it says so
+  rather than reporting zero). `calibrate -from-records` re-derives a
   certificate at any α for **$0** — sweep each arm against its **own** records.
 - **Live spend so far:** ~$136–161 (prior ~$120–145 + experiment 21's $8.15 measured
   + the superseded pre-fix attempt's $7.82 measured; experiment 20 cost **$0**).

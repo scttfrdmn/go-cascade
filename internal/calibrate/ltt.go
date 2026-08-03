@@ -41,6 +41,22 @@ type TierObs struct {
 	// falls back to Correct, i.e. it assumes the oracle was sound. See §5.5.
 	TrueCorrect *bool   `json:"true_correct,omitempty"`
 	Cost        float64 `json:"cost_usd"`
+	// DisagreementSource is the accepted candidate's program text, retained ONLY
+	// when the arm's oracle verdict differs from execution ground truth
+	// (Correct != *TrueCorrect). It exists to make the judge's error *classes*
+	// recoverable after the fact: experiment 21 measured eta_fa = 11/1096 with the
+	// cheap-tier gradient §3.1 predicts, but could not say what the 11 programs
+	// were wrong about, so the paper's claim that the blind spot is
+	// *reading-invisible* defects stayed argued rather than confirmed.
+	//
+	// FORENSIC ONLY. Nothing on the acceptance path may read this field, and no
+	// verifier stage may consume it. A field that influenced acceptance would be a
+	// new oracle input with no soundness argument behind it (invariants #4, #6).
+	//
+	// Retained on disagreements alone, not on all observations: at n=409 that is
+	// 166 programs rather than 1096, and agreeing observations carry no forensic
+	// information by construction.
+	DisagreementSource string `json:"disagreement_source,omitempty"`
 }
 
 // truth returns the ground-truth correctness for a tier observation: execution
@@ -51,6 +67,24 @@ func (t TierObs) truth() bool {
 		return *t.TrueCorrect
 	}
 	return t.Correct
+}
+
+// Disagrees reports whether this arm's oracle verdict differs from execution
+// ground truth. It is false when TrueCorrect was never recorded: an observation
+// with nothing to compare against is not evidence of agreement, so callers must
+// not read false as "the oracle was right" (RealizedRisk documents the same
+// caveat for its own fallback).
+func (t TierObs) Disagrees() bool {
+	return t.TrueCorrect != nil && t.Correct != *t.TrueCorrect
+}
+
+// RetainSourceOnDisagreement stores src for later defect classification, but only
+// if the oracle and execution truth disagree. Centralised so every recording site
+// applies the same rule and no site accidentally retains all 3n candidates.
+func (t *TierObs) RetainSourceOnDisagreement(src string) {
+	if t.Disagrees() {
+		t.DisagreementSource = src
+	}
 }
 
 // Record is one calibration problem.

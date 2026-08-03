@@ -115,6 +115,10 @@ func (r *Router) ProfileJudge(ctx context.Context, id, problem, judgeModel strin
 			local.Cost.addCompute(cpu, r.cfg.ComputeUSDPerCoreSecond)
 			truth := acc != nil && acc.OK
 			obs.TrueCorrect = &truth
+
+			// Forensic retention on judge/truth disagreement (issue #49). Must
+			// follow both assignments above, since the rule reads them.
+			obs.RetainSourceOnDisagreement(rep.Source)
 		}
 		obs.Cost = local.Cost.TotalUSD
 		if k == 0 {
@@ -240,6 +244,15 @@ func (r *Router) ProfilePaired(ctx context.Context, id, problem, judgeModel stri
 			// recorded alongside so realized risk can be checked against reality.
 			judgeObs.Correct = pass
 			judgeObs.TrueCorrect = &truth
+
+			// Keep the program behind each judge disagreement so its defect class
+			// can be recovered later (issue #49): experiment 21 measured
+			// eta_fa = 11/1096 but could not say what those 11 got wrong.
+			//
+			// Only the judge arm needs this. The execution arm assigns both
+			// Correct and TrueCorrect from the same `truth` value above, so it
+			// cannot disagree with itself and the call would be dead code.
+			judgeObs.RetainSourceOnDisagreement(rep.Source)
 		}
 		execRec.Tiers = append(execRec.Tiers, execObs)
 		judgeRec.Tiers = append(judgeRec.Tiers, judgeObs)
@@ -330,6 +343,10 @@ func (r *Router) ProfileStrictnessReplay(ctx context.Context, id, problem, judge
 				jObs.Correct = pass
 				jObs.TrueCorrect = &t
 				jObs.Cost += jcost
+				// Same forensic retention as ProfilePaired. Here it also shows
+				// which strictness level flipped a verdict on a given program,
+				// since every level rules on this identical representative.
+				jObs.RetainSourceOnDisagreement(repSource)
 			}
 			judgeRecs[lvl].Tiers = append(judgeRecs[lvl].Tiers, jObs)
 			if tier.ModelID == judgeModel {

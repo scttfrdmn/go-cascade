@@ -178,6 +178,60 @@ func TestJudgeArmDivergesFromExecutionArm(t *testing.T) {
 	}
 }
 
+// Issue #49: when the judge and execution disagree, the record must keep the
+// program so its defect class can be recovered later. Experiment 21 measured
+// η_fa = 11/1096 and could not say what any of the 11 got wrong, which is why
+// the "reading-invisible defects" mechanism stayed argued.
+//
+// The assertion is two-sided on purpose: source present on every disagreement,
+// absent on every agreement. Retaining agreements too would store 3n programs
+// per run rather than the disagreement count.
+func TestPairedRetainsSourceOnlyWhereOraclesDisagree(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = ""
+	r := newRouter(t, cfg, nil)
+
+	er, jr, err := r.ProfilePaired(context.Background(), "seq", seqProblem, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	disagreements := 0
+	for i := range jr.Tiers {
+		j := jr.Tiers[i]
+		if j.Disagrees() {
+			disagreements++
+			if j.DisagreementSource == "" {
+				t.Errorf("tier %q: judge said %v, truth %v, but no source retained — "+
+					"the defect class is unrecoverable", j.Tier, j.Correct, *j.TrueCorrect)
+			}
+		} else if j.DisagreementSource != "" {
+			t.Errorf("tier %q: oracles agree yet source was retained (%d bytes); "+
+				"retention must be limited to disagreements",
+				j.Tier, len(j.DisagreementSource))
+		}
+	}
+
+	// If the mock ever stops producing a divergence this test proves nothing, so
+	// fail loudly rather than passing vacuously (same guard as
+	// TestJudgeArmDivergesFromExecutionArm).
+	if disagreements == 0 {
+		t.Fatalf("no judge/execution disagreement in the paired run; test is vacuous. judge tiers: %+v", jr.Tiers)
+	}
+
+	// The execution arm cannot disagree with itself (Correct and TrueCorrect come
+	// from one value), so it must never retain source — that would be dead weight
+	// in every execution records file.
+	for _, e := range er.Tiers {
+		if e.DisagreementSource != "" {
+			t.Errorf("execution arm tier %q retained source; it is sound by construction", e.Tier)
+		}
+	}
+}
+
 // End to end through Calibrate: the judge arm's certificate reports higher
 // realized risk than empirical risk on a run where it passes a hidden-failing
 // program, while the execution arm's two risks coincide.
