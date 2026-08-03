@@ -1004,7 +1004,8 @@ Neither is claimed in §1.2; both are reported so the design space is mapped hon
 **What still stands from §5.3–§5.5, unchanged.** The n is still far below §5.5(1);
 the benchmark is still not a standard one (HumanEval-Go/MBPP-Go/repo-level unrun);
 §5.4's external-validity restriction to single-file stdlib-only Go is unchanged;
-§5.5(4) (cache-warmth sensitivity, the direct §2.9 test) has **not** been run.
+§5.5(4) (cache-warmth sensitivity, the direct §2.9 test) has **not** been run —
+and see below, it *cannot* be run on a benchmark of this construction.
 Adaptive conformal inference (9), non-nested ordering (§2.6), and boundary
 randomization (§2.4) remain unimplemented. So the correct one-line update to the
 closing sentence of §5.5 is: *arm (c) has now been run at n ≤ 64 and the central
@@ -1049,6 +1050,35 @@ on only 159 of 192 rows, with churn in both directions from sampling at temperat
 magnitude did not. That instability is the concrete form of the §5.5(1) n ≥ 300
 requirement, and it is a reason to read every rate in this section as a bound rather
 than an estimate.
+
+**§5.5(4) is not runnable on an independently-sampled benchmark, which is itself a
+finding about §2.8 rather than about §2.9** (`results/absorption-ceiling-2026-08-02.md`,
+2026-08-02). The direct test of the §2.9 correction needs a cache that absorbs a
+non-trivial share of the query stream. On MultiPL-E Go the two relevant quantities are
+three orders of magnitude apart: **95.1%** of problems (464/488) have a prior problem
+above the retrieval floor, but the **absorption ceiling is 2/488 (0.4%)**. The gap is
+exactly the distance between retrieval (lexical, Jaccard on character trigrams) and
+transfer (arm zero re-executes the retrieved solution against the *new* query's tests
+and keeps it only if it passes, (10)). A cache absorbing 0.4% of traffic shifts no
+distribution, so §5.5(4) would have measured a null attributable to the corpus and not
+to the method. The ceiling is exact rather than sampled: a donor whose signature differs
+cannot compile against the recipient's suite and is a guaranteed refutation, which
+reduces 118,828 pairs to 10 ordered transfers, all executed; the 4 that pass form 2
+bidirectional pairs, both cases of upstream MBPP shipping one task twice under different
+ids.
+
+The by-product is direct evidence for §2.8's argument against a similarity gate. At the
+*high* end of the distribution, similarity is **anti-correlated** with transferability:
+the most similar pairs in the benchmark are antonyms — `minimum`~`maximum` at 0.949 (the
+single highest of 118,828), `first_Digit`~`last_Digit` at 0.937,
+`even_position`~`odd_position` at 0.920. Near-identical text, opposite required answers.
+The highest-similarity *same-signature* pair, `he_56`~`he_61` `CorrectBracketing` at
+0.836, therefore compiles, runs, and is **refuted** — one problem concerns `<>` and the
+other `()`. A threshold cache without re-execution returns a wrong answer there. This
+does not weaken the §2.9 correction or the exchangeability requirement it enforces; it
+says that testing §2.9 empirically requires a **duplicate-injection** stream in which
+absorption is a controlled dial, which is a benchmark-construction problem and remains
+open.
 
 ---
 

@@ -155,7 +155,18 @@ a test, but the tests will not catch every way of violating them.
   full §5.5 experiment (n ≥ 300, standard benchmark, all five arms) remains unrun —
   that is the open gap, not "no live run." Of the two secondary tests, §5.5(5) (the
   §3.7 estimator test) **has** now been run; §5.5(4) (cache-warmth sensitivity) has
-  not.
+  not — and **cannot be run on a benchmark of this construction**. Measured offline for
+  $0 (`results/absorption_ceiling.py`, experiment 20): retrieval candidacy 464/488
+  (95.1%) but the **absorption ceiling is 2/488 (0.4%)**, because arm zero re-executes
+  (invariant #5) and lexical similarity does not imply transferability. A 0.4% cache
+  shifts no distribution, so the paid run would have reported a corpus artifact as a
+  null. Do **not** read this as licence to relax invariant #8 — it is a fact about
+  independently-sampled benchmarks, not about warm caches; testing §2.9 needs duplicate
+  injection (absorption as a controlled dial). By-product, and the stronger result:
+  similarity is *anti*-correlated with transferability at the high end — the top pairs
+  are antonyms (`minimum`~`maximum` 0.949, the highest of 118,828), and the top
+  same-signature pair (`he_56`~`he_61` `CorrectBracketing`, 0.836) is retrieved and
+  **refuted** (`<>` vs `()`). Invariant #5 measured, not asserted.
 - **The §3.7 estimator test is run** (`go-cascade estimator`, experiment 19). Mutation
   score M is a **conservative** proxy for 1 − η_fa on this benchmark, not a tight one:
   measured η_fa 0/145 (95% bound 0.020) against a pooled 1 − M of 0.1014 that predicted
