@@ -1046,9 +1046,17 @@ inflation is the mechanism that pushes its α to 0.226. But **η_fa is now a mea
 quantity rather than a single anecdote**: 11 over-acceptances out of 1096, distributed
 across tiers as 8 (cheap) / 2 (mid) / 1 (frontier). A false-acceptance rate that rises
 as candidate quality falls is exactly the §3.1 hazard. The *mechanism* nevertheless
-remains argued: the records retain per-tier verdicts but not candidate source, so the
-defect class behind each over-acceptance cannot be recovered, and the claim that the
-judge's blind spot is specifically *reading-invisible* code is not confirmed by this run.
+remains argued: *this run's* records retain per-tier verdicts but not candidate source,
+so the defect class behind each over-acceptance cannot be recovered, and the claim that
+the judge's blind spot is specifically *reading-invisible* code is not confirmed by this
+run. That is a recording gap, not an inherent one, and it is now closed going forward:
+`calibrate.TierObs` carries a `disagreement_source` field populated at every recording
+site where an arm's oracle verdict differs from execution truth, so a subsequent paired
+run yields the programs themselves. The field is forensic only — nothing on the
+acceptance path reads it, and no verifier stage may consume it, since a field that
+influenced acceptance would be a new oracle input with no soundness argument behind it.
+Retention is limited to disagreements: at n = 409 that is 166 programs rather than 1096,
+and agreeing observations carry no forensic information by construction.
 
 Two corrections to §5.6's earlier text. First, **α = 0.05 does not certify at n = 409**.
 The n = 64 pinned run that did certify recorded 0 errors in 52 problems; at 409 problems

@@ -1,6 +1,7 @@
 package calibrate
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -109,5 +110,122 @@ func TestRealizedRiskLegacyFallback(t *testing.T) {
 	emp, _ := Risk(recs, nil)
 	if got := RealizedRisk(recs, nil); got != emp {
 		t.Errorf("legacy records: realized %.3f should fall back to empirical %.3f", got, emp)
+	}
+}
+
+// Source is retained on exactly the observations where the oracle and execution
+// truth disagree, in both directions, and on no others. The negative cases carry
+// the cost argument: retaining agreements would store 3n programs per run instead
+// of the disagreement count (1096 vs 166 at n=409).
+func TestRetainSourceOnlyOnDisagreement(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		obs        TierObs
+		wantRetain bool
+	}{
+		{"over-acceptance is eta_fa, the dangerous direction",
+			TierObs{Correct: true, TrueCorrect: boolp(false)}, true},
+		{"over-rejection is beta, costly but safe",
+			TierObs{Correct: false, TrueCorrect: boolp(true)}, true},
+		{"agreement on correct carries no forensic information",
+			TierObs{Correct: true, TrueCorrect: boolp(true)}, false},
+		{"agreement on wrong carries no forensic information",
+			TierObs{Correct: false, TrueCorrect: boolp(false)}, false},
+		// A legacy record has nothing to compare against. Treating a missing
+		// TrueCorrect as agreement would be the same unsound fallback the
+		// analysis scripts must avoid: for the judge arm it forces agreement.
+		{"missing TrueCorrect is not evidence of agreement",
+			TierObs{Correct: true}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			obs := tc.obs
+			if got := obs.Disagrees(); got != tc.wantRetain {
+				t.Errorf("Disagrees() = %v, want %v", got, tc.wantRetain)
+			}
+			obs.RetainSourceOnDisagreement("package main // candidate")
+			if got := obs.DisagreementSource != ""; got != tc.wantRetain {
+				t.Errorf("retained source = %v, want %v (source %q)",
+					got, tc.wantRetain, obs.DisagreementSource)
+			}
+		})
+	}
+}
+
+// The retained source is forensic only: it must not change any risk figure. If
+// adding it moved empirical or realized risk, it would have become an oracle
+// input with no soundness argument behind it (invariants #4, #6).
+func TestRetainedSourceDoesNotAffectRisk(t *testing.T) {
+	base := []Record{
+		{Tiers: []TierObs{{Tier: "small", Score: 1, Correct: true, TrueCorrect: boolp(false)}}},
+		{Tiers: []TierObs{{Tier: "small", Score: 1, Correct: false, TrueCorrect: boolp(true)}}},
+		{Tiers: []TierObs{{Tier: "small", Score: 1, Correct: true, TrueCorrect: boolp(true)}}},
+	}
+	withSrc := make([]Record, len(base))
+	for i, r := range base {
+		tiers := make([]TierObs, len(r.Tiers))
+		copy(tiers, r.Tiers)
+		for j := range tiers {
+			tiers[j].RetainSourceOnDisagreement("func Solve() int { return 0 }")
+		}
+		withSrc[i] = Record{Tiers: tiers}
+	}
+	// Sanity: the fixture must actually exercise retention, or this proves nothing.
+	retained := 0
+	for _, r := range withSrc {
+		for _, o := range r.Tiers {
+			if o.DisagreementSource != "" {
+				retained++
+			}
+		}
+	}
+	if retained != 2 {
+		t.Fatalf("fixture retained %d sources, want 2; test would be vacuous", retained)
+	}
+
+	empBase, _ := Risk(base, nil)
+	empSrc, _ := Risk(withSrc, nil)
+	if empBase != empSrc {
+		t.Errorf("empirical risk changed with retained source: %.3f -> %.3f", empBase, empSrc)
+	}
+	if r1, r2 := RealizedRisk(base, nil), RealizedRisk(withSrc, nil); r1 != r2 {
+		t.Errorf("realized risk changed with retained source: %.3f -> %.3f", r1, r2)
+	}
+}
+
+// Records written before this field existed must still load, and a record
+// carrying it must round-trip. The field is omitempty, so agreeing observations
+// add no bytes to any records file in results/.
+func TestDisagreementSourceRoundTripsAndOmits(t *testing.T) {
+	legacy := `{"tiers":[{"tier":"small","score":1,"correct":true}]}`
+	var rec Record
+	if err := json.Unmarshal([]byte(legacy), &rec); err != nil {
+		t.Fatalf("legacy record no longer loads: %v", err)
+	}
+	if rec.Tiers[0].DisagreementSource != "" {
+		t.Errorf("legacy record invented a source: %q", rec.Tiers[0].DisagreementSource)
+	}
+
+	agree := TierObs{Tier: "small", Correct: true, TrueCorrect: boolp(true)}
+	b, err := json.Marshal(agree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "disagreement_source") {
+		t.Errorf("agreeing observation serialised the field: %s", b)
+	}
+
+	src := "package main\n\nfunc Solve() int { return 0 }\n"
+	disagree := TierObs{Tier: "small", Correct: true, TrueCorrect: boolp(false)}
+	disagree.RetainSourceOnDisagreement(src)
+	b, err = json.Marshal(disagree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back TierObs
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.DisagreementSource != src {
+		t.Errorf("source did not round-trip: got %q want %q", back.DisagreementSource, src)
 	}
 }

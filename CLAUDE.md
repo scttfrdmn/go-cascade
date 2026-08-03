@@ -154,16 +154,23 @@ a test, but the tests will not catch every way of violating them.
   α=0.084, the judge α=0.226** at δ=0.10 on identical candidates, so the margin *widens*
   with scale (1.19× at n=28 → 1.58× at n=64 → **2.69×**). Execution sound on
   **1096/1096** observations. **η_fa measured for the first time: 11/1096**, gradient
-  8/2/1 across cheap/mid/frontier — but the records keep no candidate source, so the
-  defect classes are unrecoverable and the *reading-invisible* mechanism is still
-  argued. **Two n=64 headlines do not survive:** α=0.05 does **not** certify at n=409
+  8/2/1 across cheap/mid/frontier — but *those* records keep no candidate source, so
+  their defect classes are unrecoverable and the *reading-invisible* mechanism is still
+  argued **for that run**. Fixed going forward: `TierObs.DisagreementSource`
+  (`RetainSourceOnDisagreement`) keeps the program wherever an arm's oracle differs from
+  execution truth, and `results/classify_disagreements.py` reads it back out
+  (`--dump <dir>` writes one annotated `.go` per event). Retention is **forensic only** —
+  nothing on the acceptance path may read it, or it becomes an unsound oracle input
+  (invariants #4, #6) — and it is limited to disagreements, which at n=409 is 166
+  programs rather than 1096. **Two n=64 headlines do not survive:** α=0.05 does **not** certify at n=409
   (floor 0.0538 is real model accuracy, not oracle noise — the n=64 "0/52 errors" was
   too small a sample to contain the model's errors), and the certifiable-α-vs-cost-win
   tension **reproduces** (`[1,1]` below α=0.11, `[0.1,1]` and 2.2× cheaper at or above).
   Prefer the n=409 figure wherever it conflicts with an n≤64 one. **New coverage gap:**
   MultiPL-E Go has **0 concurrency problems**, so the `-race` rung was never exercised
   at scale — the 64-problem hand-written set is not obsolete. Still open: arm (e)
-  self-consistency, §5.5(4), single-file/stdlib-only (§5.4).
+  self-consistency, §5.5(4), single-file/stdlib-only (§5.4). **Open work is tracked on
+  https://github.com/users/scttfrdmn/projects/62 (issues #49–#53), not in prose here.**
 - **Earlier live evaluation** (20 experiments against Bedrock; see `results/` and paper
   §5.6). Those are **demonstrated, not validated**: n ≤ 64, below the §5.5 bar of
   n ≥ 300, on a small non-standard single-file/stdlib benchmark. Of the two secondary
