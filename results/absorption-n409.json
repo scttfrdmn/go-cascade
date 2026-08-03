@@ -1,0 +1,1088 @@
+[
+  {
+    "pattern": "uniform",
+    "rho": 0,
+    "epsilon": 0,
+    "n_residual": 409,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": 0,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0,
+    "epsilon": 0.2,
+    "n_residual": 409,
+    "n_shadow": 82,
+    "n_calibration": 82,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.036585365853658534,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": 0.022094340747808458,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0,
+    "epsilon": 0.5,
+    "n_residual": 409,
+    "n_shadow": 205,
+    "n_calibration": 205,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.04390243902439024,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": 0.014777267577076751,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0,
+    "epsilon": 1,
+    "n_residual": 409,
+    "n_shadow": 409,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": 0,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.2,
+    "epsilon": 0,
+    "n_residual": 327,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7706422018348624,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.06116207951070336,
+    "risk_gap": 0.0024823729092363703,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.2,
+    "epsilon": 0.2,
+    "n_residual": 327,
+    "n_shadow": 65,
+    "n_calibration": 65,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7706422018348624,
+    "calibrated_risk": 0.015384615384615385,
+    "deployed_risk": 0.06422018348623854,
+    "risk_gap": 0.04883556810162315,
+    "certified": true,
+    "thresholds": [
+      0.1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.2,
+    "epsilon": 0.5,
+    "n_residual": 327,
+    "n_shadow": 164,
+    "n_calibration": 164,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7706422018348624,
+    "calibrated_risk": 0.036585365853658534,
+    "deployed_risk": 0.06422018348623854,
+    "risk_gap": 0.02763481763258,
+    "certified": true,
+    "thresholds": [
+      0.1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.2,
+    "epsilon": 1,
+    "n_residual": 327,
+    "n_shadow": 327,
+    "n_calibration": 327,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7706422018348624,
+    "calibrated_risk": 0.06116207951070336,
+    "deployed_risk": 0.06116207951070336,
+    "risk_gap": 0,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.4,
+    "epsilon": 0,
+    "n_residual": 245,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7795918367346939,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.04081632653061224,
+    "risk_gap": -0.01786338007085475,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.4,
+    "epsilon": 0.2,
+    "n_residual": 245,
+    "n_shadow": 49,
+    "n_calibration": 49,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7795918367346939,
+    "calibrated_risk": 0,
+    "deployed_risk": 0.04081632653061224,
+    "risk_gap": 0.04081632653061224,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.4,
+    "epsilon": 0.5,
+    "n_residual": 245,
+    "n_shadow": 123,
+    "n_calibration": 123,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7795918367346939,
+    "calibrated_risk": 0.032520325203252036,
+    "deployed_risk": 0.04081632653061224,
+    "risk_gap": 0.008296001327360206,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.4,
+    "epsilon": 1,
+    "n_residual": 245,
+    "n_shadow": 245,
+    "n_calibration": 245,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7795918367346939,
+    "calibrated_risk": 0.04081632653061224,
+    "deployed_risk": 0.04081632653061224,
+    "risk_gap": 0,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.6,
+    "epsilon": 0,
+    "n_residual": 164,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.75,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.06707317073170732,
+    "risk_gap": 0.008393464130240329,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.6,
+    "epsilon": 0.2,
+    "n_residual": 164,
+    "n_shadow": 33,
+    "n_calibration": 33,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.75,
+    "calibrated_risk": 0.06060606060606061,
+    "deployed_risk": 0.09146341463414634,
+    "risk_gap": 0.03085735402808573,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.6,
+    "epsilon": 0.5,
+    "n_residual": 164,
+    "n_shadow": 82,
+    "n_calibration": 82,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.75,
+    "calibrated_risk": 0.06097560975609756,
+    "deployed_risk": 0.06707317073170732,
+    "risk_gap": 0.0060975609756097615,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.3
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.6,
+    "epsilon": 1,
+    "n_residual": 164,
+    "n_shadow": 164,
+    "n_calibration": 164,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.75,
+    "calibrated_risk": 0.06097560975609756,
+    "deployed_risk": 0.06097560975609756,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.8,
+    "epsilon": 0,
+    "n_residual": 82,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7439024390243902,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.08536585365853659,
+    "risk_gap": 0.0266861470570696,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.8,
+    "epsilon": 0.2,
+    "n_residual": 82,
+    "n_shadow": 16,
+    "n_calibration": 16,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7439024390243902,
+    "calibrated_risk": 0.0625,
+    "deployed_risk": 0.04878048780487805,
+    "risk_gap": -0.01371951219512195,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ],
+    "underpowered": true,
+    "note": "calibrated on only 16 records (epsilon=0.20 of a 82-record residual); certifying alpha=0.100 at delta=0.100 needs \u003e= 22 even with zero observed errors, so this row is sample-size noise, not evidence about the correction"
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.8,
+    "epsilon": 0.5,
+    "n_residual": 82,
+    "n_shadow": 41,
+    "n_calibration": 41,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7439024390243902,
+    "calibrated_risk": 0.0975609756097561,
+    "deployed_risk": 0.08536585365853659,
+    "risk_gap": -0.01219512195121951,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0
+    ]
+  },
+  {
+    "pattern": "uniform",
+    "rho": 0.8,
+    "epsilon": 1,
+    "n_residual": 82,
+    "n_shadow": 82,
+    "n_calibration": 82,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7439024390243902,
+    "calibrated_risk": 0.04878048780487805,
+    "deployed_risk": 0.04878048780487805,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0,
+    "epsilon": 0,
+    "n_residual": 409,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": 0,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0,
+    "epsilon": 0.2,
+    "n_residual": 409,
+    "n_shadow": 82,
+    "n_calibration": 82,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.10975609756097561,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": -0.05107639095950862,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.3
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0,
+    "epsilon": 0.5,
+    "n_residual": 409,
+    "n_shadow": 205,
+    "n_calibration": 205,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.04878048780487805,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": 0.009899218796588942,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0,
+    "epsilon": 1,
+    "n_residual": 409,
+    "n_shadow": 409,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": 0,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.2,
+    "epsilon": 0,
+    "n_residual": 327,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7125382262996942,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.07339449541284404,
+    "risk_gap": 0.014714788811377048,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.2,
+    "epsilon": 0.2,
+    "n_residual": 327,
+    "n_shadow": 65,
+    "n_calibration": 65,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7125382262996942,
+    "calibrated_risk": 0.06153846153846154,
+    "deployed_risk": 0.0672782874617737,
+    "risk_gap": 0.005739825923312153,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.2,
+    "epsilon": 0.5,
+    "n_residual": 327,
+    "n_shadow": 164,
+    "n_calibration": 164,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7125382262996942,
+    "calibrated_risk": 0.06097560975609756,
+    "deployed_risk": 0.0672782874617737,
+    "risk_gap": 0.006302677705676135,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.2,
+    "epsilon": 1,
+    "n_residual": 327,
+    "n_shadow": 327,
+    "n_calibration": 327,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7125382262996942,
+    "calibrated_risk": 0.0672782874617737,
+    "deployed_risk": 0.0672782874617737,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.4,
+    "epsilon": 0,
+    "n_residual": 245,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.6163265306122448,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.09387755102040816,
+    "risk_gap": 0.03519784441894117,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.4,
+    "epsilon": 0.2,
+    "n_residual": 245,
+    "n_shadow": 49,
+    "n_calibration": 49,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.6163265306122448,
+    "calibrated_risk": 0.10204081632653061,
+    "deployed_risk": 0.09387755102040816,
+    "risk_gap": -0.00816326530612245,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.3
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.4,
+    "epsilon": 0.5,
+    "n_residual": 245,
+    "n_shadow": 123,
+    "n_calibration": 123,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.6163265306122448,
+    "calibrated_risk": 0.06504065040650407,
+    "deployed_risk": 0.09387755102040816,
+    "risk_gap": 0.028836900613904093,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.3
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.4,
+    "epsilon": 1,
+    "n_residual": 245,
+    "n_shadow": 245,
+    "n_calibration": 245,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.6163265306122448,
+    "calibrated_risk": 0.08571428571428572,
+    "deployed_risk": 0.08571428571428572,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.6,
+    "epsilon": 0,
+    "n_residual": 164,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.4268292682926829,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.13414634146341464,
+    "risk_gap": 0.07546663486194766,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.6,
+    "epsilon": 0.2,
+    "n_residual": 164,
+    "n_shadow": 33,
+    "n_calibration": 33,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.4268292682926829,
+    "calibrated_risk": 0.12121212121212122,
+    "deployed_risk": 0.12195121951219512,
+    "risk_gap": 0.0007390983000739038,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.6,
+    "epsilon": 0.5,
+    "n_residual": 164,
+    "n_shadow": 82,
+    "n_calibration": 82,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.4268292682926829,
+    "calibrated_risk": 0.0975609756097561,
+    "deployed_risk": 0.12195121951219512,
+    "risk_gap": 0.02439024390243902,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.6,
+    "epsilon": 1,
+    "n_residual": 164,
+    "n_shadow": 164,
+    "n_calibration": 164,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.4268292682926829,
+    "calibrated_risk": 0.12195121951219512,
+    "deployed_risk": 0.12195121951219512,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.8,
+    "epsilon": 0,
+    "n_residual": 82,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.2073170731707317,
+    "risk_gap": 0.1486373665692647,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.8,
+    "epsilon": 0.2,
+    "n_residual": 82,
+    "n_shadow": 16,
+    "n_calibration": 16,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0,
+    "calibrated_risk": 0.25,
+    "deployed_risk": 0.18292682926829268,
+    "risk_gap": -0.06707317073170732,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ],
+    "underpowered": true,
+    "note": "calibrated on only 16 records (epsilon=0.20 of a 82-record residual); certifying alpha=0.100 at delta=0.100 needs \u003e= 22 even with zero observed errors, so this row is sample-size noise, not evidence about the correction"
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.8,
+    "epsilon": 0.5,
+    "n_residual": 82,
+    "n_shadow": 41,
+    "n_calibration": 41,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0,
+    "calibrated_risk": 0.1951219512195122,
+    "deployed_risk": 0.18292682926829268,
+    "risk_gap": -0.012195121951219523,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "easy-first",
+    "rho": 0.8,
+    "epsilon": 1,
+    "n_residual": 82,
+    "n_shadow": 82,
+    "n_calibration": 82,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0,
+    "calibrated_risk": 0.18292682926829268,
+    "deployed_risk": 0.18292682926829268,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0,
+    "epsilon": 0,
+    "n_residual": 409,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": 0,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0,
+    "epsilon": 0.2,
+    "n_residual": 409,
+    "n_shadow": 82,
+    "n_calibration": 82,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.04878048780487805,
+    "deployed_risk": 0.07334963325183375,
+    "risk_gap": 0.024569145446955695,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.3
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0,
+    "epsilon": 0.5,
+    "n_residual": 409,
+    "n_shadow": 205,
+    "n_calibration": 205,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.06341463414634146,
+    "deployed_risk": 0.05378973105134474,
+    "risk_gap": -0.009624903094996723,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0,
+    "epsilon": 1,
+    "n_residual": 409,
+    "n_shadow": 409,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7701711491442543,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.05867970660146699,
+    "risk_gap": 0,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.2,
+    "epsilon": 0,
+    "n_residual": 327,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7217125382262997,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.07033639143730887,
+    "risk_gap": 0.011656684835841875,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.2,
+    "epsilon": 0.2,
+    "n_residual": 327,
+    "n_shadow": 65,
+    "n_calibration": 65,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7217125382262997,
+    "calibrated_risk": 0.046153846153846156,
+    "deployed_risk": 0.10091743119266056,
+    "risk_gap": 0.0547635850388144,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.2,
+    "epsilon": 0.5,
+    "n_residual": 327,
+    "n_shadow": 164,
+    "n_calibration": 164,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7217125382262997,
+    "calibrated_risk": 0.07926829268292683,
+    "deployed_risk": 0.0764525993883792,
+    "risk_gap": -0.0028156932945476304,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.2,
+    "epsilon": 1,
+    "n_residual": 327,
+    "n_shadow": 327,
+    "n_calibration": 327,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.7217125382262997,
+    "calibrated_risk": 0.06422018348623854,
+    "deployed_risk": 0.06422018348623854,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.5,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.4,
+    "epsilon": 0,
+    "n_residual": 245,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.6489795918367347,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.08571428571428572,
+    "risk_gap": 0.027034579112818723,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.4,
+    "epsilon": 0.2,
+    "n_residual": 245,
+    "n_shadow": 49,
+    "n_calibration": 49,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.6489795918367347,
+    "calibrated_risk": 0.061224489795918366,
+    "deployed_risk": 0.08163265306122448,
+    "risk_gap": 0.020408163265306117,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.4,
+    "epsilon": 0.5,
+    "n_residual": 245,
+    "n_shadow": 123,
+    "n_calibration": 123,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.6489795918367347,
+    "calibrated_risk": 0.08943089430894309,
+    "deployed_risk": 0.08163265306122448,
+    "risk_gap": -0.007798241247718607,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.4,
+    "epsilon": 1,
+    "n_residual": 245,
+    "n_shadow": 245,
+    "n_calibration": 245,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.6489795918367347,
+    "calibrated_risk": 0.08163265306122448,
+    "deployed_risk": 0.08163265306122448,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.6,
+    "epsilon": 0,
+    "n_residual": 164,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.5,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.12195121951219512,
+    "risk_gap": 0.06327151291072813,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.6,
+    "epsilon": 0.2,
+    "n_residual": 164,
+    "n_shadow": 33,
+    "n_calibration": 33,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.5,
+    "calibrated_risk": 0.18181818181818182,
+    "deployed_risk": 0.10975609756097561,
+    "risk_gap": -0.07206208425720621,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.3
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.6,
+    "epsilon": 0.5,
+    "n_residual": 164,
+    "n_shadow": 82,
+    "n_calibration": 82,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.5,
+    "calibrated_risk": 0.08536585365853659,
+    "deployed_risk": 0.0975609756097561,
+    "risk_gap": 0.01219512195121951,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.6,
+    "epsilon": 1,
+    "n_residual": 164,
+    "n_shadow": 164,
+    "n_calibration": 164,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.5,
+    "calibrated_risk": 0.0975609756097561,
+    "deployed_risk": 0.0975609756097561,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.8,
+    "epsilon": 0,
+    "n_residual": 82,
+    "n_shadow": 0,
+    "n_calibration": 409,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.024390243902439025,
+    "calibrated_risk": 0.05867970660146699,
+    "deployed_risk": 0.1951219512195122,
+    "risk_gap": 0.13644224461804522,
+    "certified": true,
+    "thresholds": [
+      1,
+      1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.8,
+    "epsilon": 0.2,
+    "n_residual": 82,
+    "n_shadow": 16,
+    "n_calibration": 16,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.024390243902439025,
+    "calibrated_risk": 0.25,
+    "deployed_risk": 0.17073170731707318,
+    "risk_gap": -0.07926829268292682,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ],
+    "underpowered": true,
+    "note": "calibrated on only 16 records (epsilon=0.20 of a 82-record residual); certifying alpha=0.100 at delta=0.100 needs \u003e= 22 even with zero observed errors, so this row is sample-size noise, not evidence about the correction"
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.8,
+    "epsilon": 0.5,
+    "n_residual": 82,
+    "n_shadow": 41,
+    "n_calibration": 41,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.024390243902439025,
+    "calibrated_risk": 0.24390243902439024,
+    "deployed_risk": 0.17073170731707318,
+    "risk_gap": -0.07317073170731705,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ]
+  },
+  {
+    "pattern": "cheap-accept",
+    "rho": 0.8,
+    "epsilon": 1,
+    "n_residual": 82,
+    "n_shadow": 82,
+    "n_calibration": 82,
+    "tier0_accuracy_d": 0.7701711491442543,
+    "tier0_accuracy_residual": 0.024390243902439025,
+    "calibrated_risk": 0.17073170731707318,
+    "deployed_risk": 0.17073170731707318,
+    "risk_gap": 0,
+    "certified": false,
+    "thresholds": [
+      0.1,
+      0.1
+    ]
+  }
+]

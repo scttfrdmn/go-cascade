@@ -30,6 +30,7 @@ Usage:
   go-cascade solve      [flags] "problem statement"
   go-cascade calibrate  [flags] -bench problems.jsonl
   go-cascade estimator  [flags] -bench problems.jsonl -refs dir -pin-api
+  go-cascade absorption [flags] -records recs.json     (offline, no cost)
   go-cascade models     [flags]
   go-cascade cache      [stats|clear] [flags]
 
@@ -58,6 +59,8 @@ func main() {
 		err = cmdCalibrate(ctx, os.Args[2:])
 	case "estimator":
 		err = cmdEstimator(ctx, os.Args[2:])
+	case "absorption":
+		err = cmdAbsorption(os.Args[2:])
 	case "models":
 		err = cmdModels(ctx, os.Args[2:])
 	case "cache":
@@ -1086,6 +1089,173 @@ func printCert(path string, cert *calibrate.Certificate) {
 	if cert.Note != "" {
 		fmt.Printf("  note            %s\n", cert.Note)
 	}
+}
+
+// cmdAbsorption runs the §5.5(4) cache-warmth sweep offline against recorded
+// observations. It queries no model and costs nothing: the records profile every
+// tier on every problem, so any absorption pattern and any threshold vector can be
+// replayed. Experiment 20 showed the effect cannot be observed on an
+// independently-sampled benchmark (absorption ceiling 0.4%), so absorption is
+// injected as a controlled dial instead.
+//
+// What this measures is the certificate's sensitivity to a shift of known shape and
+// size. It is emphatically NOT a measurement of how a real cache warms, and a number
+// from here must not be reported as one.
+func cmdAbsorption(args []string) error {
+	fs := flag.NewFlagSet("absorption", flag.ExitOnError)
+	recPath := fs.String("records", "", "profiled calibration records (JSON array), e.g. results/s55-fixed.records.execution.json")
+	out := fs.String("o", "", "write the sweep rows to this path as JSON")
+	alpha := fs.Float64("alpha", 0.10, "target risk for each replayed certificate")
+	delta := fs.Float64("delta", 0.10, "confidence parameter")
+	step := fs.Float64("step", 0.1, "threshold grid resolution")
+	method := fs.String("method", string(calibrate.FixedSequence), "multiplicity correction: fixed-sequence or bonferroni")
+	rhos := fs.String("rho", "0,0.2,0.4,0.6,0.8", "absorption rates to sweep (comma-separated)")
+	epsilons := fs.String("epsilon", "0,0.05,0.20", "shadow-sampling rates to sweep; 0 is the uncorrected arm")
+	patterns := fs.String("pattern", "uniform,easy-first,cheap-accept", "absorption patterns: uniform, easy-first, cheap-accept")
+	seed := fs.Uint64("seed", 1, "seed for the uniform pattern and the shadow draw")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *recPath == "" {
+		return errors.New("-records is required: this command replays recorded observations and never queries a model")
+	}
+	recs, err := loadRecords(*recPath)
+	if err != nil {
+		return err
+	}
+	if len(recs) == 0 {
+		return fmt.Errorf("no records in %s", *recPath)
+	}
+
+	rs, err := parseFloatList(*rhos)
+	if err != nil {
+		return fmt.Errorf("-rho: %w", err)
+	}
+	es, err := parseFloatList(*epsilons)
+	if err != nil {
+		return fmt.Errorf("-epsilon: %w", err)
+	}
+	var pats []calibrate.AbsorptionPattern
+	for _, p := range strings.Split(*patterns, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		switch calibrate.AbsorptionPattern(p) {
+		case calibrate.AbsorbUniform, calibrate.AbsorbEasyFirst, calibrate.AbsorbCheapAccept:
+			pats = append(pats, calibrate.AbsorptionPattern(p))
+		default:
+			return fmt.Errorf("unknown -pattern %q: want uniform, easy-first or cheap-accept", p)
+		}
+	}
+
+	// Tier names come from the records themselves, so the grid arity matches what
+	// was profiled rather than whatever the local config happens to say.
+	var tiers []string
+	for _, r := range recs {
+		if len(r.Tiers) > 0 {
+			for _, t := range r.Tiers {
+				tiers = append(tiers, t.Tier)
+			}
+			break
+		}
+	}
+	if len(tiers) == 0 {
+		return fmt.Errorf("no tier observations in %s; cannot infer the grid arity", *recPath)
+	}
+
+	// cheap-accept absorbs what the running policy served from tier 0, so it needs
+	// that policy. Take it from an unshifted certificate over the same records —
+	// the thresholds a system would actually have been running before the cache
+	// warmed.
+	base, err := calibrate.Calibrate(recs, tiers, calibrate.Options{
+		Alpha: *alpha, Delta: *delta, Step: *step, Method: calibrate.Method(*method),
+	})
+	if err != nil {
+		return fmt.Errorf("baseline certificate over the unshifted records: %w", err)
+	}
+
+	rows, err := calibrate.SweepAbsorption(recs, calibrate.AbsorptionOptions{
+		Rhos: rs, Epsilons: es, Patterns: pats, Tiers: tiers, Seed: *seed,
+		TauForCheapAccept: base.Thresholds,
+		LTT: calibrate.Options{
+			Alpha: *alpha, Delta: *delta, Step: *step, Method: calibrate.Method(*method),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	printAbsorption(rows, base, *recPath)
+	if *out != "" {
+		if err := writeJSONFile(*out, rows); err != nil {
+			return err
+		}
+		fmt.Printf("\nwrote %d sweep rows to %s\n", len(rows), *out)
+	}
+	return nil
+}
+
+func printAbsorption(rows []calibrate.AbsorptionSweep, base *calibrate.Certificate, recPath string) {
+	fmt.Printf("\n§5.5(4) absorption sweep — offline replay of %s\n", recPath)
+	fmt.Printf("unshifted baseline: thresholds %v, empirical risk %.4f, valid=%v\n",
+		base.Thresholds, base.EmpiricalRisk, base.Valid)
+	fmt.Println("\nabsorption is INJECTED, not observed: this measures the certificate's")
+	fmt.Println("sensitivity to a shift of known shape, not how any real cache warms.")
+
+	fmt.Printf("\n  %-13s %-5s %-6s %-5s %-6s %-9s %-9s %-9s %-8s %s\n",
+		"pattern", "rho", "n_res", "eps", "n_cal", "acc(res)", "cal-risk", "dep-risk", "gap", "cert")
+	fmt.Println("  " + strings.Repeat("-", 95))
+	for _, r := range rows {
+		gap := fmt.Sprintf("%+.4f", r.RiskGap)
+		cert := "no"
+		if r.Certified {
+			cert = "yes"
+		}
+		if r.Thresholds != nil {
+			cert += fmt.Sprintf(" %v", r.Thresholds)
+		}
+		// n_cal is what the calibrator actually saw, and it is the difference between
+		// the two arms: uncorrected calibrates on the full recorded sample, corrected
+		// on the shadow draw alone. Printing it is not cosmetic — a corrected row at
+		// eps=0.05 off a residual of 82 calibrates on 4 records, and a certificate off
+		// 4 records is sampling noise, not evidence about the correction. Without this
+		// column those rows read as findings.
+		fmt.Printf("  %-13s %-5.2f %-6d %-5.2f %-6d %-9.4f %-9.4f %-9.4f %-8s %s\n",
+			r.Pattern, r.Rho, r.NResidual, r.Epsilon, r.NCalibration,
+			r.Tier0AccuracyResidual, r.CalibratedRisk, r.DeployedRisk, gap, cert)
+		if r.Note != "" {
+			fmt.Printf("      note: %s\n", r.Note)
+		}
+	}
+
+	if len(rows) > 0 {
+		fmt.Printf("\ntier-0 accuracy on the unshifted stream D: %.4f\n", rows[0].Tier0AccuracyD)
+	}
+	fmt.Println("\nHow to read this. acc(res) is ground-truth cheap-tier accuracy on the residual")
+	fmt.Println("stream; if it does not move away from D, the pattern absorbed nothing selective")
+	fmt.Println("and no gap below is attributable to warmth. gap = dep-risk - cal-risk: positive")
+	fmt.Println("means the certificate promised less risk than deployment delivers, which is the")
+	fmt.Println("§2.9 failure. The uniform rows are the null control — they SHOULD show no shift,")
+	fmt.Println("which is why a harness injecting duplicates uniformly would have measured nothing.")
+}
+
+func parseFloatList(s string) ([]float64, error) {
+	var out []float64
+	for _, f := range strings.Split(s, ",") {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		var v float64
+		if _, err := fmt.Sscanf(f, "%g", &v); err != nil {
+			return nil, fmt.Errorf("parse %q: %w", f, err)
+		}
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return nil, errors.New("empty list")
+	}
+	return out, nil
 }
 
 func cmdModels(ctx context.Context, args []string) error {

@@ -125,3 +125,24 @@ func HoeffdingBentkus(rhat float64, n int, alpha float64) float64 {
 	pBentkus := math.E * BinomCDF(k, n, alpha)
 	return math.Min(1, math.Min(pHoeff, pBentkus))
 }
+
+// MinCalibrationSize returns the smallest n at which a threshold could be
+// certified at (alpha, delta) *even in the best case* — zero observed errors.
+//
+// It follows from the sanity check above: at rhat = 0 the Hoeffding term is
+// exactly (1-alpha)^n, so rejecting the null needs (1-alpha)^n <= delta, i.e.
+// n >= ln(delta)/ln(1-alpha). Below that no amount of good luck certifies
+// anything, because the finite-sample penalty alone exceeds the budget.
+//
+// This is the honest floor for reading a small-sample certificate. A run that
+// calibrates under it and fails to certify has learned nothing about the policy
+// — the sample was too small to certify a *perfect* one. Distinguishing "the
+// bound refused" from "there were not enough points to ask" matters wherever
+// sample size is itself a variable, which is exactly the case when shadow
+// sampling trades sample size for distributional correctness (§2.9).
+func MinCalibrationSize(alpha, delta float64) int {
+	if alpha <= 0 || alpha >= 1 || delta <= 0 || delta >= 1 {
+		return 0
+	}
+	return int(math.Ceil(math.Log(delta) / math.Log(1-alpha)))
+}
