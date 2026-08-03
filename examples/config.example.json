@@ -2,7 +2,7 @@
   "region": "us-west-2",
   "race_count": 3,
   "mutants": 24,
-  "cache_admit_score": 0.9,
+  "cache_admit_score": 0.269,
   "shadow_rate": 0.05,
   "test_model": "us.anthropic.claude-opus-4-5-20251101-v1:0",
   "tiers": [
@@ -34,5 +34,6 @@
       "temperature": 0.2
     }
   ],
-  "_comment_test_model": "Must not appear in tiers: a shared author between oracle and code is flagged oracle_contaminated and excluded from calibration."
+  "_comment_test_model": "Must not appear in tiers: a shared author between oracle and code is flagged oracle_contaminated and excluded from calibration.",
+  "_comment_cache_admit_score": "A Wilson LOWER bound on cluster mass (invariant #9), not a probability: a unanimous 5-sample tier reports 0.6488 and a unanimous 1-sample tier 0.2698, never 1.0. This is keyed to the NARROWEST tier (1 sample) on purpose — acceptance usually lands on the final tier, which is the narrowest and has no threshold at all, so a higher bar admits nothing on exactly the escalated queries a cache would pay off on. Thin admission is safe because arm zero re-executes every hit (invariant #5), so it costs a wasted verification, never a wrong answer. Omit the key to have it derived from your tiers; anything above the widest tier's ceiling is rejected outright."
 }

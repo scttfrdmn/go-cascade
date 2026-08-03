@@ -157,3 +157,30 @@ func Score(cs []Cluster) (float64, *Cluster) {
 	}
 	return 0, nil
 }
+
+// UnanimousScore is the score a tier of n samples reports when every candidate
+// lands in one verified cluster — the ceiling of Score for that fan-out.
+//
+// Because the statistic is a lower bound rather than raw mass, this ceiling is
+// strictly below 1 and grows only with n: 0.270 at n=1, 0.425 at n=2, 0.649 at
+// n=5. Any threshold above the ceiling is therefore unreachable *by
+// construction*, which is checkable in advance instead of merely being an event
+// that never fires. Config.Validate uses this to reject a cache_admit_score no
+// fan-out in the cascade can satisfy.
+func UnanimousScore(n int) float64 { return wilsonLCB(n, n, 1.645) }
+
+// MinSamplesFor returns the smallest unanimous fan-out whose score reaches want,
+// or 0 if no fan-out does. It exists to make the diagnostic for an unreachable
+// threshold actionable: "raise samples to >= 25" rather than "this cannot work".
+//
+// The search is bounded because UnanimousScore is increasing in n and tends to 1;
+// the cap is a guard against a want of 1.0, which no finite fan-out attains.
+func MinSamplesFor(want float64) int {
+	const cap = 100000
+	for n := 1; n <= cap; n++ {
+		if UnanimousScore(n) >= want {
+			return n
+		}
+	}
+	return 0
+}

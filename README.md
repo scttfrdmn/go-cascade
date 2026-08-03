@@ -269,9 +269,33 @@ Three layers:
   $0.0028.
 - **failures** — refuted canonical forms, fed forward as negative constraints
 
-Admission is stricter than acceptance (`cache_admit_score`, default 0.90): an
-entry that will be reused many times should clear a higher bar than a one-shot
-answer.
+Admission is gated on `cache_admit_score`, which defaults to unanimity at the
+cascade's **narrowest** fan-out (0.2698 for a one-sample tier). That number looks
+alarmingly low and the reason is worth stating, because the obvious alternative
+was shipped for twenty-one experiments and was silently broken.
+
+The routing score is a Wilson **lower bound** on cluster mass, not the raw mass
+(invariant #9). A unanimous tier of 5 therefore reports 0.6488 and a unanimous
+tier of 1 reports 0.2698 — never 1.0. The old default of 0.90 sat above the
+ceiling of *every* shipped fan-out, so the admission branch was unreachable and
+the solutions layer never held a single entry. Nothing failed: an empty cache just
+escalates, which is indistinguishable from a cold one. `Config.Validate` now
+rejects an unreachable threshold outright, and a test asserts a solve admits.
+
+Nor can the bar be keyed to the widest tier, which is the tempting fix. Acceptance
+most often lands on the **final** tier — both the narrowest and, by construction,
+the one with no threshold at all (invariant #6) — so a higher bar admits nothing
+on exactly the fully-escalated queries where reuse would pay for itself.
+
+Admitting on thin evidence is safe here in a way it would not be on the acceptance
+path, because arm zero re-executes every hit against the new query's tests
+(invariant #5). A weak admission costs one wasted verification, never a wrong
+answer; retrieval quality is a cost question, not a risk one.
+
+So the honest statement is *not* that admission is uniformly stricter than
+acceptance — the final tier accepts unconditionally, and nothing is stricter than
+that. It is that admission is gated where acceptance is thresholded, and that the
+gate has a computable ceiling.
 
 ### The trap this avoids
 

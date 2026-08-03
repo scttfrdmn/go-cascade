@@ -222,6 +222,42 @@ certification advantage on this stream is driven more by the judge's
 over-rejection than by its rare over-acceptance — a mechanism the paper
 underweights, but one that still favours the executable oracle.
 
+## A correction to the setup, found while building §5.5(4) (no experiment, no cost)
+
+**The arm-zero *solutions* cache was structurally dead in every run above.** Not
+cold, not underused — unreachable. `Router.finish` gates admission on
+`res.Score >= cache_admit_score`, and `res.Score` is a Wilson **lower** bound on
+cluster mass, not the raw mass (invariant #9). Its ceiling for a *unanimous* tier is
+0.2698 at 1 sample, 0.4249 at 2, 0.6488 at 5 — reaching the shipped default of
+**0.90 needs 25 samples**. All nine shipped configs run fan-outs of 1–5, so the
+admission branch never executed and the solutions layer never held an entry.
+
+Nothing failed, which is the point: an empty cache simply escalates, and that is
+indistinguishable from a cold one. Found by structural audit, not by a test.
+
+**What it does and does not invalidate.** No number above changes. Every records
+file bypasses the cache by invariant #8 (`cmdCalibrate` forces `cache_dir=""`), and
+all of them show `cache_hit=0` — verified across the 4 live records sets and the
+estimator runs. The *spec* and *failure* layers are keyed exactly and not
+score-gated, so the measured spec-cache saving ($0.0084 → $0.0028) is real. What was
+dead was solution reuse specifically, which no published result rests on.
+
+It mattered for what came next: experiment 20 concluded §5.5(4) needs duplicate
+injection to make absorption a controlled dial, and the dial was wired to a branch
+that could not fire. A paid run through that config would have reported "no §2.9
+effect" from a setup incapable of exhibiting one — the same failure mode experiment
+20 caught for a different reason, one layer down.
+
+**Fixed** (`Config.DefaultAdmitScore`, `Config.Validate`): the default is now derived
+as unanimity at the cascade's **narrowest** fan-out, and an explicitly unreachable
+threshold is rejected outright rather than silently ignored. Keying it to the
+*widest* tier is the tempting fix and is also wrong — acceptance usually lands on the
+final tier, which is both narrowest and (by construction, invariant #6) unthresholded,
+so a higher bar admits nothing on exactly the fully-escalated queries reuse would pay
+for. Thin admission carries no risk because arm zero re-executes every hit against the
+new query's tests (invariant #5): it costs a wasted verification, never a wrong
+answer. A test now asserts a solve admits, and one asserts every shipped config can.
+
 ## What is NOT established (open, honest)
 
 - **Deployable-α certification was reached at n=64 and does NOT hold at n=409

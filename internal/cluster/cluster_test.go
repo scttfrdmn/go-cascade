@@ -107,3 +107,77 @@ func TestGroupEmpty(t *testing.T) {
 		t.Errorf("Group(nil) = %v, want nil", cs)
 	}
 }
+
+// UnanimousScore has to agree with what Score actually returns for a unanimous
+// tier, or a threshold checked against the former is meaningless for the latter.
+// This is the tie that makes Config.checkAdmissionReachable sound.
+func TestUnanimousScoreMatchesScoreOnUnanimity(t *testing.T) {
+	pass := map[string]bool{"TestV_A": true}
+	for _, n := range []int{1, 2, 3, 5, 10, 25} {
+		var cands []Candidate
+		for i := range n {
+			cands = append(cands, Candidate{Index: i, Report: ok(pass, 1)})
+		}
+		got, _ := Score(Group(cands))
+		if want := UnanimousScore(n); got != want {
+			t.Errorf("n=%d: Score = %v but UnanimousScore = %v", n, got, want)
+		}
+	}
+}
+
+// It is a ceiling: no arrangement of n candidates can score above it. A tier that
+// is not unanimous has a smaller verified cluster and so a weaker bound.
+func TestUnanimousScoreIsTheCeilingForItsFanOut(t *testing.T) {
+	pass := map[string]bool{"TestV_A": true}
+	other := map[string]bool{"TestV_A": false}
+	const n = 5
+	for k := 1; k <= n; k++ {
+		var cands []Candidate
+		for i := range n {
+			r := ok(pass, 1)
+			if i >= k {
+				r = ok(other, 1)
+			}
+			cands = append(cands, Candidate{Index: i, Report: r})
+		}
+		got, _ := Score(Group(cands))
+		if got > UnanimousScore(n) {
+			t.Errorf("k=%d of %d scored %v, above the unanimity ceiling %v", k, n, got, UnanimousScore(n))
+		}
+	}
+}
+
+func TestUnanimousScoreNeverReachesCertainty(t *testing.T) {
+	for _, n := range []int{1, 10, 1000, 100000} {
+		if s := UnanimousScore(n); s >= 1 {
+			t.Errorf("UnanimousScore(%d) = %v; a lower confidence bound must stay below 1", n, s)
+		}
+	}
+	if UnanimousScore(0) != 0 {
+		t.Errorf("UnanimousScore(0) = %v, want 0: no samples is no evidence", UnanimousScore(0))
+	}
+}
+
+func TestMinSamplesForIsTheSmallestSufficientFanOut(t *testing.T) {
+	for _, want := range []float64{0.1, 0.2698, 0.5, 0.6488, 0.90, 0.99} {
+		n := MinSamplesFor(want)
+		if n == 0 {
+			t.Errorf("MinSamplesFor(%v) = 0, but the bound tends to 1 so some n suffices", want)
+			continue
+		}
+		if UnanimousScore(n) < want {
+			t.Errorf("MinSamplesFor(%v) = %d but UnanimousScore(%d) = %v < %v", want, n, n, UnanimousScore(n), want)
+		}
+		if n > 1 && UnanimousScore(n-1) >= want {
+			t.Errorf("MinSamplesFor(%v) = %d is not minimal: n=%d already reaches %v", want, n, n-1, UnanimousScore(n-1))
+		}
+	}
+	// The documented figure the config error quotes.
+	if got := MinSamplesFor(0.90); got != 25 {
+		t.Errorf("MinSamplesFor(0.90) = %d, want 25 (the value the admission diagnostic cites)", got)
+	}
+	// No finite fan-out attains certainty; the search must terminate, not hang.
+	if got := MinSamplesFor(1.0); got != 0 {
+		t.Errorf("MinSamplesFor(1.0) = %d, want 0: certainty is unattainable", got)
+	}
+}

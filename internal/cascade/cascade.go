@@ -217,8 +217,16 @@ func (r *Router) finish(ctx context.Context, res *Result, spec *prompt.Spec) {
 			res.Cost.addCompute(ms.Elapsed, r.cfg.ComputeUSDPerCoreSecond)
 		}
 	}
-	// Admission is stricter than acceptance: a cached entry is reused many
-	// times, so it should clear a higher bar than a one-shot answer.
+	// Admission is gated on CacheAdmitAt, whose ceiling is unanimity at the tier's
+	// own fan-out — res.Score is a Wilson lower bound, not raw mass (invariant #9),
+	// so it never reaches 1.0 and a threshold above the ceiling makes this branch
+	// dead code. It was, for twenty-one experiments, at the old default of 0.90.
+	// config.DefaultAdmitScore derives a reachable value and Config.Validate
+	// rejects an unreachable one; do not raise this past what a tier can score.
+	//
+	// A thin admission is not a risk: arm zero re-executes every hit against the
+	// new query's tests (invariant #5), so the cost of admitting weak evidence is
+	// one wasted verification, never a wrong answer.
 	if res.AcceptedAt != "cache" && res.Score >= r.cfg.CacheAdmitAt && !res.OracleContaminated {
 		mut := 0.0
 		if res.Mutation != nil {
