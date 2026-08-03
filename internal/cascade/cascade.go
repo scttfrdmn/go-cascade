@@ -600,6 +600,23 @@ func (r *Router) cascadePlan(ctx context.Context, problem string, spec *prompt.S
 func (r *Router) sampleTier(ctx context.Context, k int, problem string, spec *prompt.Spec,
 	res *Result, carried []string, cascadePlan string,
 ) ([]cluster.Candidate, error) {
+	return r.sampleTierN(ctx, k, problem, spec, res, carried, cascadePlan, r.cfg.Tiers[k].Samples, 0)
+}
+
+// sampleTierN is sampleTier with the fan-out and the seed origin given explicitly,
+// for callers whose sample count comes from something other than tier config —
+// arm (e) sets it from a cost budget (§5.5(2)).
+//
+// seed0 offsets both the candidate index and the prompt nonce, and both matter.
+// Bedrock exposes no seed for Claude, so the nonce in prompt.CodeUser IS the
+// diversity mechanism: a second batch starting from 0 would re-ask "(sample 0)"
+// and the "extra" candidates would be redraws of the first batch at the same
+// temperature — inflating a self-consistency majority with duplicates it did not
+// earn. The index shift matters for the same reason in reverse: colliding indices
+// would make TextVote's lowest-index tie-break favour whichever batch came first.
+func (r *Router) sampleTierN(ctx context.Context, k int, problem string, spec *prompt.Spec,
+	res *Result, carried []string, cascadePlan string, n, seed0 int,
+) ([]cluster.Candidate, error) {
 	tier := r.cfg.Tiers[k]
 	avoid := carried
 	if !r.cache.Disabled() {
@@ -636,21 +653,22 @@ func (r *Router) sampleTier(ctx context.Context, k int, problem string, spec *pr
 		res.Cost.addModel(presp.Usage.InputTokens, presp.Usage.OutputTokens, usd)
 	}
 
-	out := make([]cluster.Candidate, tier.Samples)
+	out := make([]cluster.Candidate, n)
 	var mu sync.Mutex
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(r.limit)
-	for i := range tier.Samples {
+	for i := range n {
+		nonce := seed0 + i
 		g.Go(func() error {
-			userText := prompt.CodeUser(problem, spec.API, i, avoid)
+			userText := prompt.CodeUser(problem, spec.API, nonce, avoid)
 			if plan != "" {
-				userText = prompt.CodeUserFromPlan(problem, spec.API, plan, i, avoid)
+				userText = prompt.CodeUserFromPlan(problem, spec.API, plan, nonce, avoid)
 			}
 			resp, err := r.prov.Generate(gctx, model.Request{
 				ModelID: tier.ModelID, Purpose: model.PurposeCode,
 				System:    prompt.CodeSystem(),
 				Messages:  []model.Message{{Role: model.RoleUser, Text: userText}},
-				MaxTokens: 8000, Temperature: tier.Temperature, Seed: i,
+				MaxTokens: 8000, Temperature: tier.Temperature, Seed: nonce,
 			})
 			if err != nil {
 				return err
@@ -662,7 +680,7 @@ func (r *Router) sampleTier(ctx context.Context, k int, problem string, spec *pr
 
 			src, err := prompt.ExtractCode(resp.Text)
 			if err != nil {
-				out[i] = cluster.Candidate{Index: i, Source: resp.Text,
+				out[i] = cluster.Candidate{Index: nonce, Source: resp.Text,
 					Report: &verify.Report{OK: false, Diagnostic: err.Error()}}
 				return nil
 			}
@@ -673,7 +691,7 @@ func (r *Router) sampleTier(ctx context.Context, k int, problem string, spec *pr
 			if err != nil {
 				return err
 			}
-			out[i] = cluster.Candidate{Index: i, Source: src, Report: rep}
+			out[i] = cluster.Candidate{Index: nonce, Source: src, Report: rep}
 			return nil
 		})
 	}

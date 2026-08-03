@@ -1,0 +1,58 @@
+{
+  "_note": "Computed from RECORDED costs, no model was queried. The budget is the cascade's realized per-problem spend under tau, matched problem by problem rather than on the mean: matching on the mean would hand every problem the same money and hide that the expensive problems are exactly the degenerate ones. A tier whose matched budget buys fewer than min_vote samples is always-frontier or always-cheapest relabelled, not self-consistency.",
+  "source_records": "results/s55-fixed.records.execution.json",
+  "tau": [
+    1,
+    1
+  ],
+  "profiled_fanout": {
+    "large": 1,
+    "mid": 1,
+    "small": 2
+  },
+  "min_vote": 3,
+  "rows": [
+    {
+      "tier": "small",
+      "samples": 2,
+      "mean_budget_usd": 0.010081690134617623,
+      "mean_unit_usd": 0.00017399075912697093,
+      "median_fanout": 49,
+      "p10_fanout": 38,
+      "p90_fanout": 81,
+      "degenerate": 0,
+      "degenerate_frac": 0,
+      "n": 409,
+      "estimated_run_usd": 4.123411265058608,
+      "verdict": "RUNNABLE: every problem affords at least 3 samples (median 49), so the vote is a vote"
+    },
+    {
+      "tier": "mid",
+      "samples": 1,
+      "mean_budget_usd": 0.010081690134617623,
+      "mean_unit_usd": 0.00357863698913428,
+      "median_fanout": 2,
+      "p10_fanout": 2,
+      "p90_fanout": 3,
+      "degenerate": 324,
+      "degenerate_frac": 0.7921760391198044,
+      "n": 409,
+      "estimated_run_usd": 4.123411265058608,
+      "verdict": "NOT WORTH RUNNING: the matched budget buys \u003c 3 samples on 79.2% of problems, so the arm collapses into a single draw from this tier — that is arm (a) or (d) relabelled, and reporting it as self-consistency would report a degenerate configuration as a result about the method"
+    },
+    {
+      "tier": "large",
+      "samples": 1,
+      "mean_budget_usd": 0.010081690134617623,
+      "mean_unit_usd": 0.006155071627229401,
+      "median_fanout": 1,
+      "p10_fanout": 1,
+      "p90_fanout": 1,
+      "degenerate": 407,
+      "degenerate_frac": 0.9951100244498777,
+      "n": 409,
+      "estimated_run_usd": 4.123411265058608,
+      "verdict": "NOT WORTH RUNNING: the matched budget buys \u003c 3 samples on 99.5% of problems, so the arm collapses into a single draw from this tier — that is arm (a) or (d) relabelled, and reporting it as self-consistency would report a degenerate configuration as a result about the method"
+    }
+  ]
+}

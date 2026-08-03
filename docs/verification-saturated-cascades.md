@@ -33,7 +33,7 @@ risk budget rather than an uncontrolled error source in front of it.
 
 We instantiate the design for Go, where the ratio of verification cost to model
 cost is approximately $4\times10^{-3}$, and report an implementation
-(`gocascade`, 4,328 lines) with measured per-stage costs. Building the system
+(`gocascade`, ~11,000 lines) with measured per-stage costs. Building the system
 falsified two of our own design assumptions, which we report as results. We
 conclude with an explicit account of what the artifact establishes and — at
 greater length — what it does not. The body of that account was written before any
@@ -664,7 +664,7 @@ comparisons between suites on the same program are.
 
 ### 4.1 Architecture
 
-`gocascade` — 4,328 lines of Go excluding tests, 1,214 lines of tests, Go 1.26,
+`gocascade` — ~11,000 lines of Go excluding tests, ~9,900 lines of tests, Go 1.26,
 AWS Bedrock via the Converse API.
 
 ```
@@ -1028,13 +1028,15 @@ single-file stdlib-only Go is unchanged; §5.5(4) (cache-warmth sensitivity, the
 §2.9 test) has now been run under an **injected** shift and *cannot* be run on an
 observed one on a benchmark of this construction — see below for both.
 Adaptive conformal inference (9), non-nested ordering (§2.6), and
-boundary randomization (§2.4) remain unimplemented. Arm (e), self-consistency, is
-unimplemented and unrun. **What no longer stands is the sample-size and
+boundary randomization (§2.4) remain unimplemented. Arm (e), self-consistency, is now
+**implemented, with its feasibility measured and its paid sampling pass unrun** — and the
+feasibility result rules the arm out at every tier but the cheapest; see below. **What no longer stands is the sample-size and
 benchmark-standardness caveat**, which §5.5(1) made the gating one; see immediately
 below. So the correct one-line update to the closing sentence of §5.5 is: *arms (a)–(d)
 have now been run at n = 409 on a standard benchmark and the central comparative claim
 is **measured** at the paper's own bar; §5.5(4) is answered for an injected shift but not
-an observed one; arm (e) and the concurrency coverage the benchmark lacks remain open.*
+an observed one; arm (e) is implemented and shown to be well-posed only at the cheap tier,
+with its sampling pass unrun; and the concurrency coverage the benchmark lacks remains open.*
 
 **§5.5(1) has been met, and meeting it costs two earlier headlines**
 (`results/s55-multipl-n409-2026-08-03.md`, 2026-08-03). The paired comparison ran on
@@ -1243,6 +1245,51 @@ noise about sample size and not evidence about the correction. And absorption he
 stipulated rather than observed, so what the sweep establishes is a response curve, not
 the operating point of any deployment. None of it weakens the exchangeability requirement
 of §2.9; it is the direct evidence for it.
+
+**Arm (e) is implemented, and the same design check that reshaped §5.5(4) rules out
+most of it before any spend** (`results/arm-e-feasibility-n409.json`, 2026-08-03).
+Self-consistency at matched cost cannot be replayed from the profiled records the way
+arms (a), (b) and (d) can: those arms are recoverable because every tier ran on every
+problem, whereas arm (e) votes over candidates the cascade never drew. It needs its own
+sampling pass. What *is* recoverable offline is whether the arm is well-posed, and that
+is a question about the recorded costs alone.
+
+Matched cost means the budget equals the cascade's realized spend, matched per problem —
+matching on the mean would fund every problem alike and conceal that the expensive
+problems are exactly the degenerate ones. Under $\tau = (1,1)$ that budget is
+\$0.0101/query, and dividing each tier's recorded cost by its profiled fan-out (2:1:1)
+gives per-sample costs of \$0.000174, \$0.003579 and \$0.006155. What the budget buys:
+
+| tier | median fan-out (p10–p90) | below a 3-sample vote |
+|---|---|---|
+| small (Maverick) | 49 (38–81) | 0/409 (0.0%) |
+| mid (Sonnet 4.5) | 2 (2–3) | 324/409 (79.2%) |
+| large (Opus 4.5) | 1 (1–1) | 407/409 (99.5%) |
+
+The cascade's whole spend is roughly one frontier call, because escalation to the
+frontier tier is most of what the spend *is*. A frontier-model self-consistency arm at
+matched cost is therefore always-frontier relabelled on 99.5% of problems, and a mid-tier
+one is a two-way vote on 79% — and a vote among two either agrees unanimously or ties, so
+it carries no information a single draw does not. Run as literally specified in §5.5(2),
+with the tier unnamed, arm (e) would have reported a degenerate configuration as a null
+result about self-consistency. This is the same trap as uniform absorption above, and it
+is why the feasibility computation ships as a first-class part of the arm — `go-cascade
+selfconsistency` prints it, refuses `-sample` on a tier it has ruled out, and costs
+nothing.
+
+Only the cheap tier is well-posed, and there the arm is exactly the comparison §3.5 is
+about: 49 votes on how the code is *written* against 2 votes on what it *does*, for the
+same money. The implementation gives self-consistency every advantage the claim allows —
+the vote is over normalised source, so formatting and comments do not split agreeing
+candidates, and it reports raw plurality mass rather than the Wilson bound the router uses
+(§4.3), because arm (e) crosses no threshold and bounding it below would handicap the
+foil. What it must not do is consult the verifier to pick a winner; a text vote that
+peeked at execution would be behavioural clustering with extra steps. Both selectors are
+scored on the *same* candidate set at the same cost, which isolates the selector rather
+than the budget, and a cluster abstention — nothing surviving the ladder — is recorded
+separately rather than scored as a wrong answer, since it is a sound refutation of the
+whole sample (§3.4) and an escalation in a real cascade. The sampling pass itself is
+scoped at \$4.12 and **unrun**: the feasibility half is what this section reports.
 
 ---
 
