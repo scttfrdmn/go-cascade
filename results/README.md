@@ -424,8 +424,110 @@ real cascade.
 Records: `results/arm-e-feasibility-n409.json`. Reproduce with `go-cascade
 selfconsistency -records results/s55-fixed.records.execution.json -config
 examples/bench/config.go-specialist-211.json -tau 1,1 -provider=mock` (mock only builds
-the router; nothing is queried). **The paid sampling pass is scoped at $4.12 — the matched
-budget, by construction — and is unrun pending spend approval.**
+the router; nothing is queried).
+
+**The paid sampling pass is in flight, and its approved cost was wrong the first time.** I
+quoted **$4.12** — which is the *matched sampling budget*, a quantity derived from the
+records — as if it were the invoice. The real bill is **~$20**, because arm (e) also
+regenerates each problem's pinned spec, and **no `Record` has ever stored the spec cost**
+(see the section below). Matched budget $4.12, total bill ~$20; both numbers now print
+separately in the summary, along with `OverBudgetUSD`.
+
+A 6-problem live smoke test before the full pass paid for itself three times over, and
+none of the three defects it found were reachable from the mock (which reports zero cost
+and pins no APIs):
+
+1. **The paid path scored arm (e) against an unpinned oracle.** `cmdSelfConsistency` never
+   called `SetPinnedAPIs`, while `SelfConsistency` reads `r.pinnedAPI[id]`. Arm (e) would
+   have been compared against arm (b) *on a different oracle* — a differently-named,
+   never-soundness-checked generated suite (invariant #4's corollary). `-refs` is now
+   **required** for `-sample`.
+2. **Spend exceeded the matched budget on 5/5 rows (+1.7% to +17.8%), silently.** A short
+   probe both buys a larger fan-out and underprices it, so the error compounds upward.
+   Now recorded as `OverBudgetUSD` and totalled in the summary. (My first diagnosis of this
+   was wrong — I claimed a probe double-count and rewrote the arithmetic before checking
+   that `floor(B/p)` and `1+floor((B−p)/p)` are identical. They are.)
+3. **Spec cost discarded**, as above.
+
+## A correction to every cost figure on this page (no experiment, no cost)
+
+**Every per-run cost quoted above understates the bill, by roughly 4× in aggregate, in one
+direction, for one reason.** Cost Explorer for 2026-07-24…08-03 shows **~$197** of real
+go-cascade Bedrock spend. The runs on this page total roughly **$40**.
+
+| model | role | spend |
+|---|---|---|
+| `Claude4.6Sonnet` (incl. cache r/w) | spec / oracle / judge | **$154.89** |
+| `Claude4.5Opus` | large tier | $23.48 |
+| `Claude4.5Sonnet` | mid tier | $14.31 |
+| `Claude4.5Haiku` | earlier small tier | $3.03 |
+| Llama 4 Maverick | tier 0 | $1.14 |
+
+**The oracle model is 91% of the bill and appears in no record.** Every `r.spec(...)` caller
+in `internal/cascade` passes a throwaway `&Result{}` — `profile.go`, `judge.go` (×4),
+`estimator.go`, `selfconsistency.go` — so the shared oracle's cost has never been written to
+a `Record`. Tier costs, the only thing recorded, are the *small* part of every run. Measured
+live: **$0.0408/problem** for a pinned spec (~2,700 output tokens — two Go test partitions
+at sonnet-4-6's $15/MTok out).
+
+Concretely: experiment 21 reports **$8.15** for 488 problems against only $5.14 of summed
+`tiers[].cost_usd`; specs alone were ~$20, so its true cost was **~$25–30**. The
+*ratios* on this page are unaffected — the spec term is identical across arms and cancels in
+every paired comparison, which is why it went unnoticed — but no absolute figure here is the
+invoice.
+
+Two traps in reading it back, each of which produced a wrong answer first:
+
+1. **Claude bills under service `Amazon Bedrock Service`, not `Amazon Bedrock`.** Filtering
+   on `Amazon Bedrock` returns only the open-weight models and totals $1.14; I briefly
+   concluded the whole study cost a dollar. Query both service names.
+2. **That service line also contains Claude Code's own usage**, which dwarfs the study
+   (~$11K over the same window). Filter by `USAGE_TYPE` model substring. The naming differs
+   between families (`Claude4.6Sonnet` vs `anthropic.claude-opus-5`), so one regex over both
+   mis-buckets.
+
+**How to quote a future run:** reconcile against a known past *bill*, not a derived total,
+and multiply the spec term in explicitly — it dominates. A spec cache does not recover it:
+each spec keys on `cache.ProblemHash(problem + pinned + api)`, so across distinct problems
+reuse is exactly zero, and calibration forces `cache_dir=""` anyway (invariant #8). Check a
+cache key's cardinality before claiming a cache saves anything.
+
+## Proposed: a coder-specialist tier 0 (scoped, unapproved, unrun)
+
+Scope in [`qwen-coder-tier0-scope.md`](qwen-coder-tier0-scope.md); config in
+`examples/bench/config.qwen-coder-211.json`.
+
+The cheap bottom tier is the only cost lever in this study that has ever worked
+(experiment 11, 3.2–3.4×). Every other lever bought accuracy with money and lost — an Opus
+planner was 3.1× *pricier* (15), a Haiku planner did not rescue it (16), plan-once-reuse was
+negative (18). Qwen3 Coder 30B A3B is the first candidate that is **cheaper than the
+incumbent, not merely better**: verified us-west-2 rates $0.15/$0.60 per MTok against
+Maverick's $0.12/$0.97, and a measured 4-problem probe put a real sample at **$0.000092 vs
+Maverick's profiled $0.000174** — 1.9× cheaper. So a win there cannot be reread as "we spent
+more."
+
+Two findings that make this cheap to try, both verified live rather than assumed:
+
+- **There is no second endpoint.** `qwen.qwen3-coder-30b-a3b-v1:0`,
+  `qwen.qwen3-coder-480b-a35b-v1:0`, `moonshotai.kimi-k2.5`, `zai.glm-4.7` and
+  `mistral.devstral-2-123b` all answer through plain `bedrock-runtime converse` — the path
+  `internal/model/bedrock.go` already uses. The arm is a config file, not a provider.
+- **`go-cascade models` will not list any of them**, which is what made me report the
+  opposite at first. It calls `ListInferenceProfiles`, which returns only `us.*` profiles;
+  the open-weight IDs are bare. Use `aws bedrock list-foundation-models --region us-west-2`.
+
+What the arm **cannot** test: certifiable α. Invariant #9 caps tier 0's routing score by
+**fan-out**, not accuracy — the Wilson unanimous ceiling is 0.2698/0.4249/0.6488 at n=1/2/5,
+and the n=409 records confirm tier 0's maximum observed score is exactly **0.42499**, the
+n=2 ceiling, while tier-0 accuracy is already 0.7702. Under τ=[1,1] tier 0 can never accept
+regardless of which model sits there. Read it as a test of escalation rate and mean
+cost/query. Tier 0 is 3.4% of recorded tier cost, so the win must come from **fewer
+escalations**, not from a cheaper tier-0 line. Falsifiable prediction: escalations and mean
+cost fall, certifiable α does not move; if α *does* improve, my reading of the ceiling is
+wrong, which is the more interesting outcome.
+
+Estimated at **~$3.20 on the 64-problem hand-written set** (the recommended first pass — it
+is also the set that still has concurrency coverage) and **~$20 at n=409**. Unapproved.
 
 ## What is NOT established (open, honest)
 

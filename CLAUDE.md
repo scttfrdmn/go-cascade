@@ -146,7 +146,27 @@ a test, but the tests will not catch every way of violating them.
 - **The race stage is 32× a plain test run.** It is gated on an AST predicate.
   Do not ungate it.
 - **Bedrock model IDs churn.** They are configuration, never constants. Use
-  `go-cascade models` (calls `ListInferenceProfiles`) to discover real ones.
+  `go-cascade models` (calls `ListInferenceProfiles`) to discover real ones — but note
+  it lists **only `us.*` inference profiles**. The open-weight catalog (Qwen, DeepSeek,
+  Kimi, GLM, Devstral — 112 models as of 2026-08) uses *bare* IDs like
+  `qwen.qwen3-coder-30b-a3b-v1:0`, so `models` reports them as absent when they are
+  not. `aws bedrock list-foundation-models --region us-west-2` is the ground truth. All
+  of them answer through the same `bedrock-runtime converse` path
+  `internal/model/bedrock.go` already uses; there is **no second endpoint** to
+  integrate, so a new tier-0 model is a config file. Verify a rate against the Pricing
+  API (`regionCode=us-west-2`) and a real per-sample cost against a live probe before
+  configuring one — for reasoning models output *length*, not the per-token rate,
+  drives cost, and a "cheap" reasoning tier 0 can outspend the Claude mid tier.
+- **No `Record` stores the spec cost, so no cost figure derived from records is the
+  bill.** Every `r.spec(...)` caller passes a throwaway `&Result{}`, and the shared
+  oracle is **91% of real spend** (~$197 actual vs ~$40 across `results/*.md`; measured
+  $0.0408/problem). Paired ratios are unaffected — the term cancels — which is why this
+  survived 23 experiments. Absolute figures are not. Before quoting spend, reconcile
+  against a past *bill*, and query **both** Cost Explorer service lines: Claude bills
+  under `Amazon Bedrock Service`, `Amazon Bedrock` holds only the open-weight models
+  (filtering on the latter alone totals $1.14 for the whole study). That service line
+  also contains Claude Code's own usage — filter by `USAGE_TYPE`. See `results/README.md`
+  §"A correction to every cost figure on this page".
 - **Long `calibrate` runs checkpoint and resume.** A paired run over n=64 takes
   ~60–90 min and can be SIGTERM'd externally (issue #21). The loop writes records
   after *every* problem, treats a cancelled context as a clean stop (not a
