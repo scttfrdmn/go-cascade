@@ -1242,6 +1242,7 @@ func cmdSelfConsistency(ctx context.Context, args []string) error {
 	tauFlag := fs.String("tau", "", "threshold vector whose realized spend is matched (default: the loaded certificate's)")
 	sample := fs.Bool("sample", false, "run the PAID sampling pass; without this the command only reports feasibility")
 	fanout := fs.String("fanout", "", "configured samples per tier in the profiled run, e.g. small=2,mid=2,large=1 (default: the local config's tiers)")
+	refs := fs.String("refs", "", "directory of reference solutions; required for -sample, to pin each problem's API to the same contract the profiled records were built against")
 	obsOut := fs.String("o", "selfconsistency.json", "output path for the sampling pass (JSON)")
 	feasOut := fs.String("feasibility-out", "", "write the (free) feasibility report to this path as JSON")
 	resume := fs.Bool("resume", false, "skip problems already present in -o and append")
@@ -1329,6 +1330,34 @@ func cmdSelfConsistency(ctx context.Context, args []string) error {
 		return err
 	}
 
+	// Arm (e) is scored by the same oracle as the arm it is compared against, or the
+	// comparison is between two different measurements. The budgets come from records
+	// profiled under -refs -pin-api, which (a) pinned the API so candidates implement
+	// the reference's signatures and (b) excluded problems whose generated suite
+	// refutes its own reference as an unsound oracle (invariant #4's corollary). An
+	// unpinned sampling pass would score arm (e) against a differently-named, never
+	// soundness-checked suite and read the resulting refutations as model error —
+	// which is exactly the failure that inflated measured risk before -refs existed.
+	// Hence -refs is required here rather than optional.
+	if *refs == "" {
+		return errors.New("-refs <dir> is required for -sample: the matched budgets come from records " +
+			"profiled with -refs -pin-api, and scoring arm (e) against an unpinned, soundness-unchecked " +
+			"oracle would compare it to arm (b) on a different oracle")
+	}
+	refSrc, err := loadReferences(*refs, probs)
+	if err != nil {
+		return err
+	}
+	apis := make(map[string]string, len(refSrc))
+	for id, src := range refSrc {
+		api, aerr := prompt.ExtractAPI(src)
+		if aerr != nil {
+			continue
+		}
+		apis[id] = api
+	}
+	fmt.Fprintf(os.Stderr, "loaded %d references, pinned %d APIs from %s\n", len(refSrc), len(apis), *refs)
+
 	// Cache-bypass, for the same reason calibration records are (invariant #8): a
 	// warm cache would return prior solutions instead of the fresh draws the vote
 	// is over, and the fan-out would no longer be what the budget bought.
@@ -1338,6 +1367,7 @@ func cmdSelfConsistency(ctx context.Context, args []string) error {
 		return err
 	}
 	defer r.Close() //nolint:errcheck // scratch dir
+	r.SetPinnedAPIs(apis)
 
 	obs := []cascade.SelfConsistencyObs{}
 	done := map[string]bool{}
@@ -1354,7 +1384,7 @@ func cmdSelfConsistency(ctx context.Context, args []string) error {
 	}
 	checkpoint := func() error { return writeJSONFile(*obsOut, obs) }
 
-	var spent, budgeted float64
+	var spent, budgeted, specSpend float64
 	interrupted := false
 	for i, p := range probs {
 		if done[p.ID] {
@@ -1385,6 +1415,7 @@ func cmdSelfConsistency(ctx context.Context, args []string) error {
 		obs = append(obs, *o)
 		spent += o.SpentUSD
 		budgeted += o.BudgetUSD
+		specSpend += o.SpecUSD
 		// Checkpointed per problem, like calibrate: a SIGTERM must not discard a paid
 		// run (issue #21).
 		if err := checkpoint(); err != nil {
@@ -1398,7 +1429,7 @@ func cmdSelfConsistency(ctx context.Context, args []string) error {
 		fmt.Fprintf(os.Stderr, "INTERRUPTED (context cancelled). Observations checkpointed to %s; "+
 			"re-run with -resume to finish.\n", *obsOut)
 	}
-	printSelfConsistencySummary(obs, spent, budgeted)
+	printSelfConsistencySummary(obs, spent, budgeted, specSpend)
 	return nil
 }
 
@@ -1510,11 +1541,32 @@ func printSelfConsistencyFeasibility(rows []calibrate.SelfConsistencyFeasibility
 	fmt.Println("it would report a degenerate configuration as a result about self-consistency.")
 }
 
-func printSelfConsistencySummary(obs []cascade.SelfConsistencyObs, spent, budgeted float64) {
+func printSelfConsistencySummary(obs []cascade.SelfConsistencyObs, spent, budgeted, specSpend float64) {
 	fmt.Printf("\narm (e) sampling pass: %d problems, spent $%.4f against a matched budget of $%.4f\n",
 		len(obs), spent, budgeted)
 	if len(obs) == 0 {
 		return
+	}
+	// The bill and the matched portion are different numbers, and conflating them
+	// either understates what was spent or overstates what arm (e) was given. The
+	// shared oracle is excluded from the match by design (arm (b)'s recorded spend
+	// excludes it too) but is charged to the account all the same.
+	fmt.Printf("plus $%.4f for the shared oracle (spec/plan), excluded from the match by "+
+		"construction: total bill $%.4f\n", specSpend, spent+specSpend)
+	var over float64
+	var nOver int
+	for _, o := range obs {
+		if o.OverBudgetUSD > 0 {
+			over += o.OverBudgetUSD
+			nOver++
+		}
+	}
+	if nOver > 0 {
+		// Stated rather than buried: the residual is bounded by one batch's estimation
+		// error, but a reader is entitled to know arm (e) was not held strictly under.
+		fmt.Printf("%d/%d rows finished over budget by $%.4f in total (%.2f%% of the matched budget); "+
+			"a batch's true per-sample cost is only known after it returns\n",
+			nOver, len(obs), over, 100*over/budgeted)
 	}
 	// Degenerate and abstained rows are reported separately, never pooled: a
 	// two-sample "vote" is not self-consistency, and a cluster abstention is an

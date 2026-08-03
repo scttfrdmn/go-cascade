@@ -143,7 +143,8 @@ func TestSelfConsistencyFanoutComesFromTheBudget(t *testing.T) {
 		{"a real vote", 5, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// A half-unit over, so floor() lands exactly on tc.samples.
+			// A half-unit over, so floor() lands exactly on tc.samples. The probe counts
+			// as one of the samples, so the budget covers tc.samples units in total.
 			budget := probe.spent * (float64(tc.samples) + 0.5)
 			obs, err := r.SelfConsistency(ctx, "p1", seqProblem, 0, budget)
 			if err != nil {
@@ -160,10 +161,19 @@ func TestSelfConsistencyFanoutComesFromTheBudget(t *testing.T) {
 				t.Errorf("Degenerate = %v at fan-out %d, want %v (threshold %d)",
 					obs.Degenerate, obs.Fanout, tc.degenerate, minVote)
 			}
-			// Matched means matched. Overshooting would make arm (e) better funded
-			// than arm (b) and the comparison meaningless.
-			if obs.SpentUSD > obs.BudgetUSD {
-				t.Errorf("spent $%.6f against a budget of $%.6f; the arms are no longer cost-matched",
+			// Matched means matched. A residual overshoot is possible (the final
+			// batch's true cost is only known after it returns) but it must be bounded
+			// by roughly one sample and it must be REPORTED, because an arm that
+			// quietly outspends the arm it is matched to is a rigged comparison.
+			if obs.SpentUSD > obs.BudgetUSD+probe.spent {
+				t.Errorf("spent $%.6f against a budget of $%.6f, over by more than the one "+
+					"sample's worth ($%.6f) that per-batch pricing error can explain; the fan-out "+
+					"arithmetic is buying samples the budget did not fund",
+					obs.SpentUSD, obs.BudgetUSD, probe.spent)
+			}
+			if obs.SpentUSD > obs.BudgetUSD && obs.OverBudgetUSD == 0 {
+				t.Errorf("spent $%.6f over a $%.6f budget but OverBudgetUSD is 0; the overshoot "+
+					"is invisible to whoever reads these records",
 					obs.SpentUSD, obs.BudgetUSD)
 			}
 			// The spec is the shared oracle every arm is scored against, and arm (b)'s
