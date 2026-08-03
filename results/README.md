@@ -267,9 +267,17 @@ underweights, but one that still favours the executable oracle.
   η_fa > 0 was observed exactly once (the pilot's model-authored race). The
   race-seeded test (experiment 6) caught all 20 seeded races — but only because
   sync-*deletion* leaves a visible scar; it does not produce the scar-free,
-  self-consistent racy code that was actually false-accepted. A **scar-free race
-  operator** (narrow a critical section, swap a goroutine capture) is needed to
-  probe that class. **This is the recommended next experiment.**
+  self-consistent racy code that was actually false-accepted. The **scar-free race
+  operator now exists** (`-seed-kind=scar-free-race`, issue #51): three operators
+  that leave every sync call present and paired — `Lock`/`Unlock` → `RLock`/`RUnlock`
+  around a write, moving the last guarded statement out past the `Unlock`, and
+  `wg.Wait()` → `defer wg.Wait()`. All three are validated to compile and to be
+  refuted under `-race`. The loop-variable-capture operator suggested earlier is
+  **obsolete**: Go 1.22 made loop variables per-iteration, so that mutant no longer
+  races (pinned by `TestLoopVarCaptureDoesNotRaceOnThisToolchain`). **The generator
+  is built; the paid sweep comparing scar-free η_fa against the sync-deletion 20/20
+  has not been run** — it needs the 11 concurrency problems of the hand-written set
+  (issue #50), since MultiPL-E Go has none.
 - **Cost baseline: RUN (experiments 9–11) — cascade loses at default config,
   wins when tuned, and wins with a cheap bottom tier at a signal-preserving
   fan-out.** At the default **5:2:1** fan-out, always-frontier beat the cascade

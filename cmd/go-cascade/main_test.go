@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/scttfrdmn/go-cascade/internal/calibrate"
+	"github.com/scttfrdmn/go-cascade/internal/cascade"
 )
 
 func bp(b bool) *bool { return &b }
@@ -138,5 +139,42 @@ func TestWriteJSONFileAtomicOverwrite(t *testing.T) {
 	}
 	if got := fi.Mode().Perm(); got != 0o644 {
 		t.Errorf("checkpoint mode = %#o, want 0644 (must match the pre-atomic writer)", got)
+	}
+}
+
+// The -seed-kind flag names three distinct defect classes and an unrecognised
+// value must be rejected rather than silently defaulting to logic: a run that
+// reported logic-mutant η_fa under a "race" heading would be a wrong published
+// number, not a usability annoyance.
+func TestParseSeedKind(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want cascade.SeedKind
+		ok   bool
+	}{
+		{"logic", cascade.SeedLogic, true},
+		{"race", cascade.SeedRace, true},
+		{"scar-free-race", cascade.SeedScarFreeRace, true},
+		{"", cascade.SeedLogic, false},
+		{"scarfree", cascade.SeedLogic, false},
+		{"Race", cascade.SeedLogic, false},
+	} {
+		got, ok := parseSeedKind(tc.in)
+		if ok != tc.ok {
+			t.Errorf("parseSeedKind(%q) ok = %v, want %v", tc.in, ok, tc.ok)
+		}
+		if ok && got != tc.want {
+			t.Errorf("parseSeedKind(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+	// The three kinds must stay distinct — aliasing two of them would pool the
+	// scar-bearing and scar-free rates, which is the one comparison this exists for.
+	seen := map[cascade.SeedKind]string{}
+	for _, s := range []string{"logic", "race", "scar-free-race"} {
+		k, _ := parseSeedKind(s)
+		if prev, dup := seen[k]; dup {
+			t.Errorf("%q and %q map to the same SeedKind", prev, s)
+		}
+		seen[k] = s
 	}
 }

@@ -59,6 +59,19 @@ provides:
    write outside an existing `Lock`/`Unlock` rather than deleting the pair), or
    swap a value-capture for a loop-variable capture in a goroutine. These keep the
    sync scaffolding intact, so the code reads as balanced while still racing.
+
+   **Update (issue #51): built, as `-seed-kind=scar-free-race`.** Three operators
+   ship: `Lock`/`Unlock` → `RLock`/`RUnlock` around a guarded write, moving the last
+   guarded statement out past the `Unlock`, and `wg.Wait()` → `defer wg.Wait()`.
+   Each keeps every sync call present and paired, and each is validated to compile
+   and to be refuted under `-race`.
+
+   The **loop-variable-capture idea above does not work on a current toolchain.**
+   Go 1.22 made loop variables per-iteration, so that mutant passes
+   `-race -count=3` — it is not a race at all. Had it shipped, the `-race` filter
+   would have discarded every such mutant silently after paying for the runs.
+   `TestLoopVarCaptureDoesNotRaceOnThisToolchain` pins this, so a future toolchain
+   change that reintroduced the race would surface there.
 3. **A curated seed set** of hand-written, natural-looking racy solutions.
 
 ## Where this leaves the study
@@ -74,5 +87,13 @@ The claim from `seeded-2026-07-25.md` stands and is now bracketed:
 Net: the §3.1 danger is real (observed once, live) and narrow, but pinning down
 *how* narrow needs a scar-free race generator. That is the honest next step, and
 it is a harder generator-design problem than the deletion operator built here.
+
+**Update (issue #51): the generator now exists** (`-seed-kind=scar-free-race`) and
+its mutants are validated to compile and to be `-race`-refuted. The *measurement*
+has not been made: comparing scar-free η_fa against the 20/20 above needs a paid
+sweep over the 11 concurrency problems of the hand-written set (MultiPL-E Go has
+none — issue #50). Until that runs, the scar-free class remains one live data point,
+and the sweep now prints a `NO SEEDS` warning rather than a table of zeros when no
+candidate could be harvested, so an empty run cannot be misread as η_fa = 0.
 
 Live spend this session: roughly $23–27 across six experiments and diagnosis.

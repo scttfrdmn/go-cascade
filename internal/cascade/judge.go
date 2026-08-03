@@ -376,6 +376,13 @@ type SeedKind int
 const (
 	SeedLogic SeedKind = iota // single-edit logic mutants, killed by ordinary tests
 	SeedRace                  // sync-deletion mutants, refuted only under -race
+	// SeedScarFreeRace keeps the synchronization scaffolding intact and balanced,
+	// so the mutant reads as self-consistent. SeedRace deletes a sync call, which
+	// always leaves an imbalance a reviewer can spot — the judge scored 20/20 on
+	// those while false-accepting a model-authored race live. Reported separately
+	// from SeedRace on purpose: the difference between the two η_fa rates is the
+	// mechanism result, and pooling them would average it away.
+	SeedScarFreeRace
 )
 
 // ProfileSeeded runs the judge dangerous-mode experiment for one problem. It
@@ -391,8 +398,10 @@ const (
 //
 // seedKind selects the defect class: SeedLogic harvests single-edit logic
 // mutants killed by ordinary testing; SeedRace harvests sync-deletion mutants
-// refuted only under the race detector — the reader-invisible class that is the
-// judge's one observed blind spot.
+// refuted only under the race detector; SeedScarFreeRace harvests races whose
+// synchronization scaffolding is intact, which is the genuinely
+// reading-invisible class (SeedRace's deletions leave an imbalance a reviewer
+// catches without reasoning about interleaving).
 func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, nSeed int,
 	levels []prompt.JudgeStrictness, seedKind SeedKind,
 ) (map[prompt.JudgeStrictness]*SeededJudgeResult, int, error) {
@@ -423,6 +432,9 @@ func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, 
 	switch seedKind {
 	case SeedRace:
 		mutants, err = verify.RaceKilledMutants(ctx, r.runner, seed, spec.VisibleTests, spec.HiddenTests,
+			nSeed, r.cfg.RaceCount, r.cfg.TestTimeout)
+	case SeedScarFreeRace:
+		mutants, err = verify.ScarFreeRaceKilledMutants(ctx, r.runner, seed, spec.VisibleTests, spec.HiddenTests,
 			nSeed, r.cfg.RaceCount, r.cfg.TestTimeout)
 	default:
 		mutants, err = verify.KilledMutants(ctx, r.runner, seed, spec.VisibleTests, spec.HiddenTests,
