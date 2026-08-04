@@ -254,3 +254,67 @@ func captureOutput(t *testing.T, fn func()) string {
 	os.Stdout = old
 	return <-done
 }
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	fn()
+	_ = w.Close()
+	os.Stderr = old
+	return <-done
+}
+
+// A live run's timeout tally must print even at zero, and printCert's must not.
+// The asymmetry is load-bearing rather than cosmetic: TierObs.TimedOut is
+// omitempty, so in a records file replayed from disk "0 timeouts" and "collected
+// before timeouts were recorded" are the same bytes — printing "0" there would
+// assert something the file cannot support. A live run just produced the records,
+// so its zero is a measurement (issue #63).
+func TestTimeoutTallyPrintsZeroOnlyWhenZeroIsAMeasurement(t *testing.T) {
+	clean := []calibrate.Record{
+		{ID: "a", Tiers: []calibrate.TierObs{{Tier: "cheap"}}},
+		{ID: "b", Tiers: []calibrate.TierObs{{Tier: "cheap"}}},
+	}
+	out := captureStderr(t, func() { reportTimeouts("timeouts", clean) })
+	if !strings.Contains(out, "0/2") {
+		t.Errorf("a live run must report its zero tally; got %q", out)
+	}
+	if strings.Contains(out, "WARNING") {
+		t.Errorf("a clean run warned about timeouts: %q", out)
+	}
+
+	slow := append([]calibrate.Record{}, clean...)
+	slow = append(slow, calibrate.Record{ID: "c",
+		Tiers: []calibrate.TierObs{{Tier: "cheap", TimedOut: true}}})
+	out = captureStderr(t, func() { reportTimeouts("timeouts", slow) })
+	if !strings.Contains(out, "WARNING") || !strings.Contains(out, "1/3") {
+		t.Errorf("a run with a timeout must warn and give the count; got %q", out)
+	}
+	// The warning must say the refutation stands, or a reader will "clean" the
+	// records — which selects the sample on an outcome (invariants #4, #8).
+	if !strings.Contains(out, "KEPT") {
+		t.Errorf("the warning does not say the timed-out records are kept: %q", out)
+	}
+
+	// printCert: silent at zero, explicit above it.
+	cert := &calibrate.Certificate{Valid: true, Alpha: 0.1, Delta: 0.1, N: 3}
+	out = captureOutput(t, func() { printCert("/tmp/x.json", cert) })
+	if strings.Contains(out, "timeout") {
+		t.Errorf("printCert mentioned timeouts at NTimedOut=0, where 0 may mean 'never recorded': %q", out)
+	}
+	cert.NTimedOut = 1
+	out = captureOutput(t, func() { printCert("/tmp/x.json", cert) })
+	if !strings.Contains(out, "timeouts") || !strings.Contains(out, "1 of 3") {
+		t.Errorf("printCert hid a nonzero timeout count: %q", out)
+	}
+}

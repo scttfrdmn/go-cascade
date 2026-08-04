@@ -145,6 +145,25 @@ a test, but the tests will not catch every way of violating them.
   mutex.
 - **The race stage is 32× a plain test run.** It is gated on an AST predicate.
   Do not ungate it.
+- **A timeout is the one refutation whose cause can be external to the candidate**, and
+  it is now marked as such — `verify.StageResult.TimedOut` → `Report.TimedOut()` →
+  `cascade.Step.TimedOut` → `calibrate.TierObs.TimedOut`, with `CountTimedOut` and a
+  `Certificate.NTimedOut` tally printed by `calibrate` (issue #63). The **scoring is
+  unchanged and must stay unchanged**: `stageFrom` keeps `OK: res.Err == nil &&
+  !res.TimedOut`, because a program that does not finish is not a program that works and
+  a timeout-is-inconclusive rung would make a ladder stage probabilistic (invariant #4).
+  The flag is **forensic only**, same constraint as `TierObs.DisagreementSource` — nothing
+  on the acceptance path may branch on it, and no record is *excluded* for carrying it
+  (that would select the calibration sample on an outcome, invariant #8). Sampling is
+  covered as well as acceptance, and deliberately: a timeout during sampling refutes that
+  candidate, which shrinks its behavioural cluster and so moves the very score a
+  calibrated threshold is compared against, so load can change a routing decision by a
+  path that acceptance-only recording would miss. Two asymmetries to preserve: the count
+  is over **records, not observations** (three timed-out tiers on one problem is one
+  suspect problem, not three events), and a live run prints its tally **even at zero**
+  while `printCert` stays silent there — `TimedOut` is `omitempty`, so in a replayed file
+  "0" and "never recorded" are the same bytes. This matters most for the concurrency set
+  (#50), where every problem runs the `-race` rung on the study's smallest sample.
 - **Bedrock model IDs churn.** They are configuration, never constants. Use
   `go-cascade models` (calls `ListInferenceProfiles`) to discover real ones — but note
   it lists **only `us.*` inference profiles**. The open-weight catalog (Qwen, DeepSeek,

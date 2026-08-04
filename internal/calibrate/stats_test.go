@@ -279,6 +279,76 @@ func TestCalibrateExcludesOracleUnsoundRecords(t *testing.T) {
 	}
 }
 
+// A timed-out record is REPORTED, never excluded. The distinction from
+// Contaminated/OracleUnsound is the point of the test: those two are excluded
+// because their labels are noise, whereas a timeout is a sound refutation
+// (invariant #4) whose label is correct. Dropping records containing one would
+// select the calibration sample on an outcome and void exchangeability
+// (invariant #8) — a "cleaning" step that reads as reasonable and is not.
+func TestCalibrateReportsTimeoutsWithoutExcludingThem(t *testing.T) {
+	recs := []Record{
+		{ID: "slow", Tiers: []TierObs{{Tier: "a", Score: 1, Correct: false, Cost: 0.001, TimedOut: true}}},
+		{ID: "fast", Tiers: []TierObs{{Tier: "a", Score: 1, Correct: true, Cost: 0.001}}},
+	}
+	cert, err := Calibrate(recs, []string{"a"}, Options{Alpha: 0.9, Delta: 0.1, Step: 0.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cert.N != 2 {
+		t.Errorf("n = %d, want 2: a timeout is a sound refutation and its record must stay in the sample", cert.N)
+	}
+	if cert.NTimedOut != 1 {
+		t.Errorf("NTimedOut = %d, want 1", cert.NTimedOut)
+	}
+	if cert.NExcluded != 0 || cert.NOracleUnsound != 0 {
+		t.Errorf("a timeout must not be tallied as contaminated or oracle-unsound: excluded=%d unsound=%d",
+			cert.NExcluded, cert.NOracleUnsound)
+	}
+	// The refutation must still count against risk. If it did not, the timeout
+	// would be a free pass, which is exactly the unsoundness invariant #4 forbids.
+	if cert.EmpiricalRisk != 0.5 {
+		t.Errorf("empirical risk = %g, want 0.5: the timed-out record's refutation must count",
+			cert.EmpiricalRisk)
+	}
+}
+
+// CountTimedOut counts RECORDS, not observations: one problem whose every tier
+// timed out is one suspect problem, and counting per-tier would report 3 events
+// from one loaded moment and overstate the prevalence.
+func TestCountTimedOutCountsRecordsNotObservations(t *testing.T) {
+	recs := []Record{
+		{ID: "all-three", Tiers: []TierObs{
+			{Tier: "a", TimedOut: true}, {Tier: "b", TimedOut: true}, {Tier: "c", TimedOut: true},
+		}},
+		{ID: "one-tier", Tiers: []TierObs{
+			{Tier: "a"}, {Tier: "b", TimedOut: true}, {Tier: "c"},
+		}},
+		{ID: "none", Tiers: []TierObs{{Tier: "a"}, {Tier: "b"}, {Tier: "c"}}},
+	}
+	if got := CountTimedOut(recs); got != 2 {
+		t.Errorf("CountTimedOut = %d, want 2 (records, not the 4 observations)", got)
+	}
+	if got := CountTimedOut(nil); got != 0 {
+		t.Errorf("CountTimedOut(nil) = %d, want 0", got)
+	}
+}
+
+// MarkTimedOut is sticky: one observation spans a whole fan-out plus an
+// acceptance run, and the sites that populate it call it several times. A setter
+// that cleared on false would let a clean acceptance erase a sampling timeout.
+func TestMarkTimedOutIsSticky(t *testing.T) {
+	var o TierObs
+	o.MarkTimedOut(false)
+	if o.TimedOut {
+		t.Error("MarkTimedOut(false) set the flag")
+	}
+	o.MarkTimedOut(true)
+	o.MarkTimedOut(false)
+	if !o.TimedOut {
+		t.Error("a later MarkTimedOut(false) cleared a recorded timeout; the flag must be sticky")
+	}
+}
+
 // When every record is oracle-unsound there is nothing sound to calibrate on,
 // and the error must name the spec-model test bug rather than silently
 // certifying against noise.
