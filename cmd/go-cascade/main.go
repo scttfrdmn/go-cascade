@@ -1573,6 +1573,16 @@ func printSelfConsistencySummary(obs []cascade.SelfConsistencyObs, spent, budget
 	// escalation rather than a wrong answer (invariant #4).
 	var nText, nCluster, nAgree, nDegen, nAbstain, scored int
 	var fanSum int
+	// Paired counts on the rows where BOTH selectors answered. The text arm has no
+	// abstention concept, so its all-rows rate has a larger denominator than the
+	// cluster's; dividing by different n and printing the two side by side reads as a
+	// wider gap than the data supports. These are the numbers to quote.
+	var nTextPaired, nDiscordTextWrong, nDiscordTextRight int
+	// The text arm's rate on exactly the rows the cluster abstained on. A cluster
+	// abstention means nothing survived the ladder — an escalation in a real cascade.
+	// The text vote has no such signal and commits anyway, so how it fares there is
+	// the §3.5 contrast rather than a footnote.
+	var nTextOnAbstain int
 	for _, o := range obs {
 		if o.Skipped != "" {
 			continue
@@ -1588,12 +1598,24 @@ func printSelfConsistencySummary(obs []cascade.SelfConsistencyObs, spent, budget
 		}
 		if o.ClusterAbstained {
 			nAbstain++
+			if o.TextCorrect {
+				nTextOnAbstain++
+			}
 		} else {
 			if o.ClusterCorrect {
 				nCluster++
 			}
 			if o.Agreed {
 				nAgree++
+			}
+			if o.TextCorrect {
+				nTextPaired++
+			}
+			switch {
+			case !o.TextCorrect && o.ClusterCorrect:
+				nDiscordTextWrong++
+			case o.TextCorrect && !o.ClusterCorrect:
+				nDiscordTextRight++
 			}
 		}
 	}
@@ -1603,13 +1625,35 @@ func printSelfConsistencySummary(obs []cascade.SelfConsistencyObs, spent, budget
 		fmt.Println("no row seated a real vote; nothing here is a measurement of self-consistency")
 		return
 	}
-	fmt.Printf("on %d rows with a real vote:\n", scored)
-	fmt.Printf("  arm (e), text vote:        %d/%d correct (%.3f)\n", nText, scored, float64(nText)/float64(scored))
-	if cl := scored - nAbstain; cl > 0 {
-		fmt.Printf("  §3.5, behavioural cluster: %d/%d correct (%.3f), %d abstentions excluded\n",
-			nCluster, cl, float64(nCluster)/float64(cl), nAbstain)
-		fmt.Printf("  the two selectors agreed on %d/%d\n", nAgree, cl)
+	cl := scored - nAbstain
+	if cl <= 0 {
+		fmt.Printf("on %d rows with a real vote, the cluster abstained on all of them; "+
+			"there is no paired comparison to report\n", scored)
+		return
 	}
+	// The headline is the PAIRED comparison, because that is the only one that
+	// isolates the selector. Both arms on the same rows, same candidates, same spend.
+	fmt.Printf("on %d rows where both selectors answered (of %d with a real vote):\n", cl, scored)
+	fmt.Printf("  arm (e), text vote:        %d/%d correct (%.3f)\n",
+		nTextPaired, cl, float64(nTextPaired)/float64(cl))
+	fmt.Printf("  §3.5, behavioural cluster: %d/%d correct (%.3f)\n",
+		nCluster, cl, float64(nCluster)/float64(cl))
+	fmt.Printf("  the two selectors agreed on %d/%d\n", nAgree, cl)
+	// Discordant pairs are what a paired test reads; the marginal rates are not
+	// independent samples. Printed as counts so the asymmetry is visible without a
+	// p-value being asserted here.
+	if d := nDiscordTextWrong + nDiscordTextRight; d > 0 {
+		fmt.Printf("  discordant %d: text wrong/cluster right %d, text right/cluster wrong %d\n",
+			d, nDiscordTextWrong, nDiscordTextRight)
+	}
+	if nAbstain > 0 {
+		// Reported on its own denominator and labelled, never folded into either rate.
+		fmt.Printf("on the %d rows the cluster abstained on, the text vote was correct %d/%d (%.3f)\n",
+			nAbstain, nTextOnAbstain, nAbstain, float64(nTextOnAbstain)/float64(nAbstain))
+	}
+	fmt.Printf("across all %d voted rows the text arm was correct %d/%d (%.3f); this is NOT "+
+		"comparable to the cluster rate above, which has a smaller denominator\n",
+		scored, nText, scored, float64(nText)/float64(scored))
 	fmt.Println("\nBoth selectors saw the SAME candidates at the SAME cost, so this isolates the")
 	fmt.Println("selector rather than the sampling budget. The text vote never consults the ladder;")
 	fmt.Println("an abstention is not scored as a wrong answer for the cluster arm, because nothing")

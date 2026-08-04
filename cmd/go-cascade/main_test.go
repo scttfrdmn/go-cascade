@@ -1,8 +1,10 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scttfrdmn/go-cascade/internal/calibrate"
@@ -177,4 +179,78 @@ func TestParseSeedKind(t *testing.T) {
 		}
 		seen[k] = s
 	}
+}
+
+// The paired comparison must be printed on ONE denominator. The live n=409 pass
+// printed the text arm over all voted rows (296/409 = 0.724) against the cluster
+// over non-abstained rows only (335/366 = 0.915), which reads as a 0.19 gap where
+// the paired figure is 0.11 (295/366 vs 335/366). Nothing failed — both numbers
+// were individually correct — so this asserts the shape of the report, not a value.
+func TestSelfConsistencySummaryPairsOnOneDenominator(t *testing.T) {
+	// 4 rows: two where both answer, two where the cluster abstains. The text arm is
+	// right on one abstention row, so an all-rows text rate (3/4) differs from the
+	// paired one (2/2) — if the report pooled them the assertions below would catch it.
+	obs := []cascade.SelfConsistencyObs{
+		{Fanout: 5, TextCorrect: true, ClusterCorrect: true, Agreed: true},
+		{Fanout: 5, TextCorrect: true, ClusterCorrect: true, Agreed: true},
+		{Fanout: 5, TextCorrect: true, ClusterAbstained: true},
+		{Fanout: 5, TextCorrect: false, ClusterAbstained: true},
+	}
+	out := captureOutput(t, func() { printSelfConsistencySummary(obs, 1, 1, 1) })
+
+	// The paired line covers the 2 rows both selectors answered, both arms over 2.
+	if !strings.Contains(out, "both selectors answered") {
+		t.Error("no paired-denominator line; the two arms may be printed over different n")
+	}
+	for _, want := range []string{
+		"arm (e), text vote:        2/2",
+		"§3.5, behavioural cluster: 2/2",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing paired count %q\nout:\n%s", want, out)
+		}
+	}
+	// The all-rows text rate may still be shown, but only labelled as incomparable.
+	if strings.Contains(out, "3/4") && !strings.Contains(out, "NOT") {
+		t.Error("all-rows text rate printed without the incomparability caveat")
+	}
+	// The abstention rows get their own denominator, never folded into either rate.
+	if !strings.Contains(out, "abstained on, the text vote was correct 1/2") {
+		t.Errorf("abstention-row text rate missing or pooled\nout:\n%s", out)
+	}
+}
+
+// A run where the cluster abstains on everything has no paired comparison. Printing
+// a text-only rate there would read as a selector result with no baseline.
+func TestSelfConsistencySummaryRefusesAnEmptyPairing(t *testing.T) {
+	obs := []cascade.SelfConsistencyObs{
+		{Fanout: 5, TextCorrect: true, ClusterAbstained: true},
+		{Fanout: 5, TextCorrect: false, ClusterAbstained: true},
+	}
+	out := captureOutput(t, func() { printSelfConsistencySummary(obs, 1, 1, 1) })
+	if !strings.Contains(out, "no paired comparison") {
+		t.Errorf("all-abstain run did not say the pairing is empty\nout:\n%s", out)
+	}
+	if strings.Contains(out, "behavioural cluster:") {
+		t.Error("printed a cluster rate with zero non-abstained rows")
+	}
+}
+
+func captureOutput(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	fn()
+	_ = w.Close()
+	os.Stdout = old
+	return <-done
 }

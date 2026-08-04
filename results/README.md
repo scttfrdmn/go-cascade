@@ -104,7 +104,8 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 20 | [absorption ceiling](absorption-ceiling-2026-08-02.md) | the **last** unrun secondary experiment — §5.5(4) cache-warmth (the direct §2.9 test), scoped at ~$7. Asks first whether the benchmark *can* exhibit the effect | **not runnable here, decided offline for $0 — and the reason is a stronger result than the experiment would have been.** On MultiPL-E Go: retrieval candidacy **464/488 (95.1%)** vs absorption ceiling **2/488 (0.4%)**, three orders of magnitude apart. §2.9's effect is driven by *absorption* (arm zero re-executes — invariant #5), so a 0.4% cache shifts no distribution and the paid run would have reported a **benchmark artifact as a null**. Ceiling is **exact, not sampled**: a differing signature cannot compile, so `manifest.json` reduces 118,828 pairs to 10 ordered transfers, all executed; 4 pass = 2 bidirectional pairs, both **upstream MBPP duplicates**. The finding: at the high end similarity is **anti-correlated** with transferability — the top pairs are *antonyms* (`minimum`~`maximum` **0.949**, the highest of all 118,828; `first_Digit`~`last_Digit`; `even_position`~`odd_position`), and the top same-signature pair `he_56`~`he_61` `CorrectBracketing` (0.836) is **retrieved and refuted** (`<>` vs `()`). **Invariant #5 measured, not asserted.** §2.9 itself is untouched; running §5.5(4) needs **duplicate injection** (absorption as a dial), not a bigger corpus — **done in experiment 22** |
 | 21 | [§5.5 at n=409](s55-multipl-n409-2026-08-03.md) | **the §5.5(1) bar itself** — n ≥ 300 on a *standard* benchmark (MultiPL-E Go: HumanEval-Go + MBPP-Go, 488 problems, 409 usable), all arms paired. The one gap between "demonstrated" and "validated" | **the primary claim replicates and the margin widens monotonically with n: execution certifies α=0.084, the judge only α=0.226** (δ=0.10, identical candidates) — the exec/judge ratio goes 1.19× (n=28) → 1.58× (n=64) → **2.69×**, and the absolute gap 0.050 → 0.110 → **0.142**. Execution sound again and now emphatically: **1096/1096** tier observations agree with ground truth, 0 over-accept, 0 over-reject. **η_fa is finally more than one data point — 11/1096 over-acceptances**, with a cheap-tier gradient (small 8, mid 2, large 1) exactly as §3.1 predicts; but *this run's* records keep no candidate source, so its *defect classes are unrecoverable* and the reading-invisible mechanism stays **argued, not confirmed** — fixed going forward by `TierObs.DisagreementSource` (issue #49), which retains the program on every oracle/truth disagreement, readable via `classify_disagreements.py`. **α=0.05 does NOT certify here** (floor 0.0538 is genuine model accuracy, not oracle noise) — the n=64 "α=0.05 certifies" was a 0/52 small-sample artifact, and this is the more trustworthy result. Cost tension **reproduces at 6× scale**: `[1,1]` (1.6× pricier than frontier) below α=0.11, `[0.1,1]` (**2.2× cheaper**) at or above it. Exclusions are load-bearing — the 79 dropped have **frontier risk 0.785**. **Coverage gap: 0 concurrency problems, so the `-race` rung never ran.** $8.15, 488/488, no kill |
 | 22 | [§5.5(4) absorption dial](README.md#experiment-22--554-the-29-shift-measured-as-a-controlled-dial-0-offline) | §5.5(4) proper: make absorption a **controlled dial** over the n=409 records and measure how the certificate degrades, with and without shadow sampling. Offline, $0, 60 rows | **§2.9 tested rather than assumed.** Under a head-shaped filter the certificate goes optimistic monotonically — gap **+0.0147 → +0.1486** as ρ goes 0.2 → 0.8, and at ρ=0.6 it promises α=0.10 and delivers **0.134**, an actually *violated* bound. **Uniform absorption is a null** (acc 0.7702 → 0.7439 across all rates, noise in both directions), so #52's own framing — inject duplicates uniformly — would have measured nothing and reported it as evidence; it ships as the explicit control, and its envelope — measured over **10 seeds × 4 rates**, **max |gap| = 0.0389**, not the 0.0267 a single sweep shows — is the yardstick. By it the effect is established at **ρ ≥ 0.6, not ρ ≥ 0.4**; the selective rows are seed-exact (a sort), but the control is not, and the control sets the bar. Cleanest row holds n **fixed** at 327: uniform certifies `[1,1]`, both selective patterns refuse — same n, α, δ, grid, so only the shift can explain it. Shadow sampling drives the gap to **exactly 0** and converts a silent violation into a visible **refusal to certify**, which is the correction working, not failing. Limit stated not buried: α=0.10 at δ=0.10 needs **n ≥ 22 even at zero errors**, so 3 small-ε rows are flagged `underpowered` rather than reported |
-| 23 | [arm (e) feasibility](README.md#experiment-23--552-arm-e-self-consistency-at-matched-cost-0-so-far-offline) | §5.5(2)'s last unimplemented arm — self-consistency at matched cost. Asks first, for $0, what the matched budget actually buys | **the arm is implemented and the free check rules it out at every tier but the cheapest.** Matched budget $0.0101/q under τ=[1,1]; at the profiled 2:1:1 fan-out that buys median **49** cheap-tier samples (0.0% below a 3-vote), **2** mid (79.2% below), **1** frontier (**99.5%** below). So a frontier arm (e) at matched cost is **always-frontier relabelled** and a mid-tier one is a coin flip — run as §5.5(2) literally specifies it (tier unnamed) it would have **reported a degenerate configuration as a null about self-consistency**, the same trap as experiment 22's uniform absorption. Only the cheap tier is well-posed, and there it is exactly §3.5's contrast: **49 votes on how the code is written vs 2 on what it does**, same money. Built as a fair foil, not a strawman — normalised-source vote (formatting/comments/import order do not split it), **raw plurality mass** not the Wilson bound (invariant #9 governs the *routing* score; arm (e) crosses no threshold), and it never consults the verifier to pick a winner. Both selectors scored on the **same candidates at the same cost**, so the selector is isolated; cluster abstentions reported separately, not scored wrong (invariant #4). `selfconsistency` **refuses `-sample` on a ruled-out tier.** Paid pass scoped **$4.12, unrun** |
+| 23 | [arm (e) feasibility](README.md#experiment-23--552-arm-e-self-consistency-at-matched-cost-0-so-far-offline) | §5.5(2)'s last unimplemented arm — self-consistency at matched cost. Asks first, for $0, what the matched budget actually buys | **the arm is implemented and the free check rules it out at every tier but the cheapest.** Matched budget $0.0101/q under τ=[1,1]; at the profiled 2:1:1 fan-out that buys median **49** cheap-tier samples (0.0% below a 3-vote), **2** mid (79.2% below), **1** frontier (**99.5%** below). So a frontier arm (e) at matched cost is **always-frontier relabelled** and a mid-tier one is a coin flip — run as §5.5(2) literally specifies it (tier unnamed) it would have **reported a degenerate configuration as a null about self-consistency**, the same trap as experiment 22's uniform absorption. Only the cheap tier is well-posed, and there it is exactly §3.5's contrast: **49 votes on how the code is written vs 2 on what it does**, same money. Built as a fair foil, not a strawman — normalised-source vote (formatting/comments/import order do not split it), **raw plurality mass** not the Wilson bound (invariant #9 governs the *routing* score; arm (e) crosses no threshold), and it never consults the verifier to pick a winner. Both selectors scored on the **same candidates at the same cost**, so the selector is isolated; cluster abstentions reported separately, not scored wrong (invariant #4). `selfconsistency` **refuses `-sample` on a ruled-out tier.** Paid pass **run — experiment 24** |
+| 24 | [arm (e) live](arm-e-live-n409.md) | the paid pass at the one tier experiment 23 did **not** rule out: does a source-text majority vote beat behavioural clustering at matched per-problem cost, on identical candidates? | **execution wins decisively, and the interesting part is *where*.** Paired on the 366 rows both selectors answered: text vote **295/366 (0.806)** vs behavioural cluster **335/366 (0.915)**, median fan-out **50** samples — ~50 votes on how the code is *written* against 2 on what it *does*, same money, and the text vote still loses. McNemar on the 50 discordant pairs: **45 text-wrong/cluster-right vs 5 the other way, p = 4.2e-09**. **The finding is the abstentions:** where the cluster abstained (nothing survived the ladder — an escalation in a real cascade), the text vote was right **1/43 (0.023)** while its vote mass barely moved (0.604 vs 0.661 elsewhere) — it is **confidently wrong exactly where execution knows it has nothing**, which is an inversion, not the gradual degradation a "weaker selector" story predicts. Agreement carries no signal (313 agreed rows: 293 vs 290); the **entire** margin is the 53 disagreements (text 2, cluster 45), i.e. when they diverge it is almost always the text vote preferring a popular wrong program. **A reporting bug found and fixed in the same pass:** the summary printed text over all 409 voted rows against the cluster over 366, reading as a 0.19 gap where the paired figure is **0.11** — both numbers correct, different denominators, no test failing. Bill **$18.77** ($4.71 matched + $14.06 oracle = 75%), against the **$4.12** originally quoted, which was the matched *budget* mistaken for the invoice |
 
 ### How each run answered the previous one's limitation
 
@@ -216,6 +217,15 @@ The value is in the chain, not any single number:
    reader cannot verify. The executable oracle caught it under `-race`.
 4. **For logic defects and races-with-a-tell, a strong judge is reliable and
    strictness-robust.** 37/37 such seeded defects caught, permissive included.
+5. **Behavioural clustering beats a source-text majority vote at matched cost**
+   (experiment 24, §5.5(2) arm (e)). Paired on identical candidates at the same
+   per-problem spend: **0.915 vs 0.806** over 366 rows, McNemar **45 vs 5**
+   discordant, p = 4.2e-09. The vote had ~50 samples to the cluster's 2 and still
+   lost. **Where** it lost is the mechanism: on the 43 rows the cluster abstained,
+   the text vote was right **1/43** while its confidence barely moved — it is
+   confidently wrong precisely where execution reports having nothing. Agreement
+   between the two selectors carries no signal (293 vs 290 of 313); the entire
+   margin is the 53 disagreements (2 vs 45).
 
 Together these make the paper's claim **more precise**: the executable oracle
 both certifies lower *and* covers the judge's blind spot (reading-invisible
@@ -223,6 +233,11 @@ defects — scar-free races, and by extension aliasing / spec misreads). The
 certification advantage on this stream is driven more by the judge's
 over-rejection than by its rare over-acceptance — a mechanism the paper
 underweights, but one that still favours the executable oracle.
+
+Point 5 closes §5.5(2): every arm (a)-(e) has now been run, and the one that had to
+be *sampled* rather than replayed is also the one that most directly tests §3.5's
+contrast between agreement and behaviour. Its result is an inversion rather than a
+gradient, which is stronger than the paper argues for.
 
 ## A correction to the setup, found while building §5.5(4) (no experiment, no cost)
 
@@ -426,16 +441,16 @@ selfconsistency -records results/s55-fixed.records.execution.json -config
 examples/bench/config.go-specialist-211.json -tau 1,1 -provider=mock` (mock only builds
 the router; nothing is queried).
 
-**The paid sampling pass is in flight, and its approved cost was wrong the first time.** I
-quoted **$4.12** — which is the *matched sampling budget*, a quantity derived from the
-records — as if it were the invoice. The real bill is **~$20**, because arm (e) also
-regenerates each problem's pinned spec, and **no `Record` has ever stored the spec cost**
-(see the section below). Matched budget $4.12, total bill ~$20; both numbers now print
-separately in the summary, along with `OverBudgetUSD`.
+**The paid sampling pass is run — see [experiment 24](arm-e-live-n409.md).** Its approved
+cost was wrong the first time: I quoted **$4.12**, which is the *matched sampling budget*, a
+quantity derived from the records, as if it were the invoice. The real bill was **$18.77**,
+because arm (e) also regenerates each problem's pinned spec and **no `Record` has ever
+stored the spec cost** (see the section below). Both numbers now print separately, along
+with `OverBudgetUSD`.
 
-A 6-problem live smoke test before the full pass paid for itself three times over, and
-none of the three defects it found were reachable from the mock (which reports zero cost
-and pins no APIs):
+A 6-problem live smoke test before the full pass paid for itself three times over, and none
+of the three defects it found were reachable from the mock (which reports zero cost and pins
+no APIs):
 
 1. **The paid path scored arm (e) against an unpinned oracle.** `cmdSelfConsistency` never
    called `SetPinnedAPIs`, while `SelfConsistency` reads `r.pinnedAPI[id]`. Arm (e) would
@@ -446,7 +461,7 @@ and pins no APIs):
    probe both buys a larger fan-out and underprices it, so the error compounds upward.
    Now recorded as `OverBudgetUSD` and totalled in the summary. (My first diagnosis of this
    was wrong — I claimed a probe double-count and rewrote the arithmetic before checking
-   that `floor(B/p)` and `1+floor((B−p)/p)` are identical. They are.)
+   that `floor(B/p)` and `1+floor((B-p)/p)` are identical. They are.)
 3. **Spec cost discarded**, as above.
 
 ## A correction to every cost figure on this page (no experiment, no cost)

@@ -263,33 +263,47 @@ a test, but the tests will not catch every way of violating them.
   drives the gap to exactly zero and converts a silent violation into a visible
   **refusal to certify**; it does not rescue the cost win under heavy absorption. None
   of this licenses relaxing invariant #8; it is the evidence *for* it.
-- **Arm (e) is implemented and its paid pass is gated by a free check** (`go-cascade
-  selfconsistency`, `internal/calibrate/selfconsistency.go`, `internal/cascade/selfconsistency.go`,
-  `internal/cluster/text.go`, experiment 23). Arms (a)/(b)/(d) replay from the records because
-  every tier ran on every problem; arm (e) cannot, because "matched cost" is a budget equal to
-  the cascade's *realized* spend and the vote is over candidates the cascade never drew. What
-  *is* free is whether the arm is well-posed, and it mostly is not: at τ=[1,1] the $0.0101/query
-  budget buys median **49 / 2 / 1** samples at the profiled 2:1:1 fan-out, i.e. below a 3-way
-  vote on **0.0% / 79.2% / 99.5%** of problems. **A frontier arm (e) at matched cost is
-  always-frontier relabelled** — run as §5.5(2) literally specifies it (tier unnamed) it would
-  have reported a degenerate configuration as a null about self-consistency, exactly experiment
-  22's trap. Hence `SelfConsistencyBudget` ships as a gate that **refuses `-sample` on a
-  ruled-out tier**, and the budget is matched **per problem**: averaging would fund every
-  problem alike and hide that the expensive ones are the degenerate ones. Load-bearing design
-  choices, all of which make the foil *stronger*: the vote is over normalised source
-  (`cluster.TextKey` drops comments/formatting/import order) but must **not** approximate
-  semantics, or the text vote becomes behavioural clustering and the §3.5 contrast dies;
-  `TextVote` returns **raw mass**, not a Wilson bound — invariant #9 governs the *routing* score
-  crossing a calibrated threshold, and arm (e) crosses none; and it never consults a verifier to
-  pick its winner. Both selectors are scored on the **same candidates at the same cost**
-  (isolating the selector), and a cluster abstention is reported separately, never as a wrong
-  answer — nothing surviving is a sound refutation (invariant #4) and an escalation in a real
-  cascade. Two subtleties with teeth: `sampleTierN(..., n, seed0)` exists because Bedrock
-  exposes **no seed for Claude**, so `prompt.CodeUser`'s `(sample N)` nonce IS the diversity
-  mechanism — a second batch restarting at 0 would redraw the first and inflate a majority with
-  duplicates it did not earn; and `cascade.minVote` mirrors `calibrate.MinVote` by test, since
-  calibrate must not import cascade. Records: `results/arm-e-feasibility-n409.json`. The paid
-  sampling pass is scoped at **$4.12 and unrun**.
+- **Arm (e) is implemented and RUN — §5.5(2) is closed** (`go-cascade selfconsistency`,
+  `internal/calibrate/selfconsistency.go`, `internal/cascade/selfconsistency.go`,
+  `internal/cluster/text.go`, experiments 23 (free) and 24 (paid, $18.77)). Arms (a)/(b)/(d)
+  replay from the records because every tier ran on every problem; arm (e) cannot, because
+  "matched cost" is a budget equal to the cascade's *realized* spend and the vote is over
+  candidates the cascade never drew. What *was* free is whether the arm is well-posed, and it
+  mostly is not: at τ=[1,1] the $0.0101/query budget buys median **49 / 2 / 1** samples at the
+  profiled 2:1:1 fan-out, i.e. below a 3-way vote on **0.0% / 79.2% / 99.5%** of problems.
+  **A frontier arm (e) at matched cost is always-frontier relabelled** — run as §5.5(2)
+  literally specifies it (tier unnamed) it would have reported a degenerate configuration as a
+  null about self-consistency, exactly experiment 22's trap. Hence `SelfConsistencyBudget`
+  ships as a gate that **refuses `-sample` on a ruled-out tier**, and the budget is matched
+  **per problem**: averaging would fund every problem alike and hide that the expensive ones
+  are the degenerate ones. **Live result at the one surviving tier: execution wins, 0.915 vs
+  0.806 paired over 366 rows, McNemar 45-vs-5, p=4.2e-09**, with ~50 text votes against 2
+  behavioural ones. The mechanism is the **abstentions**: where the cluster abstained the text
+  vote was right **1/43** while its vote mass moved only 0.661→0.604 — confidently wrong
+  exactly where execution reports nothing, an inversion rather than a gradient. Agreement is
+  uninformative (293 vs 290 of 313 agreed rows); the whole margin is the 53 disagreements
+  (2 vs 45). Load-bearing design choices, all of which make the foil *stronger*: the vote is
+  over normalised source (`cluster.TextKey` drops comments/formatting/import order) but must
+  **not** approximate semantics, or the text vote becomes behavioural clustering and the §3.5
+  contrast dies; `TextVote` returns **raw mass**, not a Wilson bound — invariant #9 governs
+  the *routing* score crossing a calibrated threshold, and arm (e) crosses none; and it never
+  consults a verifier to pick its winner. Both selectors are scored on the **same candidates
+  at the same cost** (isolating the selector), and a cluster abstention is reported
+  separately, never as a wrong answer — nothing surviving is a sound refutation (invariant #4)
+  and an escalation in a real cascade. Two subtleties with teeth: `sampleTierN(..., n, seed0)`
+  exists because Bedrock exposes **no seed for Claude**, so `prompt.CodeUser`'s `(sample N)`
+  nonce IS the diversity mechanism — a second batch restarting at 0 would redraw the first and
+  inflate a majority with duplicates it did not earn; and `cascade.minVote` mirrors
+  `calibrate.MinVote` by test, since calibrate must not import cascade.
+  **A paired comparison must print ONE denominator.** The live pass first reported the text
+  arm over all 409 voted rows against the cluster over the 366 it did not abstain on — both
+  figures correct, read together as a 0.19 gap where the paired one is 0.11. No test failed,
+  because no value was wrong; the *shape* of the report was. `printSelfConsistencySummary`
+  now leads with the paired line, prints discordant counts, gives the abstention rows their
+  own rate, and labels the all-rows figure incomparable;
+  `TestSelfConsistencySummaryPairsOnOneDenominator` asserts that shape. Records:
+  `results/arm-e-feasibility-n409.json`, `results/arm-e-n409.json`; write-up
+  `results/arm-e-live-n409.md`.
 - **The §3.7 estimator test is run** (`go-cascade estimator`, experiment 19). Mutation
   score M is a **conservative** proxy for 1 − η_fa on this benchmark, not a tight one:
   measured η_fa 0/145 (95% bound 0.020) against a pooled 1 − M of 0.1014 that predicted
