@@ -62,11 +62,13 @@ func (r *Router) Profile(ctx context.Context, id, problem string) (*calibrate.Re
 		score, winner := cluster.Score(cluster.Group(cands))
 
 		obs := calibrate.TierObs{Tier: tier.Name, Score: score}
+		obs.MarkTimedOut(anyTimedOut(cands))
 		if winner != nil {
 			rep := cands[indexOf(cands, winner.Rep)]
 			acc, cpu := r.acceptOne(ctx, rep.Source, spec)
 			local.Cost.addCompute(cpu, r.cfg.ComputeUSDPerCoreSecond)
 			obs.Correct = acc != nil && acc.OK
+			obs.MarkTimedOut(acc.TimedOut())
 		}
 		obs.Cost = local.Cost.TotalUSD
 		if k == 0 {

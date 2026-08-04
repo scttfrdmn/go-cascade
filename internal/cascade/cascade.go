@@ -260,6 +260,10 @@ func (r *Router) record(res *Result) calibrate.Record {
 			Tier: s.Tier, Score: s.Score,
 			Correct: s.Action == ActAccept && res.Solved,
 			Cost:    s.CostSoFar,
+			// Forensic only (issue #63): carried from the trace so a record can be
+			// told apart from one collected on an unloaded machine. Never read on
+			// the acceptance path.
+			TimedOut: s.TimedOut,
 		})
 	}
 	return rec
@@ -380,6 +384,10 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 		score, winner := cluster.Score(clusters)
 		tau, certified := r.threshold(k)
 		last := k == len(r.cfg.Tiers)-1
+		// Tracked across the whole tier, including any repair candidates appended
+		// below, because a timeout anywhere in the fan-out shrinks a behavioural
+		// cluster and so moves the score this tier is routed on. Forensic only.
+		timedOut := anyTimedOut(cands)
 
 		// No survivor: the whole sample is soundly refuted. Repair or escalate
 		// by marginal correctness per dollar, not by a fixed rule.
@@ -392,6 +400,7 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 					cands = append(cands, *repaired)
 					clusters = cluster.Group(cands)
 					score, winner = cluster.Score(clusters)
+					timedOut = timedOut || repaired.Report.TimedOut()
 				}
 			}
 			if winner == nil {
@@ -402,6 +411,7 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 					Stage: "tier", Tier: tier.Name, Action: ActEscalate, Clusters: clusters,
 					Reason:    "every sample refuted by the verifier ladder",
 					CostSoFar: res.Cost.TotalUSD, Elapsed: time.Since(t0),
+					TimedOut: timedOut,
 				})
 				continue
 			}
@@ -414,6 +424,7 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 				Stage: "tier", Tier: tier.Name, Action: ActEscalate, Score: score, Threshold: tau,
 				Clusters: clusters, Reason: thresholdReason(score, tau, certified),
 				CostSoFar: res.Cost.TotalUSD, Elapsed: time.Since(t0),
+				TimedOut: timedOut,
 			})
 			continue
 		}
@@ -422,6 +433,7 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 		// never fed to repair, or the holdout would stop being held out.
 		acc, cpu := r.acceptOne(ctx, rep.Source, spec)
 		res.Cost.addCompute(cpu, r.cfg.ComputeUSDPerCoreSecond)
+		timedOut = timedOut || acc.TimedOut()
 		if acc == nil || !acc.OK {
 			diag := ""
 			if acc != nil {
@@ -434,6 +446,7 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 				Clusters: clusters, Diagnostic: diag,
 				Reason:    "passed the visible tests, refuted by the held-out partition",
 				CostSoFar: res.Cost.TotalUSD, Elapsed: time.Since(t0),
+				TimedOut: timedOut,
 			})
 			continue
 		}
@@ -447,6 +460,7 @@ func (r *Router) sequential(ctx context.Context, problem string, spec *prompt.Sp
 			Stage: "tier", Tier: tier.Name, Action: ActAccept, Score: score, Threshold: tau,
 			Clusters: clusters, Reason: acceptReason(score, tau, certified, last),
 			CostSoFar: res.Cost.TotalUSD, Elapsed: time.Since(t0),
+			TimedOut: timedOut,
 		})
 		return nil
 	}
@@ -507,6 +521,7 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 		cand     cluster.Candidate
 		score    float64
 		clusters []cluster.Cluster
+		timedOut bool
 	}
 	var winners []winner
 	for o := range ch {
@@ -520,6 +535,10 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 		}
 		winners = append(winners, winner{
 			k: o.k, cand: o.cands[indexOf(o.cands, w.Rep)], score: score, clusters: cs,
+			// Timeouts are likelier on this path than on the sequential one: every
+			// tier's fan-out runs at once, so the verifier contends with itself for
+			// CPU. Recording it is the only way to tell that apart afterwards.
+			timedOut: anyTimedOut(o.cands),
 		})
 	}
 	slices.SortFunc(winners, func(a, b winner) int { return a.k - b.k })
@@ -528,7 +547,10 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 	var bestCand *cluster.Candidate
 	var bestScore float64
 	var bestClusters []cluster.Cluster
+	var bestTimedOut bool
+	anySampleTimedOut := false
 	for _, w := range winners {
+		anySampleTimedOut = anySampleTimedOut || w.timedOut
 		acc, cpu := r.acceptOne(ctx, w.cand.Source, spec)
 		res.Cost.addCompute(cpu, r.cfg.ComputeUSDPerCoreSecond)
 		if acc == nil || !acc.OK {
@@ -537,11 +559,13 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 				Score: w.score, Clusters: w.clusters,
 				Reason:    "passed the visible tests, refuted by the held-out partition",
 				CostSoFar: res.Cost.TotalUSD,
+				TimedOut:  w.timedOut || acc.TimedOut(),
 			})
 			continue
 		}
 		c := w.cand
 		best, bestCand, bestScore, bestClusters = w.k, &c, w.score, w.clusters
+		bestTimedOut = w.timedOut || acc.TimedOut()
 		break
 	}
 	if bestCand == nil {
@@ -549,6 +573,7 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 			Stage: "speculative", Action: ActEscalate,
 			Reason:    "no tier produced a candidate that survived both partitions within the deadline",
 			CostSoFar: res.Cost.TotalUSD,
+			TimedOut:  anySampleTimedOut,
 		})
 		return nil
 	}
@@ -561,7 +586,8 @@ func (r *Router) speculative(ctx context.Context, problem string, spec *prompt.S
 	res.Trace = append(res.Trace, Step{
 		Stage: "speculative", Tier: tier.Name, Action: ActAccept, Score: bestScore,
 		Clusters: bestClusters, CostSoFar: res.Cost.TotalUSD,
-		Reason: "cheapest tier whose candidate survived; all tiers were run concurrently to meet the deadline",
+		Reason:   "cheapest tier whose candidate survived; all tiers were run concurrently to meet the deadline",
+		TimedOut: bestTimedOut,
 	})
 	return nil
 }
@@ -949,6 +975,26 @@ func bestRefuted(cands []cluster.Candidate) *cluster.Candidate {
 		return nil
 	}
 	return &cands[best]
+}
+
+// anyTimedOut reports whether any candidate in a fan-out had a verifier stage
+// killed by the timeout rather than refuted by the program.
+//
+// Sampling matters as much as acceptance here, and more subtly: a timeout during
+// sampling refutes that candidate, which shrinks its behavioural cluster and so
+// moves the tier's *score* — the quantity a calibrated threshold is compared
+// against. Recording only acceptance timeouts would miss the path by which a
+// loaded machine can change a routing decision.
+//
+// Forensic only, like everything reading verify.Report.TimedOut: nothing here
+// rescores a candidate (invariant #4).
+func anyTimedOut(cands []cluster.Candidate) bool {
+	for _, c := range cands {
+		if c.Report.TimedOut() {
+			return true
+		}
+	}
+	return false
 }
 
 func indexOf(cands []cluster.Candidate, idx int) int {

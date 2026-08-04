@@ -918,6 +918,110 @@ func TestScarFreeRaceKilledMutantsAreRaceRefuted(t *testing.T) {
 	}
 }
 
+// hangingSrc compiles and typechecks but never returns, so the test stage can
+// only end on the clock.
+const hangingSrc = `package solution
+
+// LongestIncreasingRun never returns.
+func LongestIncreasingRun(xs []int) int {
+	for {
+		_ = xs
+	}
+}`
+
+// TestTimeoutIsARefutationAndIsVisible pins BOTH halves of issue #63 at once,
+// because they are in tension and a change that fixed one by breaking the other
+// would otherwise look like a pass.
+//
+// The verdict must stay OK==false: a program that does not finish is not a program
+// that works, and a timeout-is-inconclusive rung would make a ladder stage
+// probabilistic (invariant #4). The TimedOut flag must ALSO be set, because a
+// timeout is the one refutation whose cause can be external to the candidate, so a
+// run cannot be audited afterwards unless the clock-caused ones are marked.
+func TestTimeoutIsARefutationAndIsVisible(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and executes candidates")
+	}
+	r := newTestRunner(t)
+	ws, err := r.NewWorkspace(hangingSrc, visibleSrc, hiddenSrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Remove() //nolint:errcheck // scratch dir
+
+	// Short enough to fire quickly, long enough that a loaded machine does not
+	// reach it during `go build`/`go vet` (which use their own 60s bound anyway).
+	o := opts()
+	o.TestTimeout = 2 * time.Second
+
+	rep := NewLadder().Run(context.Background(), ws, hangingSrc, o)
+	if rep.OK {
+		t.Fatal("a candidate that never returns was not refuted; a timeout must not be scored as a pass (invariant #4)")
+	}
+	if rep.FailedAt != StageTest {
+		t.Errorf("refuted at %s, want %s: the hang is in the test stage", rep.FailedAt, StageTest)
+	}
+	if !rep.TimedOut() {
+		t.Error("Report.TimedOut() is false on a stage killed by the clock; the refutation is correct but unauditable (issue #63)")
+	}
+
+	var sr *StageResult
+	for i := range rep.Stages {
+		if rep.Stages[i].Stage == StageTest {
+			sr = &rep.Stages[i]
+		}
+	}
+	if sr == nil {
+		t.Fatal("no test stage in the report")
+	}
+	if sr.OK {
+		t.Error("the timed-out stage reports OK; TimedOut must record the cause, never rescore the verdict")
+	}
+	if !sr.TimedOut {
+		t.Error("StageResult.TimedOut is false on the stage that was killed")
+	}
+}
+
+// TestTimedOutIsFalseWithoutATimeout is the null half: the flag must distinguish a
+// clock-caused refutation from an ordinary one, so an ordinary refutation must not
+// set it. Without this, "0 timeouts" in a summary would carry no information.
+func TestTimedOutIsFalseWithoutATimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and executes candidates")
+	}
+	r := newTestRunner(t)
+	l := NewLadder()
+
+	rep, ws := run(t, r, l, goodSrc)
+	defer ws.Remove() //nolint:errcheck // scratch dir
+	if !rep.OK {
+		t.Fatalf("the correct solution was refuted at %s: %s", rep.FailedAt, firstLine(rep.Diagnostic))
+	}
+	if rep.TimedOut() {
+		t.Error("TimedOut() is true on a clean run")
+	}
+
+	// A genuinely wrong candidate: refuted on its output, not on the clock.
+	const wrong = `package solution
+
+func LongestIncreasingRun(xs []int) int { return 0 }`
+	bad, bws := run(t, r, l, wrong)
+	defer bws.Remove() //nolint:errcheck // scratch dir
+	if bad.OK {
+		t.Fatal("a wrong candidate survived the visible tests")
+	}
+	if bad.TimedOut() {
+		t.Error("TimedOut() is true on an ordinary refutation; the flag would then mark every failure and distinguish nothing")
+	}
+
+	// And a nil report is not evidence of a timeout: recording sites hold one when
+	// the ladder never ran.
+	var nilRep *Report
+	if nilRep.TimedOut() {
+		t.Error("(*Report)(nil).TimedOut() is true")
+	}
+}
+
 func TestParseAllocs(t *testing.T) {
 	out := "BenchmarkX-8   1000   1234 ns/op   56 B/op   3 allocs/op\n" +
 		"BenchmarkY-8   1000   99 ns/op   0 B/op   7 allocs/op"

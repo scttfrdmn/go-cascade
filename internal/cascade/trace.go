@@ -60,6 +60,17 @@ type Step struct {
 	Diagnostic string            `json:"diagnostic,omitempty"`
 	CostSoFar  float64           `json:"cost_so_far_usd"`
 	Elapsed    time.Duration     `json:"elapsed"`
+
+	// TimedOut marks a step where some verifier stage was killed by the timeout
+	// rather than refuted by the program. The decision recorded in Action stands
+	// (invariant #4), but a timeout is the one refutation whose cause can be
+	// external to the candidate, so a step carrying this flag may be reporting the
+	// machine's load rather than the model's output.
+	//
+	// FORENSIC ONLY, like verify.StageResult.TimedOut, from which it is derived:
+	// nothing on the acceptance path may branch on it. It is here so that
+	// Router.record can carry it onto the calibration record.
+	TimedOut bool `json:"timed_out,omitempty"`
 }
 
 // Result is what the router returns.

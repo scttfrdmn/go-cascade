@@ -61,6 +61,23 @@ type StageResult struct {
 	Reason     string        `json:"skip_reason,omitempty"`
 	Diagnostic string        `json:"diagnostic,omitempty"`
 	Elapsed    time.Duration `json:"elapsed"`
+
+	// TimedOut marks a refutation that came from the clock rather than from the
+	// program: the stage exceeded Options.TestTimeout and was killed.
+	//
+	// The verdict is still OK==false, and that is deliberate — a program that does
+	// not finish is not a program that works, and treating a timeout as a pass is
+	// exactly the unsoundness invariant #4 forbids. But a timeout is the one
+	// refutation whose cause can be *external* to the candidate (a starved CPU, a
+	// paging storm, a loaded machine), so it is the one that can be wrong while
+	// still being correctly scored. This field exists so that can be detected
+	// afterwards.
+	//
+	// FORENSIC ONLY. Nothing on the acceptance path may branch on it. A
+	// retry-on-timeout or timeout-is-inconclusive rung would make a ladder stage
+	// probabilistic and break the central argument that verification reduces cost
+	// at fixed risk. Same constraint as TierObs.DisagreementSource.
+	TimedOut bool `json:"timed_out,omitempty"`
 }
 
 // Report is the outcome of running the ladder against one candidate.
@@ -81,6 +98,24 @@ type Report struct {
 
 	AllocsPerOp int           `json:"allocs_per_op,omitempty"`
 	CPUTime     time.Duration `json:"cpu_time"`
+}
+
+// TimedOut reports whether any stage was killed by the timeout rather than
+// refuted by the program. Forensic only — see StageResult.TimedOut. Callers use
+// it to make a possibly load-induced verdict visible, never to rescore one.
+//
+// Nil-safe: recording sites hold reports that are nil when the ladder never ran,
+// and "no report" is not evidence of a timeout.
+func (r *Report) TimedOut() bool {
+	if r == nil {
+		return false
+	}
+	for _, s := range r.Stages {
+		if s.TimedOut {
+			return true
+		}
+	}
+	return false
 }
 
 // Options controls which optional rungs run.
@@ -353,7 +388,13 @@ func (l *Ladder) typecheck(src string) error {
 }
 
 func stageFrom(s Stage, res cmdResult) StageResult {
-	sr := StageResult{Stage: s, OK: res.Err == nil && !res.TimedOut, Elapsed: res.Duration}
+	// A timeout stays a refutation (invariant #4); TimedOut only records *why*.
+	sr := StageResult{
+		Stage:    s,
+		OK:       res.Err == nil && !res.TimedOut,
+		Elapsed:  res.Duration,
+		TimedOut: res.TimedOut,
+	}
 	if !sr.OK {
 		sr.Diagnostic = res.Output
 		if sr.Diagnostic == "" && res.Err != nil {

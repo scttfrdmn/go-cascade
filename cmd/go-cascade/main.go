@@ -504,6 +504,8 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 			"Records checkpointed; re-run with -resume to finish the rest.\n", len(recs), len(probs))
 	}
 
+	reportTimeouts("timeouts", recs)
+
 	cert, err := calibrate.Calibrate(recs, names, opts)
 	if err != nil {
 		return err
@@ -1029,6 +1031,11 @@ func runCompare(ctx context.Context, r *cascade.Router, probs []benchProblem, na
 			len(execRecs), len(probs))
 	}
 
+	// One tally for the shared candidate stream, not one per arm: both arms rule on
+	// the same programs and the same execution run, so a timeout taints both
+	// identically and printing it twice would read as two independent events.
+	reportTimeouts("timeouts (shared candidate stream)", execRecs)
+
 	fmt.Printf("\n%-11s %-6s %-9s %-9s %-9s %s\n",
 		"arm", "valid", "cert-α", "emp-risk", "real-risk", "verdict")
 	fmt.Println("  " + strings.Repeat("-", 68))
@@ -1072,6 +1079,31 @@ func printBaselines(ps []calibrate.Policy) {
 	fmt.Println("worse risk, and lower-risk than always-cheapest. Compare the rows above.")
 }
 
+// reportTimeouts prints the timeout tally for a freshly profiled stream.
+//
+// Unconditional, including at zero, and that is the whole point: TierObs.TimedOut
+// is omitempty, so in a *replayed* records file "0" and "never recorded" are
+// indistinguishable — printCert therefore stays silent at zero. Here the run just
+// produced the records, so zero is a measurement and worth stating (issue #63).
+//
+// The records are never filtered on this. A timeout is a sound refutation
+// (invariant #4); dropping the records containing one would select the calibration
+// sample on an outcome and void exchangeability (invariant #8). This is a
+// visibility mechanism, not a cleaning step.
+func reportTimeouts(label string, recs []calibrate.Record) {
+	n := calibrate.CountTimedOut(recs)
+	if n == 0 {
+		fmt.Fprintf(os.Stderr, "%s: 0/%d records had a verifier stage killed by the clock\n",
+			label, len(recs))
+		return
+	}
+	fmt.Fprintf(os.Stderr, "%s: WARNING — %d/%d records had a verifier stage killed by the clock "+
+		"rather than refuted by the program. Those refutations stand and are KEPT (invariant #4), "+
+		"but a timeout can be caused by machine load rather than by the candidate, so this run's "+
+		"risk figure may be partly a measurement of this machine. Re-run on an idle host, or raise "+
+		"test_timeout, before quoting it.\n", label, n, len(recs))
+}
+
 func printCert(path string, cert *calibrate.Certificate) {
 	fmt.Printf("\ncertificate: %s\n", path)
 	fmt.Printf("  valid           %v\n", cert.Valid)
@@ -1085,6 +1117,15 @@ func printCert(path string, cert *calibrate.Certificate) {
 	if cert.NOracleInconclusive > 0 {
 		fmt.Printf("  oracle-check    %d inconclusive & kept (reference did not fit the generated API)\n",
 			cert.NOracleInconclusive)
+	}
+	// Printed only when nonzero, and kept in the sample either way: a timeout is a
+	// sound refutation (invariant #4), so dropping those records would select the
+	// calibration sample on an outcome. It is surfaced because a timeout is the one
+	// refutation whose cause can be external to the candidate (issue #63).
+	if cert.NTimedOut > 0 {
+		fmt.Printf("  timeouts        %d of %d records had a stage killed by the clock & KEPT "+
+			"(a refutation, but possibly load-induced — re-run on an idle machine to confirm the risk figure)\n",
+			cert.NTimedOut, cert.N)
 	}
 	fmt.Printf("  method          %s over a grid of %d\n", cert.Method, cert.GridSize)
 	fmt.Printf("  thresholds      %v\n", cert.Thresholds)

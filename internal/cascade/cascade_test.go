@@ -349,6 +349,100 @@ func TestSpeculativeModeUnderDeadline(t *testing.T) {
 	}
 }
 
+// A verifier timeout must reach the calibration record without changing any
+// verdict (issue #63). Both halves matter and they pull against each other: the
+// refutation has to stand (invariant #4 — a program that does not finish is not
+// correct), and the record has to say the clock caused it, or a run cannot be told
+// apart afterwards from one on an idle machine.
+//
+// The timeout is forced by shrinking TestTimeout rather than by a hanging
+// candidate, because that also exercises the SAMPLING side: every candidate in the
+// fan-out is refuted on the clock, which is the path by which machine load can move
+// a tier's behavioural score and therefore a routing decision.
+func TestProfileRecordsATimeoutWithoutRescoringIt(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = ""                  // bypass arm zero so tiers actually sample
+	cfg.TestTimeout = time.Millisecond // no `go test` invocation finishes this fast
+	r := newRouter(t, cfg, nil)
+
+	rec, err := r.Profile(context.Background(), "p1", seqProblem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.Tiers) == 0 {
+		t.Fatal("no tiers profiled")
+	}
+	for _, obs := range rec.Tiers {
+		if obs.Correct {
+			t.Errorf("tier %s reports Correct with an unrunnable test stage; a timeout must never be scored as a pass",
+				obs.Tier)
+		}
+		if !obs.TimedOut {
+			t.Errorf("tier %s does not record the timeout; the refutation is right but unauditable", obs.Tier)
+		}
+	}
+	if n := calibrate.CountTimedOut([]calibrate.Record{*rec}); n != 1 {
+		t.Errorf("CountTimedOut = %d, want 1", n)
+	}
+	// The record stays in the sample. Excluding it would select the calibration
+	// set on an outcome (invariant #8) — see the calibrate-side test.
+	if rec.Contaminated || rec.OracleUnsound {
+		t.Error("a timeout was tallied as contamination or an unsound oracle; it is neither")
+	}
+}
+
+// A clean profile must report NO timeout, or the flag marks everything and
+// distinguishes nothing — the null half of the test above.
+func TestProfileReportsNoTimeoutOnACleanRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = ""
+	r := newRouter(t, cfg, nil)
+
+	rec, err := r.Profile(context.Background(), "p1", seqProblem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, obs := range rec.Tiers {
+		if obs.TimedOut {
+			t.Errorf("tier %s reports a timeout on an unloaded run at the default TestTimeout", obs.Tier)
+		}
+	}
+}
+
+// The solve path records the flag on the trace step and Router.record carries it
+// onto the observation. Kept toolchain-free so it runs under -short: the wiring is
+// what breaks silently, and it is pure data movement.
+func TestRecordCarriesTheTraceTimeoutFlag(t *testing.T) {
+	res := &Result{
+		Problem: seqProblem, Solved: true,
+		Trace: []Step{
+			{Stage: "tier", Tier: "cheap", Action: ActEscalate, Score: 0.2, TimedOut: true},
+			{Stage: "tier", Tier: "mid", Action: ActAccept, Score: 0.9},
+		},
+	}
+	rec := (&Router{}).record(res)
+	if len(rec.Tiers) != 2 {
+		t.Fatalf("recorded %d observations, want 2", len(rec.Tiers))
+	}
+	if !rec.Tiers[0].TimedOut {
+		t.Error("the escalating tier's timeout did not reach the record")
+	}
+	if rec.Tiers[1].TimedOut {
+		t.Error("the accepting tier reports a timeout it never had; the flag must be per-step")
+	}
+	// And the verdicts are untouched by it: the escalation is still wrong, the
+	// acceptance still correct.
+	if rec.Tiers[0].Correct || !rec.Tiers[1].Correct {
+		t.Errorf("TimedOut altered a verdict: %+v", rec.Tiers)
+	}
+}
+
 func TestValidateRejectsDualKnobs(t *testing.T) {
 	cfg := config.Default()
 	cfg.Alpha, cfg.Budget = 0.05, 1.0

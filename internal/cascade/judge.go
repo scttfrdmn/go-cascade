@@ -97,6 +97,7 @@ func (r *Router) ProfileJudge(ctx context.Context, id, problem, judgeModel strin
 		score, winner := cluster.Score(cluster.Group(cands))
 
 		obs := calibrate.TierObs{Tier: tier.Name, Score: score}
+		obs.MarkTimedOut(anyTimedOut(cands))
 		if winner != nil {
 			rep := cands[indexOf(cands, winner.Rep)]
 
@@ -115,6 +116,7 @@ func (r *Router) ProfileJudge(ctx context.Context, id, problem, judgeModel strin
 			local.Cost.addCompute(cpu, r.cfg.ComputeUSDPerCoreSecond)
 			truth := acc != nil && acc.OK
 			obs.TrueCorrect = &truth
+			obs.MarkTimedOut(acc.TimedOut())
 
 			// Forensic retention on judge/truth disagreement (issue #49). Must
 			// follow both assignments above, since the rule reads them.
@@ -220,6 +222,13 @@ func (r *Router) ProfilePaired(ctx context.Context, id, problem, judgeModel stri
 		execObs := calibrate.TierObs{Tier: tier.Name, Score: score, Cost: sampleCost}
 		judgeObs := calibrate.TierObs{Tier: tier.Name, Score: score, Cost: sampleCost}
 
+		// The candidate stream is shared, so a sampling timeout taints BOTH arms
+		// identically — which is the point of the paired design and the reason the
+		// flag must be set on both records rather than only the execution one.
+		sampleTO := anyTimedOut(cands)
+		execObs.MarkTimedOut(sampleTO)
+		judgeObs.MarkTimedOut(sampleTO)
+
 		if winner != nil {
 			rep := cands[indexOf(cands, winner.Rep)]
 
@@ -229,6 +238,11 @@ func (r *Router) ProfilePaired(ctx context.Context, id, problem, judgeModel stri
 			acc, cpu := r.acceptOne(ctx, rep.Source, spec)
 			truth := acc != nil && acc.OK
 			execObs.Cost += cpu.Seconds() * r.cfg.ComputeUSDPerCoreSecond
+			// Both arms again: the judge record's TrueCorrect comes from this same
+			// execution run, so a clock-caused verdict here makes the judge arm's
+			// ground-truth column suspect too — and eta_fa is computed from it.
+			execObs.MarkTimedOut(acc.TimedOut())
+			judgeObs.MarkTimedOut(acc.TimedOut())
 
 			// Judge oracle: rule on the same representative by reading only.
 			pass, jcost, jerr := r.judgeAccept(ctx, judgeModel, problem, spec.API, rep.Source)
@@ -317,6 +331,7 @@ func (r *Router) ProfileStrictnessReplay(ctx context.Context, id, problem, judge
 		var truth bool
 		var repSource string
 		haveRep := false
+		timedOut := anyTimedOut(cands)
 		if winner != nil {
 			rep := cands[indexOf(cands, winner.Rep)]
 			repSource = rep.Source
@@ -326,7 +341,9 @@ func (r *Router) ProfileStrictnessReplay(ctx context.Context, id, problem, judge
 			execObs.Cost += cpu.Seconds() * r.cfg.ComputeUSDPerCoreSecond
 			execObs.Correct = truth
 			execObs.TrueCorrect = &truth
+			timedOut = timedOut || acc.TimedOut()
 		}
+		execObs.MarkTimedOut(timedOut)
 		execRec.Tiers = append(execRec.Tiers, execObs)
 		if tier.ModelID == r.cfg.TestModel {
 			execRec.Contaminated = true
@@ -334,6 +351,9 @@ func (r *Router) ProfileStrictnessReplay(ctx context.Context, id, problem, judge
 
 		for _, lvl := range levels {
 			jObs := calibrate.TierObs{Tier: tier.Name, Score: score, Cost: sampleCost}
+			// Every level replays against the one shared candidate and the one shared
+			// execution run, so they all inherit its timeout status.
+			jObs.MarkTimedOut(timedOut)
 			if haveRep {
 				pass, jcost, jerr := r.judgeAt(ctx, lvl, judgeModel, problem, spec.API, repSource)
 				if jerr != nil {

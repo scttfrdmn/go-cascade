@@ -57,6 +57,16 @@ type TierObs struct {
 	// 166 programs rather than 1096, and agreeing observations carry no forensic
 	// information by construction.
 	DisagreementSource string `json:"disagreement_source,omitempty"`
+	// TimedOut marks an observation where some verifier stage was killed by the
+	// timeout rather than refuted by the program. The verdict stands (invariant
+	// #4 — a program that does not finish is not correct), but a timeout is the
+	// one refutation whose cause can be external to the candidate, so a run with
+	// a nonzero count may have been measuring its own machine's load.
+	//
+	// FORENSIC ONLY, exactly as DisagreementSource: nothing on the acceptance
+	// path may branch on it. Recorded so that `calibrate` can print a count and a
+	// reader can tell "0 timeouts" from "never checked".
+	TimedOut bool `json:"timed_out,omitempty"`
 }
 
 // truth returns the ground-truth correctness for a tier observation: execution
@@ -84,6 +94,31 @@ func (t TierObs) Disagrees() bool {
 func (t *TierObs) RetainSourceOnDisagreement(src string) {
 	if t.Disagrees() {
 		t.DisagreementSource = src
+	}
+}
+
+// CountTimedOut returns how many records had a verifier stage killed by the
+// timeout on any tier. Forensic: it is reported, never used to filter, since a
+// timeout is a sound refutation and dropping the records it appears in would
+// select the calibration sample on an outcome (invariants #4, #8).
+func CountTimedOut(recs []Record) int {
+	n := 0
+	for _, r := range recs {
+		if slices.ContainsFunc(r.Tiers, func(t TierObs) bool { return t.TimedOut }) {
+			n++
+		}
+	}
+	return n
+}
+
+// MarkTimedOut records that some verifier stage behind this observation was killed
+// by the timeout. Sticky: an observation covers a whole fan-out plus an acceptance
+// run, and one clock-caused verdict anywhere is enough to make the row suspect.
+//
+// Deliberately a setter and not a rescoring hook — see TierObs.TimedOut.
+func (t *TierObs) MarkTimedOut(b bool) {
+	if b {
+		t.TimedOut = true
 	}
 }
 
@@ -228,19 +263,31 @@ const (
 // Certificate is the artefact the router loads. A run without one is explicitly
 // uncertified and must not claim a guarantee.
 type Certificate struct {
-	Valid               bool      `json:"valid"`
-	Alpha               float64   `json:"alpha"`
-	Delta               float64   `json:"delta"`
-	N                   int       `json:"n_calibration"`
-	NShadow             int       `json:"n_shadow"`
-	NExcluded           int       `json:"n_excluded_contaminated"`
-	NOracleUnsound      int       `json:"n_excluded_oracle_unsound,omitempty"`
-	NOracleInconclusive int       `json:"n_oracle_inconclusive,omitempty"`
-	Method              Method    `json:"method"`
-	GridSize            int       `json:"grid_size"`
-	Tiers               []string  `json:"tiers"`
-	Thresholds          []float64 `json:"thresholds"`
-	EmpiricalRisk       float64   `json:"empirical_risk"`
+	Valid               bool    `json:"valid"`
+	Alpha               float64 `json:"alpha"`
+	Delta               float64 `json:"delta"`
+	N                   int     `json:"n_calibration"`
+	NShadow             int     `json:"n_shadow"`
+	NExcluded           int     `json:"n_excluded_contaminated"`
+	NOracleUnsound      int     `json:"n_excluded_oracle_unsound,omitempty"`
+	NOracleInconclusive int     `json:"n_oracle_inconclusive,omitempty"`
+	// NTimedOut counts calibration records in which some verifier stage was killed
+	// by the timeout rather than refuted by the program. Those records are KEPT and
+	// fully counted: a timeout is a sound refutation (invariant #4), so excluding
+	// them would be selecting the calibration sample on an outcome. The number is
+	// reported so a run whose risk estimate may reflect its own machine's load is
+	// visible rather than needing a log grep.
+	//
+	// Zero on records collected before this was recorded (pre-#63) means "not
+	// recorded", not "none happened" — TimedOut is omitempty, so the two are
+	// indistinguishable in a replayed file. A live `calibrate` run prints its own
+	// count, where zero does mean zero.
+	NTimedOut     int       `json:"n_timed_out,omitempty"`
+	Method        Method    `json:"method"`
+	GridSize      int       `json:"grid_size"`
+	Tiers         []string  `json:"tiers"`
+	Thresholds    []float64 `json:"thresholds"`
+	EmpiricalRisk float64   `json:"empirical_risk"`
 	// RealizedRisk is the ground-truth risk of the selected thresholds (§5.5).
 	// Under the sound execution oracle it equals EmpiricalRisk. Under a judge
 	// oracle it can exceed alpha even when the certificate is Valid: the judge
@@ -337,6 +384,9 @@ func Calibrate(recs []Record, tiers []string, opts Options) (*Certificate, error
 		NExcluded: excluded, NOracleUnsound: unsound, NOracleInconclusive: inconclusive,
 		Method: opts.Method, GridSize: len(grid),
 		Tiers: tiers, Note: note, CreatedAt: time.Now().UTC(),
+		// Counted over the stream actually calibrated on (shadow subset when it was
+		// preferred), because that is the sample this certificate describes.
+		NTimedOut: CountTimedOut(use),
 	}
 	if len(grid) == 0 {
 		cert.Valid = true
