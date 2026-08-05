@@ -358,6 +358,25 @@ a test, but the tests will not catch every way of violating them.
   scar-free race. (The old mock figure — judge certifies α=0.15 at 0 empirical while
   realized risk is 0.22 — still illustrates the §3.1 floor, but **is a mock number,
   not a measurement of any model.**)
+- **The scar-free race sweep is DECLINED on power, not pending on budget** (experiment
+  28, `results/scarfree-coverage-n11.md`, `results/scarfree_coverage.py`). The operators
+  exist and are correct (`collectScarFreeRaceSites`, `-seed-kind=scar-free-race`), but on
+  the 11-problem concurrency set 15 AST sites yield only **6 usable seeds**, 5 of them
+  from `defer wg.Wait()` alone: the `RWMutex` downgrade is **structurally dead** because
+  there is no `sync.RWMutex` anywhere in `examples/bench/`, so every one of its 6 mutants
+  fails to build. At n=6, Fisher against the sync-deletion 0/17 needs **≥3 of 6** events
+  for p<0.05, and a null — the likely outcome given the judge's 20/20 on scar-*bearing*
+  races — bounds scar-free η_fa only at **≤0.393**. Both branches are uninformative, so
+  no money was spent. Do not "unblock" this by funding it; §3.1's reading-invisible
+  mechanism stays **argued** until the corpus is wider (0/23 → ≤0.122).
+  `TestScarFreeOperatorCoverageOnTheConcurrencyBenchmark` pins the site counts and
+  **fails on purpose** if concurrency problems are added — that failure is the signal to
+  re-measure seeds and re-price. Two traps: a site is not a seed (`conc_parallel_map`
+  merely *returns* the slice, so its deferred `Wait` still precedes any observation — the
+  operator's guard wants a **read** after the wait, not just a statement), and if the set
+  is widened, authoring problems mutable *by these operators* tunes the benchmark to the
+  instrument, so any addition must be a plausible exercise first and be named as
+  post-operator in the write-up.
 - Adaptive conformal inference (paper eq. 9) is not implemented; only the static
   LTT bound plus shadow sampling.
 - No boundary randomization, so the selected policy is feasible but not exactly

@@ -1157,6 +1157,29 @@ influenced acceptance would be a new oracle input with no soundness argument beh
 Retention is limited to disagreements: at n = 409 that is 166 programs rather than 1096,
 and agreeing observations carry no forensic information by construction.
 
+The other route to the same claim — *seeding* the reading-invisible class rather than
+waiting to observe it — is implemented and is reported here as **blocked by the benchmark
+rather than by cost**, because a reader is otherwise entitled to ask why an available
+experiment was not run. Sound seeding requires mutants whose synchronization scaffolding
+is intact: a deleted `wg.Wait()` leaves a WaitGroup that is never waited on, and the judge
+scored 20 of 20 on such mutants by noticing the imbalance rather than by reasoning about
+interleaving. Three scar-free operators were therefore built (downgrade a `Lock`/`Unlock`
+pair to `RLock`/`RUnlock`; move the last guarded statement out past the `Unlock`; replace
+`wg.Wait()` with `defer wg.Wait()`), each validated to compile and to be refuted under
+`-race`. Measured against the 11 concurrency problems, they yield 15 candidate edit sites
+but only **6 mutants that both compile and race** — five of them from the third operator
+alone, because the benchmark contains no `sync.RWMutex` and so every downgrade mutant
+fails to build. At six seeds the comparison against the sync-deletion rate requires three
+or more false acceptances to reach *p* < 0.05, i.e. it can detect only a large effect,
+while the hypothesis under test is that this defect class is *subtler* than the visible
+one; and the likely outcome, a null, would bound the scar-free false-acceptance rate only
+at 0.393. The experiment was therefore declined rather than run, and the mechanism claim
+is left argued. What would change this is a wider concurrency corpus, not a larger budget:
+zero events in 23 seeds would bound the rate at 0.122. We note the hazard in doing so,
+since it applies to anyone extending a benchmark to feed a mutation operator — problems
+authored *because* these operators can mutate them would tune the benchmark to the
+instrument, and such additions must be identified as post hoc.
+
 Two corrections to §5.6's earlier text. First, **α = 0.05 does not certify at n = 409**.
 The n = 64 pinned run that did certify recorded 0 errors in 52 problems; at 409 problems
 the empirical risk is 0.0538 and the oracle is provably clean, so this is a genuine
