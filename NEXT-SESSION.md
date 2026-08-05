@@ -216,20 +216,31 @@ Do not re-derive the backlog from prose here; read the issues.
 |---|-----|------|----------------|
 | ~~[#49](https://github.com/scttfrdmn/go-cascade/issues/49)~~ | ~~Retain candidate source for **disagreeing** observations~~ | free | **DONE** (PR #55). `TierObs.DisagreementSource` + `results/classify_disagreements.py`. Forensic only — nothing on the acceptance path reads it. |
 | [#50](https://github.com/scttfrdmn/go-cascade/issues/50) | Concurrency coverage — `-race` never fired at large n | **$2–4** | The rung that caught the only confirmed judge over-acceptance was skipped on all 488. |
-| ~~[#51](https://github.com/scttfrdmn/go-cascade/issues/51)~~ | ~~Scar-free race operator~~ | free | **GENERATOR DONE**, measurement NOT run. `-seed-kind=scar-free-race`: three operators (RWMutex downgrade, escape past `Unlock`, `defer wg.Wait()`), all validated `-race`-refuted. The **sweep needs #50's problems** — MultiPL-E Go has no concurrency. Loop-var capture is obsolete (Go 1.22 per-iteration vars). |
+| ~~[#51](https://github.com/scttfrdmn/go-cascade/issues/51)~~ | ~~Scar-free race operator~~ | free | **GENERATOR DONE and its coverage MEASURED** (experiments 28, 29). `-seed-kind=scar-free-race`: **four** operators (RWMutex downgrade, escape past an explicit `Unlock`, escape past a **deferred** `Unlock`, `defer wg.Wait()`), all validated `-race`-refuted. On the 11 concurrency problems: **16 sites → 10 seeds**, which **meets** the bar of 10 registered before experiment 28's harvest (that harvest returned 9 and declined). Fundable, **not funded** — see below. Loop-var capture is obsolete (Go 1.22 per-iteration vars). |
 | [#52](https://github.com/scttfrdmn/go-cascade/issues/52) | §5.5(4) via **duplicate injection** | free harness | Absorption must become a dial; the corpus cannot supply it. |
 | [#53](https://github.com/scttfrdmn/go-cascade/issues/53) | Arm (e), self-consistency at matched cost | **$6–10** | Last unimplemented arm of §5.5(2). Lowest priority — a comparison arm, not a load-bearing claim. |
 
 #50 and #53 are labelled `needs-spend-approval` and are **filed, not scheduled**.
 **Scope the spend with me first** — I said "not yet" to a live run twice before.
 
-**#49 and #51 are merged, and together they leave exactly one blocker on the η_fa
-mechanism claim: #50.** The forensic field records the programs behind each
-disagreement, and the scar-free generator can now seed the reading-invisible class —
-but neither has produced a measurement, because the only large-n benchmark has zero
-concurrency problems. The next move on the mechanism is the **$2–4 sweep over the 11
-`conc_*`/`hard_conc_*` problems**, comparing scar-free η_fa against the sync-deletion
-20/20. That needs your spend approval.
+**#49 and #51 are merged, and the one blocker left on the η_fa mechanism claim is a
+spend decision, not code.** The seeded scar-free sweep now **clears the bar registered
+before its harvest** — 10 seeds, after the deferred-escape operator supplied the tenth
+(experiment 29; the bar stayed at 10, the measurement moved). So the next move on the
+mechanism is the **~$3 sweep over the 11 `conc_*`/`hard_conc_*` problems**, comparing
+scar-free η_fa against the sync-deletion 20/20, and it needs your approval.
+
+**Read the arithmetic before approving, because clearing a bar is not being
+well-powered.** At n=10 the critical value is ≥3 of 10 and a null bounds η_fa only at
+≤0.259: what this buys is an **existence proof** (P=0.893 at η_fa=0.2), where one
+scar-free false acceptance turns §3.1's mechanism from argued into demonstrated. A null
+resolves little. One thing did improve qualitatively — experiment 28's whole seed set was
+*also* refuted without `-race`, so it would have tested the judge against
+deterministically-wrong programs; **9 of 10** are now, and the new seed is the first that
+genuinely requires the interleaving. The route that looked cheapest, harvesting from the
+tier-0 **model draws** `ProfileSeeded` actually mutates, is **measured and closed**: 8
+raw / 6 unique / 5 from execution-correct bases. Only widening the corpus can raise n
+further, and that carries the tuning hazard.
 
 Two n≤64 questions the n=409 run did *not* settle, and one it did: whether **M ranks**
 candidates by η_fa is **still open** (experiment 19 had no events in either M bucket);
@@ -237,7 +248,7 @@ whether the **false-rejection rate** has any stable value is **still open** (11 
 across two draws); the **cost win** question is **answered** — the tension reproduces,
 so it was not a 2-in-6 coincidence but a structural property.
 
-Or: **declare the study done** and treat it as a finished artifact. Twenty-one
+Or: **declare the study done** and treat it as a finished artifact. Twenty-nine
 experiments, both levers mapped, every claim labelled demonstrated-vs-argued, and the
 paper's own §5.5(1) bar now met. A defensible stopping point either way — and a more
 defensible one than it was a session ago.

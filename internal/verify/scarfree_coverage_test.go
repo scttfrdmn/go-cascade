@@ -110,7 +110,7 @@ func TestScarFreeOperatorCoverageOnTheConcurrencyBenchmark(t *testing.T) {
 	}
 
 	const (
-		wantTotal     = 15
+		wantTotal     = 16
 		wantWithSites = 10
 	)
 	if total != wantTotal || withSites != wantWithSites {
@@ -121,7 +121,9 @@ func TestScarFreeOperatorCoverageOnTheConcurrencyBenchmark(t *testing.T) {
 			total, withSites, len(concurrencyRefIDs), wantTotal, wantWithSites)
 	}
 
-	for op, want := range map[string]int{"defer-wait": 8, "downgrade": 6, "escape": 1} {
+	for op, want := range map[string]int{
+		"defer-wait": 8, "downgrade": 6, "escape": 1, "escape-defer": 1,
+	} {
 		if perOperator[op] != want {
 			t.Errorf("operator %s: %d sites, recorded %d", op, perOperator[op], want)
 		}
@@ -141,6 +143,15 @@ func classifyScarFreeSite(t *testing.T, id, desc string) string {
 	switch {
 	case strings.Contains(desc, "RLock/RUnlock"):
 		return "downgrade"
+	// The two escape forms are binned SEPARATELY. They differ in what they have
+	// to edit — the deferred form must convert `defer mu.Unlock()` to a plain
+	// call, the other only reorders — so pooling them would hide one form dying
+	// while the other carried the count, which is exactly the failure mode that
+	// let a broken downgrade operator be reported as a fact about the corpus.
+	// This check precedes the plain-escape one because its description contains
+	// both substrings.
+	case strings.Contains(desc, "undeferring the Unlock"):
+		return "escape-defer"
 	case strings.Contains(desc, "out of the"):
 		return "escape"
 	case strings.Contains(desc, "defer"):
@@ -175,13 +186,16 @@ func TestScarFreeSeedCountOnTheConcurrencyBenchmark(t *testing.T) {
 	want := map[string]int{
 		"conc_parallel_map": 0, "conc_parallel_sum": 1, "conc_safe_counter": 0,
 		"conc_parallel_filter": 1, "conc_fan_in_merge": 2, "conc_first_success": 1,
-		"conc_parallel_histogram": 1, "conc_bounded_pipeline": 0, "hard_conc_rate_limiter": 1,
+		"conc_parallel_histogram": 1, "conc_bounded_pipeline": 0, "hard_conc_rate_limiter": 2,
 		"hard_conc_once_init": 2, "hard_conc_ordered_fanout": 0,
 	}
-	wantByOperator := map[string]int{"defer-wait": 4, "downgrade": 4, "escape": 1}
+	wantByOperator := map[string]int{
+		"defer-wait": 4, "downgrade": 4, "escape": 1, "escape-defer": 1,
+	}
 
 	got := map[string]int{}
 	gotByOperator := map[string]int{}
+	raceOnly := map[string]int{} // seeds NOT refuted by a plain (no -race) run
 	total := 0
 	for _, id := range concurrencyRefIDs {
 		dir := concurrencyRefDir(t, id)
@@ -210,7 +224,11 @@ func TestScarFreeSeedCountOnTheConcurrencyBenchmark(t *testing.T) {
 		got[id] = len(seeds)
 		total += len(seeds)
 		for _, m := range seeds {
-			gotByOperator[classifyScarFreeSite(t, id, m.Desc)]++
+			op := classifyScarFreeSite(t, id, m.Desc)
+			gotByOperator[op]++
+			if !m.PlainRefuted {
+				raceOnly[op]++
+			}
 			// Every seed must carry a ThreadSanitizer report: this arm's filter is
 			// DataRace, not merely "failed under -race". A mutant that returns the
 			// wrong answer deterministically is a different defect class wearing
@@ -223,14 +241,20 @@ func TestScarFreeSeedCountOnTheConcurrencyBenchmark(t *testing.T) {
 		}
 	}
 
-	const wantTotal = 9
+	// 10, which is exactly the bar experiment 28 registered before its harvest —
+	// the deferred-escape operator supplied the tenth. The guard below is what
+	// made that happen without anyone re-reading the write-up: it was pinned at 9
+	// and FAILED when the operator landed, which is the whole design (see the
+	// doc comment).
+	const wantTotal = 10
 	if total != wantTotal {
 		t.Errorf("scar-free SEED count moved: %d, recorded %d.\n"+
-			"This is the number the declined sweep's power rests on (results/"+
-			"scarfree-coverage-n11.md): the registered bar was >=10 seeds and the "+
-			"harvest returned 9. If an operator fix or a wider corpus moved it to 10 "+
-			"or more, the sweep clears the bar and should be re-priced, not left "+
-			"declined.", total, wantTotal)
+			"This is the number the seeded sweep's power rests on (results/"+
+			"scarfree-coverage-n11.md and results/deferred-escape-n11.md): the "+
+			"registered bar was >=10 seeds and the corrected harvest returns 10. "+
+			"If this DROPPED below 10 the sweep no longer clears its bar; if it "+
+			"rose, re-run the power arithmetic before quoting any rate.",
+			total, wantTotal)
 	}
 	for id, w := range want {
 		if got[id] != w {
@@ -240,6 +264,32 @@ func TestScarFreeSeedCountOnTheConcurrencyBenchmark(t *testing.T) {
 	for op, w := range wantByOperator {
 		if gotByOperator[op] != w {
 			t.Errorf("operator %s: %d seeds, recorded %d", op, gotByOperator[op], w)
+		}
+	}
+
+	// Experiment 28's Result 3 was that all 9 seeds were ALSO refuted without
+	// -race, so the rung was not load-bearing for any of them — a seeded sweep
+	// could only ever have measured whether a reader notices a defect the plain
+	// test run already catches. The deferred-escape seed is the first that is
+	// not: undeferring the Unlock widens the window enough that the ordinary run
+	// passes and only ThreadSanitizer objects.
+	//
+	// Pinned per operator rather than as a total because that is the claim: the
+	// escape-defer operator is the one that produces -race-only seeds, and a
+	// total of 1 could be satisfied by any operator drifting into the bucket.
+	// PlainRefuted is recorded and never filtered (it must not be — filtering one
+	// arm breaks comparability with the scar-bearing arm), so this is the only
+	// place the asymmetry is asserted.
+	wantRaceOnly := map[string]int{
+		"defer-wait": 0, "downgrade": 0, "escape": 0, "escape-defer": 1,
+	}
+	for op, w := range wantRaceOnly {
+		if raceOnly[op] != w {
+			t.Errorf("operator %s: %d seeds refuted ONLY under -race, recorded %d.\n"+
+				"If this fell to 0 for escape-defer the sweep is back to measuring "+
+				"reader-visibility on defects a plain run already catches; if it rose "+
+				"elsewhere, say so in the write-up — it strengthens the arm.",
+				op, raceOnly[op], w)
 		}
 	}
 }

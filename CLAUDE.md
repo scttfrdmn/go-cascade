@@ -358,17 +358,46 @@ a test, but the tests will not catch every way of violating them.
   scar-free race. (The old mock figure — judge certifies α=0.15 at 0 empirical while
   realized risk is 0.22 — still illustrates the §3.1 floor, but **is a mock number,
   not a measurement of any model.**)
-- **The scar-free race sweep is DECLINED at 9 seeds against a pre-registered bar of 10 —
-  and the first pass of that measurement was wrong twice, both times in its own favour**
-  (experiment 28, `results/scarfree-coverage-n11.md`, `results/scarfree_coverage.py`). On
-  the 11-problem concurrency set, 15 AST sites yield **9 seeds** (compile + a real
-  ThreadSanitizer report), 7 of 11 problems contributing, split 4 `defer-wait` / 4
-  downgrade / 1 escape. Against the sync-deletion control **0/20** the critical value is
-  **≥3 of 9**, a null bounds η_fa at **≤0.283**, and P(≥1 event) is 0.866 at η_fa=0.2. The
-  bar was registered *before* the harvest and 9 misses it, so nothing was spent — but the
-  honest framing is **close, not clear**: for ~$3 an 87% shot at an existence proof on a
-  claim resting on n=1 is not obviously a bad buy, and "both branches buy nothing" (the
-  first pass's phrasing) is too strong at n=9. §3.1's mechanism stays **argued**.
+- **The scar-free race sweep was DECLINED at 9 seeds against a pre-registered bar of 10,
+  then a fourth operator moved the measurement to 10 and it now CLEARS that bar — the bar
+  never moved. Nothing has been spent.** (experiments 28 and 29,
+  `results/scarfree-coverage-n11.md`, `results/deferred-escape-n11.md`,
+  `results/scarfree_coverage.py`). On the 11-problem concurrency set: **16 AST sites → 10
+  seeds** (compile + a real ThreadSanitizer report), 7 of 11 problems, split 4 `defer-wait`
+  / 4 downgrade / 1 escape / 1 escape-defer. Against the sync-deletion control **0/20** the
+  critical value is **≥3 of 10**, a null bounds η_fa at **≤0.259**, P(≥1 event) is 0.893 at
+  η_fa=0.2. **Clearing a registered bar makes a run fundable, not authorized** — and n=10
+  buys an *existence proof*, not a rate, so read the arithmetic before quoting a price.
+  The tenth seed came from implementing the **deferred form** of the escape operator, which
+  had been skipping every `Lock(); defer Unlock()` — the dominant Go idiom, so the operator
+  had exactly one site on a concurrency benchmark. It needs a control-flow **veto** the
+  plain form does not: undeferring an `Unlock` only unlocks on the fall-through path, so a
+  `return` in the covered region **deadlocks** instead of racing — wrong class twice over,
+  since a timeout's cause can be external to the candidate and a `Lock` with a `return`
+  before its `Unlock` is a *visible* imbalance (the deletion arm's territory). A `return`
+  inside a `func` literal is **not** an exit. That was found by *reading both mutants*, not
+  by the DATA-RACE filter, which would have dropped the hang and reported one seed either
+  way. **A formatting artifact is a scar:** `go/printer` lays a block out from its
+  statements' *recorded source lines*, not slice order, so any reordering operator emits a
+  blank line at the mutation site and **`gofmt` does not remove it** (it preserves author
+  blank lines). 3 of 17 sites carried the tell; now 0 of 16, via `clearPositions` — scoped
+  to the statements that **moved**, because clearing the enclosing block re-lays-out code
+  the mutation never touched (52 printed lines → 49, a collapsed closure and a dropped
+  blank line: a three-line scar replacing a one-line one) versus 52 → 52 scoped. Confined
+  to the scar-free reordering operators; `collectRaceSites`/`collectSites` untouched, so
+  arm comparability holds. **Seed quality changed more than the count did:** experiment 28
+  found *all* 9 seeds were also refuted without `-race` — so the sweep could only have
+  measured whether a reader notices a deterministically-wrong program — and it is now **9
+  of 10**, the new seed being the first that genuinely requires the interleaving.
+  `PlainRefuted` is still recorded and **never filtered**, and the asymmetry is asserted
+  **per operator**, since a total of 1 could be satisfied by drift.
+  **Route 1 is measured and closed:** `ProfileSeeded` mutates a tier-0 **model draw**,
+  never a reference, and that population gives **8 raw / 6 unique / 5 from
+  execution-correct bases** — 9 recorded rows are 7 unique programs (`conc_safe_counter`
+  3× byte-identically) and `ProfileSeeded` never checks base correctness, so a mutant of an
+  already-wrong program would count as a seed. Quote the range, not the flattering end.
+  §3.1's mechanism stays **argued** — experiment 29 sharpened the instrument, it did not
+  run the sweep.
   **Two retractions worth reading before trusting any figure here, because both errors
   pushed toward declining:** (a) the `RWMutex` downgrade was reported "**structurally
   dead** — no `sync.RWMutex` in `examples/bench/`". That was an operator bug: it rewrote
@@ -387,20 +416,19 @@ a test, but the tests will not catch every way of violating them.
   now pins seeds per problem and per operator, and `TestConcurrencyRefIDsMatchTheBenchFile`
   pins the problem count — the old guard keyed on a hardcoded id list, so adding the 12th
   concurrency problem the write-up itself recommends left every assertion passing on the
-  stale 11. Three further cautions: the scar-free arm requires an actual **DATA RACE**, not
-  merely a `-race` failure (`conc_safe_counter`'s mutant returns `got 0 want 400` with no
-  race — a deterministic wrong answer in this operator's clothes, counted as a seed by the
-  first pass); all 9 seeds are **also refuted without `-race`**, which establishes the rung
-  is not load-bearing for them but does *not* establish a reader would notice
-  (`PlainRefuted` is recorded, never filtered — filtering one arm breaks comparability with
-  the other, which is `raceKilledFrom`'s whole contract); and **9 is measured on the wrong
-  population** — `ProfileSeeded` mutates a **tier-0 model draw**, never a reference, and the
-  study's one live scar-free false acceptance was model-authored. Reopen in cost order:
-  harvest from model draws (nearly free, right population), implement the deferred-form
-  escape (free; `syncCall` calls `Lock(); defer Unlock()` "the dominant Go idiom" and the
-  operator skips it), then widen the corpus — the first two being immune to the tuning
-  hazard, which is that authoring problems mutable *by these operators* tunes the benchmark
-  to the instrument.
+  stale 11. **That pinning is what flipped the verdict**, not a re-read: the seed constant
+  sat at 9, and landing the deferred-escape operator *failed the test*, which is the only
+  reason anyone noticed the bar was now met. Pin the decision number and a later change
+  cannot quietly invalidate a conclusion.
+  One caution survives both experiments unchanged: the scar-free arm requires an actual
+  **DATA RACE**, not merely a `-race` failure (`conc_safe_counter`'s mutant returns
+  `got 0 want 400` with no race — a deterministic wrong answer in this operator's clothes,
+  counted as a seed by the first pass). **The only route left for raising n is widening the
+  corpus**, since the model-draw route is closed and the deferred form is implemented — and
+  it revives only the *escape* operators. Its hazard: authoring problems mutable *by these
+  operators* tunes the benchmark to the instrument, so any extension must be written as a
+  plausible Go exercise first, checked for operator coverage second, and identified as post
+  hoc in the write-up.
 - Adaptive conformal inference (paper eq. 9) is not implemented; only the static
   LTT bound plus shadow sampling.
 - No boundary randomization, so the selected policy is feasible but not exactly
