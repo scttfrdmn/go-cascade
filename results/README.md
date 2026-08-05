@@ -16,7 +16,7 @@ was a small-sample artifact; the real model-accuracy floor is 0.0538), and the
 certifiable-α-vs-cost-win tension **reproduces** rather than dissolving. Read the rest of
 this file with that correction in mind.
 
-**One-line summary:** across twenty live experiments (plus three decided offline for $0)
+**One-line summary:** across twenty-two live experiments (plus three decided offline for $0)
 the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
@@ -106,6 +106,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 22 | [§5.5(4) absorption dial](README.md#experiment-22--554-the-29-shift-measured-as-a-controlled-dial-0-offline) | §5.5(4) proper: make absorption a **controlled dial** over the n=409 records and measure how the certificate degrades, with and without shadow sampling. Offline, $0, 60 rows | **§2.9 tested rather than assumed.** Under a head-shaped filter the certificate goes optimistic monotonically — gap **+0.0147 → +0.1486** as ρ goes 0.2 → 0.8, and at ρ=0.6 it promises α=0.10 and delivers **0.134**, an actually *violated* bound. **Uniform absorption is a null** (acc 0.7702 → 0.7439 across all rates, noise in both directions), so #52's own framing — inject duplicates uniformly — would have measured nothing and reported it as evidence; it ships as the explicit control, and its envelope — measured over **10 seeds × 4 rates**, **max |gap| = 0.0389**, not the 0.0267 a single sweep shows — is the yardstick. By it the effect is established at **ρ ≥ 0.6, not ρ ≥ 0.4**; the selective rows are seed-exact (a sort), but the control is not, and the control sets the bar. Cleanest row holds n **fixed** at 327: uniform certifies `[1,1]`, both selective patterns refuse — same n, α, δ, grid, so only the shift can explain it. Shadow sampling drives the gap to **exactly 0** and converts a silent violation into a visible **refusal to certify**, which is the correction working, not failing. Limit stated not buried: α=0.10 at δ=0.10 needs **n ≥ 22 even at zero errors**, so 3 small-ε rows are flagged `underpowered` rather than reported |
 | 23 | [arm (e) feasibility](README.md#experiment-23--552-arm-e-self-consistency-at-matched-cost-0-so-far-offline) | §5.5(2)'s last unimplemented arm — self-consistency at matched cost. Asks first, for $0, what the matched budget actually buys | **the arm is implemented and the free check rules it out at every tier but the cheapest.** Matched budget $0.0101/q under τ=[1,1]; at the profiled 2:1:1 fan-out that buys median **49** cheap-tier samples (0.0% below a 3-vote), **2** mid (79.2% below), **1** frontier (**99.5%** below). So a frontier arm (e) at matched cost is **always-frontier relabelled** and a mid-tier one is a coin flip — run as §5.5(2) literally specifies it (tier unnamed) it would have **reported a degenerate configuration as a null about self-consistency**, the same trap as experiment 22's uniform absorption. Only the cheap tier is well-posed, and there it is exactly §3.5's contrast: **49 votes on how the code is written vs 2 on what it does**, same money. Built as a fair foil, not a strawman — normalised-source vote (formatting/comments/import order do not split it), **raw plurality mass** not the Wilson bound (invariant #9 governs the *routing* score; arm (e) crosses no threshold), and it never consults the verifier to pick a winner. Both selectors scored on the **same candidates at the same cost**, so the selector is isolated; cluster abstentions reported separately, not scored wrong (invariant #4). `selfconsistency` **refuses `-sample` on a ruled-out tier.** Paid pass **run — experiment 24** |
 | 24 | [arm (e) live](arm-e-live-n409.md) | the paid pass at the one tier experiment 23 did **not** rule out: does a source-text majority vote beat behavioural clustering at matched per-problem cost, on identical candidates? | **execution wins decisively, and the interesting part is *where*.** Paired on the 366 rows both selectors answered: text vote **295/366 (0.806)** vs behavioural cluster **335/366 (0.915)**, median fan-out **50** samples — ~50 votes on how the code is *written* against 2 on what it *does*, same money, and the text vote still loses. McNemar on the 50 discordant pairs: **45 text-wrong/cluster-right vs 5 the other way, p = 4.2e-09**. **The finding is the abstentions:** where the cluster abstained (nothing survived the ladder — an escalation in a real cascade), the text vote was right **1/43 (0.023)** while its vote mass barely moved (0.604 vs 0.661 elsewhere) — it is **confidently wrong exactly where execution knows it has nothing**, which is an inversion, not the gradual degradation a "weaker selector" story predicts. Agreement carries no signal (313 agreed rows: 293 vs 290); the **entire** margin is the 53 disagreements (text 2, cluster 45), i.e. when they diverge it is almost always the text vote preferring a popular wrong program. **A reporting bug found and fixed in the same pass:** the summary printed text over all 409 voted rows against the cluster over 366, reading as a 0.19 gap where the paired figure is **0.11** — both numbers correct, different denominators, no test failing. Bill **$18.77** ($4.71 matched + $14.06 oracle = 75%), against the **$4.12** originally quoted, which was the matched *budget* mistaken for the invoice |
+| 25 | [concurrency coverage](conc-coverage-n11-2026-08-04.md) | the `-race` rung — the ladder stage that caught the study's **only** confirmed judge over-acceptance — **never fired in experiment 21**, because MultiPL-E Go has 0 concurrency problems and a skipped stage scores `OK`. Exercise it on the 11 concurrency problems of the hand-written set (`concurrency.jsonl`; exactly 11 of 64 references trip the predicate) | **the rung fires (2.1 s at `-count=3` vs 605 ms plain), and the finding is the oracle's clock, not concurrency.** A generated `TestHInt64Overflow` on a counter that increments by **one** needs 20 s at a measured 215 M adds/s — sound assertion, **non-terminating test** — and it refuted the *reference* eleventh in a 30 s budget, flagging the record `OracleUnsound` with `timed_out` on all three tiers. **Without #63 this reads as η_fa = 3/26 = 0.115**, 11× experiment 21's 11/1096, from one test; the reference passes its own canonical suite in 673 ms, so it was never machine load. Excluding it: **η_fa = 0/23, all 6 disagreements over-rejections** (small 4, mid 2, large 0) — and #49's retention gives its first live data (6/6 carry source), showing the **mirror image** of §3.5: *correct* code (disjoint-index writes, mutex-merged local maps) that *reads* racy. By-product: **6 of these 11 problems were oracle-unsound in experiment 12 vs 6 of the other 53** — ~5×, so the class the paper most needs has the least trustworthy oracle. n=11 certifies nothing (α ≥ 0.19 required at δ=0.10); coverage, not a certificate. $0.8, 13 min |
 
 ### How each run answered the previous one's limitation
 
@@ -464,6 +465,63 @@ no APIs):
    that `floor(B/p)` and `1+floor((B-p)/p)` are identical. They are.)
 3. **Spec cost discarded**, as above.
 
+## Experiment 25 — concurrency coverage: the `-race` rung, and a generated test that cannot terminate ($0.8)
+
+Full write-up: [`conc-coverage-n11-2026-08-04.md`](conc-coverage-n11-2026-08-04.md).
+
+MultiPL-E Go has **0** concurrency problems, so experiment 21's n=409 run skipped the
+`-race` rung on all 488 records — the rung that caught the study's only confirmed judge
+over-acceptance never fired at the only large n, and a skipped stage scores `OK`, so
+nothing said so. `examples/bench/concurrency.jsonl` is the coverage set: **exactly 11 of
+the 64** hand-written references trip `UsesConcurrency`, now asserted in both directions
+by `TestConcurrencyBenchActuallyReachesTheRaceRung` (every id trips it; no concurrency
+reference is absent from the file).
+
+**n=11 is coverage, not a certificate.** At δ=0.10, `MinCalibrationSize` needs α ≥ 0.19
+for n=11 even at zero errors, so `valid=false` on both arms at the run's α=0.05 is
+arithmetic about sample size, not a result about either oracle.
+
+**The finding is the oracle's clock, not concurrency.** One of 11 records was excluded
+`OracleUnsound` because the *reference* was refuted at `VA:accept` — with `timed_out`
+set on all three tiers. The reference passes its own canonical suite in 673 ms, so it
+was not machine load, which is precisely what the printed WARNING invites you to assume.
+Reproduced deterministically for $0: `ConcurrentCount` increments by **one**, so
+"overflow an int64 counter" taken literally is ~2^63 atomic adds. At a measured 215 M/s,
+the generated `ConcurrentCount(2, MaxInt32)` needs **20 s** — inside a 30 s budget
+already spent on ten prior tests. The assertion is correct and the test is sound; it
+simply **cannot finish**. That is a third generated-oracle failure mode, alongside
+experiment 19's over-rejections: neither wrong nor strict but **non-terminating**, and
+indistinguishable from a slow host without `TimedOut`.
+
+**Without #63 this run would have reported η_fa = 3/26 = 0.115**, against experiment
+21's 11/1096 = 0.0100 — one non-terminating test, tripling three tiers because the truth
+column is shared, producing the study's largest η_fa by an order of magnitude on the
+exact defect class the mechanism argument is about. #63 shipped hours earlier as pure
+instrumentation and changed a headline on first live use. Two of its design choices
+earned their keep: the tally is over **records** (`1/11`, one suspect problem, not three
+events), and the record is **kept** — it is the oracle-soundness gate that excludes it,
+never the timeout flag (invariant #8).
+
+With that record excluded, **η_fa = 0/23 and all 6 disagreements are over-rejections**
+(small 4, mid 2, large 0). This is `classify_disagreements.py`'s first live data (#49),
+and retention worked: **6/6 carry source**. Reading them shows the **mirror image** of
+§3.5's claim — every one is *correct* concurrent code that *reads* as racy:
+disjoint-index writes (`out[start+j]`, `j%workers == workerID`) into a shared slice,
+per-goroutine local maps merged under a mutex, `context.WithCancel` first-writer-wins.
+The judge has no execution, and disjointness is exactly the property text does not show.
+Same blind spot as the over-acceptance case, running the safe direction. It does **not**
+show the judge is safe on concurrency: the scar-free race class that produced the pilot's
+one over-acceptance was never sampled here (issue #51).
+
+By-product, and the strongest justification for keeping this set: experiment 12 ran
+the same config over all 64, so its 12 unsound records split **6 of the 11 concurrency
+problems against 6 of the other 53** — concurrency problems produce an unsound generated
+oracle **~5× as often**. The class the paper most needs is the class whose oracle is least
+often trustworthy, so usable n shrinks fastest where it is scarcest. And the two draws
+share **exactly one** unsound id (the non-terminating one, the only deterministic defect
+among them), reproducing experiment 19's warning that rejection-side rates are unstable
+at this n.
+
 ## A correction to every cost figure on this page (no experiment, no cost)
 
 **Every per-run cost quoted above understates the bill, by roughly 4× in aggregate, in one
@@ -598,8 +656,13 @@ is also the set that still has concurrency coverage) and **~$20 at n=409**. Unap
   **obsolete**: Go 1.22 made loop variables per-iteration, so that mutant no longer
   races (pinned by `TestLoopVarCaptureDoesNotRaceOnThisToolchain`). **The generator
   is built; the paid sweep comparing scar-free η_fa against the sync-deletion 20/20
-  has not been run** — it needs the 11 concurrency problems of the hand-written set
-  (issue #50), since MultiPL-E Go has none.
+  has not been run** — it needs the 11 concurrency problems of the hand-written set,
+  since MultiPL-E Go has none. **That set now exists as `concurrency.jsonl` and is
+  exercised** (experiment 25, issue #50), so the sweep is unblocked; note that
+  experiment 25 also found only 8 of the 11 usable in a given draw, and that its 6
+  judge disagreements were all over-rejections of *correct* code — so a scar-free sweep
+  is measuring against a judge already shown to mis-read this class in the safe
+  direction.
 - **Cost baseline: RUN (experiments 9–11) — cascade loses at default config,
   wins when tuned, and wins with a cheap bottom tier at a signal-preserving
   fan-out.** At the default **5:2:1** fan-out, always-frontier beat the cascade
@@ -644,18 +707,30 @@ is also the set that still has concurrency coverage) and **~$20 at n=409**. Unap
 - **Judge β depends on the prompt.** The judge ran with "when in doubt, FAIL";
   its false-rejection counts would move under a different operating point. The
   strictness knob exists (`--judge-strictness`) but was only exercised on small n.
-- **Small n in experiments 1–20** (n ≤ 64). Those counts have wide intervals; treat
+- **Small n in experiments 1–20, and in 25** (n ≤ 64). Those counts have wide intervals; treat
   directions, not magnitudes, as the finding. **Experiment 21 is the exception** (n=409
   usable on a standard benchmark) and is where a magnitude can be quoted.
-- **The `-race` rung is untested at scale.** MultiPL-E Go has **0** concurrency problems,
-  so experiment 21 — the only large-n run — never exercised the ladder stage that caught
-  the study's sole confirmed judge over-acceptance. The n=409 result therefore validates
-  the *statistics* at scale while leaving the *most expensive verifier stage* covered only
-  by the 64-problem hand-written set. That set is not obsolete.
-- **η_fa's mechanism is still argued.** Experiment 21 measures 11 over-acceptances but
-  the records store no candidate source, so the defect classes cannot be recovered.
-  "The judge's blind spot is reading-invisible defects" needs a run that retains the
-  accepted program for disagreeing observations — a disk cost, not a money cost.
+- **The `-race` rung is exercised, but only at n=11** (experiment 25). MultiPL-E Go has
+  **0** concurrency problems, so experiment 21 — the only large-n run — never ran the
+  ladder stage that caught the study's sole confirmed judge over-acceptance. The n=409
+  result therefore validates the *statistics* at scale while the *most expensive verifier
+  stage* is covered only by the 11 concurrency problems of the hand-written set. That set
+  is not obsolete, and it is scarcer than it looks: **6 of those 11 problems yielded an
+  unsound generated oracle in experiment 12, against 6 of the other 53** — the class the
+  paper most needs has the least trustworthy oracle, so usable n shrinks fastest exactly
+  where it is scarcest. `-race` at large n needs a concurrency benchmark that does not
+  yet exist.
+- **η_fa's mechanism is confirmed in the *safe* direction only.** Experiment 21 measured
+  11 over-acceptances but stored no candidate source, so its defect classes are
+  unrecoverable. Retention now works (`TierObs.DisagreementSource`, #49) and experiment
+  25 is its first live data: 6/6 disagreements carry source, and reading them shows the
+  **mirror image** of the claim — correct concurrent code (disjoint-index writes, mutex-
+  merged local maps) that *reads* as racy and is over-*rejected*. That confirms the
+  mechanism — the judge cannot see disjointness because text does not show it — on the
+  cheap side. **The dangerous side is still argued:** experiment 25 found η_fa = 0/23,
+  and the scar-free race class that produced the pilot's one over-acceptance was never
+  sampled. The generator for it exists (#51); the sweep pairing it against the
+  sync-deletion 20/20 has not been run.
 
 ## The honesty line this work holds
 
@@ -687,8 +762,10 @@ AWS_PROFILE=<profile> go-cascade calibrate --provider=bedrock \
 Raw records (`*.execution.json`, `*.judge.json`, per-level and seeded JSON) are
 committed alongside each write-up so any α can be re-evaluated offline.
 
-Total live spend across all nineteen experiments plus offline diagnosis: roughly
-$108–126 (the first eleven ~$65–69; experiments 12–17 ~$30–37; experiment 18 ~$5–7;
-experiment 19 ~$8–14, **estimated not measured** — the `estimator` subcommand
-records no cost field, and the figure includes ~$4–7 lost to a killed run whose
-pre-atomic-write checkpoint was destroyed).
+**Do not read a study total off this page.** The per-run figures above are summed tier
+costs, which omit the shared spec/oracle term entirely — Cost Explorer shows **~$197**
+of real Bedrock spend against roughly $40 published, with the oracle model alone at 91%.
+See [§A correction to every cost figure on this page](#a-correction-to-every-cost-figure-on-this-page-no-experiment-no-cost)
+for the breakdown and for the two traps in querying it back. Recent runs quote both terms:
+experiment 24 billed $18.77 against a $4.12 *budget*, and experiment 25 cost $0.34 recorded
+plus ~$0.45 unrecorded spec ≈ $0.8.
