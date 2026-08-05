@@ -17,13 +17,23 @@ is **cheaper than the incumbent, not merely better**:
 
 | | in $/MTok | out $/MTok | measured $/sample |
 |---|---|---|---|
-| Llama 4 Maverick 17B (current tier 0) | 0.12 | 0.97 | 0.000174 (profiled, n=409) |
-| **Qwen3 Coder 30B A3B** | 0.15 | **0.60** | **0.000092** (4-problem probe) |
+| Llama 4 Maverick 17B (current tier 0) | **0.24** | 0.97 | 0.000174 (profiled, n=409) |
+| **Qwen3 Coder 30B A3B** | **0.15** | **0.60** | **0.000092** (4-problem probe) |
 
 Rates are real `us-west-2` on-demand figures from the AWS Pricing API filtered to
 `regionCode=us-west-2`. The per-sample figure is measured, not derived: a 4-problem
 probe through the actual coder prompt shape averaged 177 in / 109 out tokens.
 **1.9× cheaper per sample.** So a win cannot be reread as "we spent more."
+
+> **Correction to an earlier revision of this table, which claimed Maverick at
+> $0.12/MTok in.** That is Maverick's **batch** rate
+> (`USW2-Llama4-Maverick-17B-input-tokens-batch`); the Converse path bills the
+> on-demand row, $0.24. `config.go-specialist-211.json` has always configured 0.24,
+> so no published cost figure is affected — but the comparison it implies is wrong in
+> the *conservative* direction. Qwen is cheaper on **both** legs (0.15 vs 0.24 in,
+> 0.60 vs 0.97 out), not only on output. When pulling a rate for a new tier, filter
+> the `usagetype` string: `list-foundation-models` returns four rows per Meta model
+> and the batch/on-demand pair differ by exactly 2×.
 
 It is also the first *coder-specialist* tier 0; every prior cheap tier was a
 general instruct model.
@@ -87,14 +97,25 @@ escalation-rate question directly. Only scale to 409 if the escalation rate move
 ## Repro (when approved)
 
 ```bash
-AWS_PROFILE=aws ./bin/go-cascade calibrate \
+AWS_PROFILE=aws ./bin/go-cascade calibrate -provider=bedrock \
   -config examples/bench/config.qwen-coder-211.json \
   -bench examples/bench/combined.jsonl \
-  -refs examples/bench/refs -pin-api \
-  -alpha 0.05 -delta 0.10 -resume \
+  -refs examples/bench -pin-api \
+  -alpha 0.05 -delta 0.10 -baselines -resume \
   -records results/qwen-coder-211.records.json \
   -o results/qwen-coder-211.cert.json
 ```
+
+> **`-refs examples/bench`, not `examples/bench/refs`.** An earlier revision of this
+> doc said the latter, and it silently resolves **28 of 64** references: `hard/` and
+> `scale/` carry their own `refs/` subdirectories, and `loadReferences` walks for
+> `*/<id>/solution.go` from whatever root it is given. Pointed at `examples/bench/refs`
+> the run pins 28 APIs, leaves 36 problems with **no oracle-soundness gate at all**
+> (`validateOracle` returns `OracleSound` when `r.refs[id]` is missing, by design), and
+> is not comparable to the matched Maverick arm, which used `examples/bench`. The
+> `loaded N/64` line on stderr is the check — it is printed for exactly this reason.
+> `-provider=bedrock` is likewise required; without it the run is the mock and no
+> number from it means anything.
 
 Then compare escalation rate and mean cost/query against
 `results/go-specialist-211-pinned-n64.execution.json`, which is the matched
