@@ -358,25 +358,49 @@ a test, but the tests will not catch every way of violating them.
   scar-free race. (The old mock figure — judge certifies α=0.15 at 0 empirical while
   realized risk is 0.22 — still illustrates the §3.1 floor, but **is a mock number,
   not a measurement of any model.**)
-- **The scar-free race sweep is DECLINED on power, not pending on budget** (experiment
-  28, `results/scarfree-coverage-n11.md`, `results/scarfree_coverage.py`). The operators
-  exist and are correct (`collectScarFreeRaceSites`, `-seed-kind=scar-free-race`), but on
-  the 11-problem concurrency set 15 AST sites yield only **6 usable seeds**, 5 of them
-  from `defer wg.Wait()` alone: the `RWMutex` downgrade is **structurally dead** because
-  there is no `sync.RWMutex` anywhere in `examples/bench/`, so every one of its 6 mutants
-  fails to build. At n=6, Fisher against the sync-deletion 0/17 needs **≥3 of 6** events
-  for p<0.05, and a null — the likely outcome given the judge's 20/20 on scar-*bearing*
-  races — bounds scar-free η_fa only at **≤0.393**. Both branches are uninformative, so
-  no money was spent. Do not "unblock" this by funding it; §3.1's reading-invisible
-  mechanism stays **argued** until the corpus is wider (0/23 → ≤0.122).
-  `TestScarFreeOperatorCoverageOnTheConcurrencyBenchmark` pins the site counts and
-  **fails on purpose** if concurrency problems are added — that failure is the signal to
-  re-measure seeds and re-price. Two traps: a site is not a seed (`conc_parallel_map`
-  merely *returns* the slice, so its deferred `Wait` still precedes any observation — the
-  operator's guard wants a **read** after the wait, not just a statement), and if the set
-  is widened, authoring problems mutable *by these operators* tunes the benchmark to the
-  instrument, so any addition must be a plausible exercise first and be named as
-  post-operator in the write-up.
+- **The scar-free race sweep is DECLINED at 9 seeds against a pre-registered bar of 10 —
+  and the first pass of that measurement was wrong twice, both times in its own favour**
+  (experiment 28, `results/scarfree-coverage-n11.md`, `results/scarfree_coverage.py`). On
+  the 11-problem concurrency set, 15 AST sites yield **9 seeds** (compile + a real
+  ThreadSanitizer report), 7 of 11 problems contributing, split 4 `defer-wait` / 4
+  downgrade / 1 escape. Against the sync-deletion control **0/20** the critical value is
+  **≥3 of 9**, a null bounds η_fa at **≤0.283**, and P(≥1 event) is 0.866 at η_fa=0.2. The
+  bar was registered *before* the harvest and 9 misses it, so nothing was spent — but the
+  honest framing is **close, not clear**: for ~$3 an 87% shot at an existence proof on a
+  claim resting on n=1 is not obviously a bad buy, and "both branches buy nothing" (the
+  first pass's phrasing) is too strong at n=9. §3.1's mechanism stays **argued**.
+  **Two retractions worth reading before trusting any figure here, because both errors
+  pushed toward declining:** (a) the `RWMutex` downgrade was reported "**structurally
+  dead** — no `sync.RWMutex` in `examples/bench/`". That was an operator bug: it rewrote
+  the call sites and left `var mu sync.Mutex`, on the reasoning (in its own doc comment)
+  that "the build filter enforces the RWMutex rather than a type check". Deferring a type
+  constraint to the compiler turns an unreachable operator into an empty result, and an
+  empty result reads as a finding. Co-mutating the declaration gives it **4 seeds**, so
+  "one operator carries the set" is retracted too. (b) the control was **0/17**, which is
+  the *logic* arm over 6 **different** problems; sync-deletion on these 11 is **0/20**.
+  That swap alone moved the critical value from 2 to 3 of 6 — and 2/6 was the row labelled
+  "cannot resolve." Both are real results in this repo, which is why it survived a
+  read-through; this is the same error as *one denominator per paired comparison*.
+  **Pin the number the decision rests on, not the cheap one:** the first pass pinned only
+  AST sites, which stayed correct at 15 throughout the period the seed count was wrong, so
+  the suite was green on a false conclusion. `TestScarFreeSeedCountOnTheConcurrencyBenchmark`
+  now pins seeds per problem and per operator, and `TestConcurrencyRefIDsMatchTheBenchFile`
+  pins the problem count — the old guard keyed on a hardcoded id list, so adding the 12th
+  concurrency problem the write-up itself recommends left every assertion passing on the
+  stale 11. Three further cautions: the scar-free arm requires an actual **DATA RACE**, not
+  merely a `-race` failure (`conc_safe_counter`'s mutant returns `got 0 want 400` with no
+  race — a deterministic wrong answer in this operator's clothes, counted as a seed by the
+  first pass); all 9 seeds are **also refuted without `-race`**, which establishes the rung
+  is not load-bearing for them but does *not* establish a reader would notice
+  (`PlainRefuted` is recorded, never filtered — filtering one arm breaks comparability with
+  the other, which is `raceKilledFrom`'s whole contract); and **9 is measured on the wrong
+  population** — `ProfileSeeded` mutates a **tier-0 model draw**, never a reference, and the
+  study's one live scar-free false acceptance was model-authored. Reopen in cost order:
+  harvest from model draws (nearly free, right population), implement the deferred-form
+  escape (free; `syncCall` calls `Lock(); defer Unlock()` "the dominant Go idiom" and the
+  operator skips it), then widen the corpus — the first two being immune to the tuning
+  hazard, which is that authoring problems mutable *by these operators* tunes the benchmark
+  to the instrument.
 - Adaptive conformal inference (paper eq. 9) is not implemented; only the static
   LTT bound plus shadow sampling.
 - No boundary randomization, so the selected policy is feasible but not exactly
