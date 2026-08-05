@@ -7,14 +7,14 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be at `b3f4e91` (PR #58, the §5.5(4)
-   absorption dial). 58 PRs merged. **PR #59 (arm (e), issue #53's free half) may
+1. **Check git state.** `main` should be at `d8633b5` (PR #70, the deferred-escape
+   operator). 70 PRs merged. **The experiment-30 PR (the scar-free sweep write-up) may
    still be open** — if a PR is open, confirm CI green and I'll tell you whether to
    merge; don't merge unilaterally.
 2. **Read the project board** —
    https://github.com/users/scttfrdmn/projects/62 — which is now where the open work
    lives, one issue per gap (#49–#53). This file no longer restates the backlog.
-3. **Re-read `results/README.md`** (twenty-three experiments; 20 live, 3 decided
+3. **Re-read `results/README.md`** (twenty-nine experiments; 24 live, 5 decided
    offline for $0) and
    **`docs/verification-saturated-cascades.md` §5.6** (the live-evaluation
    reconciliation). `AWS_PROFILE=aws` for live Bedrock; `--provider=mock` is free.
@@ -216,31 +216,62 @@ Do not re-derive the backlog from prose here; read the issues.
 |---|-----|------|----------------|
 | ~~[#49](https://github.com/scttfrdmn/go-cascade/issues/49)~~ | ~~Retain candidate source for **disagreeing** observations~~ | free | **DONE** (PR #55). `TierObs.DisagreementSource` + `results/classify_disagreements.py`. Forensic only — nothing on the acceptance path reads it. |
 | [#50](https://github.com/scttfrdmn/go-cascade/issues/50) | Concurrency coverage — `-race` never fired at large n | **$2–4** | The rung that caught the only confirmed judge over-acceptance was skipped on all 488. |
-| ~~[#51](https://github.com/scttfrdmn/go-cascade/issues/51)~~ | ~~Scar-free race operator~~ | free | **GENERATOR DONE and its coverage MEASURED** (experiments 28, 29). `-seed-kind=scar-free-race`: **four** operators (RWMutex downgrade, escape past an explicit `Unlock`, escape past a **deferred** `Unlock`, `defer wg.Wait()`), all validated `-race`-refuted. On the 11 concurrency problems: **16 sites → 10 seeds**, which **meets** the bar of 10 registered before experiment 28's harvest (that harvest returned 9 and declined). Fundable, **not funded** — see below. Loop-var capture is obsolete (Go 1.22 per-iteration vars). |
+| ~~[#51](https://github.com/scttfrdmn/go-cascade/issues/51)~~ | ~~Scar-free race operator~~ | free + ~$1.20 | **GENERATOR DONE, coverage MEASURED, and the sweep RUN — both arms NULL** (experiments 28, 29, 30). `-seed-kind=scar-free-race`: **four** operators (RWMutex downgrade, escape past an explicit `Unlock`, escape past a **deferred** `Unlock`, `defer wg.Wait()`), all validated `-race`-refuted. Reference coverage on the 11 concurrency problems: **16 sites → 10 seeds**, meeting the bar of 10 registered before experiment 28's harvest (that harvest returned 9 and declined). The paid sweep then returned **scar-free 0/9, sync-deletion 0/27**, every strictness level, Fisher p = 1.0 — see below. Loop-var capture is obsolete (Go 1.22 per-iteration vars). |
 | [#52](https://github.com/scttfrdmn/go-cascade/issues/52) | §5.5(4) via **duplicate injection** | free harness | Absorption must become a dial; the corpus cannot supply it. |
 | [#53](https://github.com/scttfrdmn/go-cascade/issues/53) | Arm (e), self-consistency at matched cost | **$6–10** | Last unimplemented arm of §5.5(2). Lowest priority — a comparison arm, not a load-bearing claim. |
 
 #50 and #53 are labelled `needs-spend-approval` and are **filed, not scheduled**.
 **Scope the spend with me first** — I said "not yet" to a live run twice before.
 
-**#49 and #51 are merged, and the one blocker left on the η_fa mechanism claim is a
-spend decision, not code.** The seeded scar-free sweep now **clears the bar registered
-before its harvest** — 10 seeds, after the deferred-escape operator supplied the tenth
-(experiment 29; the bar stayed at 10, the measurement moved). So the next move on the
-mechanism is the **~$3 sweep over the 11 `conc_*`/`hard_conc_*` problems**, comparing
-scar-free η_fa against the sync-deletion 20/20, and it needs your approval.
+**#49 and #51 are merged, the spend decision was taken, and the sweep RAN — it returned
+a null in both arms, so the η_fa mechanism claim stays ARGUED** (experiment 30,
+`results/scarfree-sweep-n9.md`). Sequence, in order: the bar of ≥10 seeds was registered
+before experiment 28's harvest; that harvest returned 9 and **declined**; experiment 29's
+deferred-escape operator supplied the tenth, so the bar was met **without the bar
+moving**; the run was then priced at **~$1.20** (the seeded path skips the cascade tier
+loop, so it is cheaper than the ~$3 the decline assumed), authorized explicitly, and run.
+**Result: scar-free 0/9 false acceptances from 5 problems, sync-deletion 0/27 from 8, at
+strict/balanced/permissive alike. Fisher one-sided 0/9 vs 0/27 = p = 1.0.** The
+comparison the sweep exists to make asks whether the scar-free rate is *above* the
+deletion rate; both rates are zero, so there is no gap to test. This landed in the branch
+the pre-registered arithmetic gave the larger probability — 0, 1, or 2 events all read
+"cannot resolve."
 
-**Read the arithmetic before approving, because clearing a bar is not being
-well-powered.** At n=10 the critical value is ≥3 of 10 and a null bounds η_fa only at
-≤0.259: what this buys is an **existence proof** (P=0.893 at η_fa=0.2), where one
-scar-free false acceptance turns §3.1's mechanism from argued into demonstrated. A null
-resolves little. One thing did improve qualitatively — experiment 28's whole seed set was
-*also* refuted without `-race`, so it would have tested the judge against
-deterministically-wrong programs; **9 of 10** are now, and the new seed is the first that
-genuinely requires the interleaving. The route that looked cheapest, harvesting from the
-tier-0 **model draws** `ProfileSeeded` actually mutates, is **measured and closed**: 8
-raw / 6 unique / 5 from execution-correct bases. Only widening the corpus can raise n
-further, and that carries the tuning hazard.
+**Four things outlive the verdict, and they are the reason to read the write-up:**
+
+1. **The realized denominator is not the instrument's reach.** The bar was measured on the
+   *references* (10 seeds / 7 problems); `ProfileSeeded` mutates a tier-0 **model draw**,
+   which came back 9 seeds / **5** problems, and the two problem sets differ in *both*
+   directions. A nearly-equal total over fewer problems is more **concentrated**, so
+   several mutants share a base program, effective n is *below* 9, and the ≤0.283 null
+   bound is optimistic. Flagged before launch, not after.
+2. **Re-run a control in-session; do not cite one across sessions.** The sync-deletion arm
+   came back **0/27 from 8**, not the **0/20 from 9** on file from 2026-07-25 — same
+   operator, benchmark and config, different draw. Citing July's figure beside today's
+   scar-free arm would have crossed model versions inside a two-arm comparison,
+   invisibly. The critical value is ≥3 against both, so the verdict is unchanged — but
+   that is luck, and it is only *checkable* because the control was re-measured.
+3. **`-seed-kind` writes no records, only stdout.** No `-rec-out` path, unlike every other
+   `calibrate` mode: per-problem seed counts and **mutant sources** are unrecoverable and
+   the run is not resumable. Cheap on a null; fatal on a positive event, where the only
+   interesting follow-up is *what* the judge missed. `KilledMutant` already carries
+   `Source`/`Desc`/`DataRace`/`PlainRefuted`, so this is a persistence path, not new
+   instrumentation. **Fix it before any re-run at larger n.**
+4. **The surviving asymmetry is bound tightness, not observed rate** — 9 seeds bound the
+   scar-free class at ≤0.283 against the control's ≤0.105. Overlapping intervals are not a
+   mechanism, but the class §3.1 is about is the one we can least afford to sample, and
+   that is a fact about the operators' reach rather than about the judge. **Do not read
+   the zeros as η_fa = 0.**
+
+The `DataRace` requirement was verified rather than assumed — `ScarFreeRaceKilledMutants`
+applies the filter on top of the shared harvest, so all 9 carried a real ThreadSanitizer
+report; without it this would be a null about deterministically-wrong programs in race
+clothing. The route that looked cheapest for raising n, harvesting from the tier-0 model
+draws, is **measured and closed** (8 raw / 6 unique / 5 from execution-correct bases).
+**Only widening the corpus can raise n further**, and that carries the tuning hazard:
+authoring problems mutable *by these operators* tunes the benchmark to the instrument, so
+any extension must be written as a plausible Go exercise first, checked for coverage
+second, and identified as post hoc.
 
 Two n≤64 questions the n=409 run did *not* settle, and one it did: whether **M ranks**
 candidates by η_fa is **still open** (experiment 19 had no events in either M bucket);
@@ -248,10 +279,12 @@ whether the **false-rejection rate** has any stable value is **still open** (11 
 across two draws); the **cost win** question is **answered** — the tension reproduces,
 so it was not a 2-in-6 coincidence but a structural property.
 
-Or: **declare the study done** and treat it as a finished artifact. Twenty-nine
-experiments, both levers mapped, every claim labelled demonstrated-vs-argued, and the
-paper's own §5.5(1) bar now met. A defensible stopping point either way — and a more
-defensible one than it was a session ago.
+Or: **declare the study done** and treat it as a finished artifact. Thirty
+experiments, both levers mapped, every claim labelled demonstrated-vs-argued, the
+paper's own §5.5(1) bar met, and the last free-standing spend decision taken and
+resolved. A defensible stopping point either way — and a more defensible one than it was
+a session ago, since the one open question that money could have answered has now had
+money spent on it.
 
 Keep the discipline: branch-per-change + PR + green CI + I merge; surface confounds
 rather than bury them; state demonstrated vs. argued; never cite a mock number as a
@@ -275,21 +308,31 @@ and blocks *all* Bash; Read/Grep/Glob keep working, so do read-only work and ret
 
 ---
 
-## Quick reference (state as of 2026-08-03, end of sixth session)
+## Quick reference (state as of 2026-08-05, end of seventh session)
 
-- Public repo: github.com/scttfrdmn/go-cascade. main `b3f4e91`, 58 PRs merged
-  (PR #59 may be open). Project board:
+- Public repo: github.com/scttfrdmn/go-cascade. main `d8633b5`, 70 PRs merged
+  (the experiment-30 write-up PR may be open). Project board:
   https://github.com/users/scttfrdmn/projects/62. **#49, #51 and #52 are closed;
   #50 and #53 remain, both `needs-spend-approval`** — #50 concurrency coverage
-  ($2–4), #53's paid arm (e) sampling pass ($4.12, scoped by the shipped tool).
-- **New last session:** `go-cascade absorption` (§5.5(4) dial + multi-seed null
+  ($2–4), #53's paid arm (e) sampling pass ($4.12, scoped by the shipped tool). #51's
+  paid follow-on (the seeded scar-free sweep) was authorized and **run** — experiment
+  30, both arms null; the only route left for raising its n is widening the corpus.
+- **New last session:** the four **scar-free race operators**
+  (`internal/verify/mutation.go`, `-seed-kind=scar-free-race`) plus their coverage
+  measurement and the **paid sweep** that used them — experiments 28/29/30,
+  `results/scarfree-coverage-n11.md`, `deferred-escape-n11.md`,
+  `scarfree-sweep-n9.md`, and `results/scarfree_coverage.py` for the power arithmetic.
+  **Known gap left deliberately unfixed: `-seed-kind` has no `-rec-out`**, so the sweep
+  writes stdout only — no per-problem counts, no mutant sources, not resumable. Fix that
+  before any re-run at larger n; `KilledMutant` already carries everything needed.
+- **From the session before:** `go-cascade absorption` (§5.5(4) dial + multi-seed null
   envelope, `internal/calibrate/absorb.go`) and `go-cascade selfconsistency` (arm (e)
   feasibility gate + sampling arm, `internal/calibrate/selfconsistency.go`,
   `internal/cascade/selfconsistency.go`, `internal/cluster/text.go`); records
   `results/absorption-n409.json` and `results/arm-e-feasibility-n409.json`. Both
   subcommands are **free with `-provider=mock`** (they replay recorded costs; mock only
   builds the router).
-- **From the session before:** `results/analyze_s55.py` (recomputes every figure the n=409
+- **Earlier still:** `results/analyze_s55.py` (recomputes every figure the n=409
   write-up quotes, from any records pair — usable-only, and it correctly *skips*
   observations lacking `true_correct` rather than falling back to `correct`, which for
   the judge arm would force agreement); `results/absorption_ceiling.py` (bench path is
@@ -307,10 +350,17 @@ and blocks *all* Bash; Read/Grep/Glob keep working, so do read-only work and ret
   oracle/truth disagreement for defect classification; on pre-#49 records it says so
   rather than reporting zero). `calibrate -from-records` re-derives a
   certificate at any α for **$0** — sweep each arm against its **own** records.
-- **Live spend so far:** ~$136–161 (prior ~$120–145 + experiment 21's $8.15 measured
-  + the superseded pre-fix attempt's $7.82 measured; experiment 20 cost **$0**).
-  Earlier components remain *estimated not measured* — neither the `estimator`
-  subcommand nor `stage2_references.py` records a cost field.
+- **Live spend so far: ~$197 by the BILL, not the ~$40 the write-ups sum to** — see
+  `results/README.md` §"A correction to every cost figure on this page". No `Record`
+  stores the spec cost and the shared oracle is ~91% of real spend, so **no
+  records-derived figure is the invoice**; paired *ratios* are unaffected (the term
+  cancels). Experiment 30 adds ~$1.20, **priced ex ante and not yet reconciled** — Cost
+  Explorer lags ~1 day. Three filters when you reconcile: query **both**
+  `Amazon Bedrock Service` (Claude) and `Amazon Bedrock` (open-weight); exclude usage
+  types carrying a **`-mantle-`** infix (Claude Code's own traffic); and restrict to
+  `input-tokens`/`output-tokens`, because `cache-read-input-token-count` under a study
+  model name is other traffic (go-cascade sends no cached prompts) and over-attributes by
+  an order of magnitude. Prefer a same-day delta on a day with no other activity.
 - Bedrock models ACTIVE (us-west-2): maverick-17b, haiku-4-5, sonnet-4-5, sonnet-4-6,
   opus-4-5 (+ newer opus/sonnet/fable-5 profiles — keep configs pinned to the models
   each experiment used, for cross-run cost comparability). Re-run `go-cascade models`

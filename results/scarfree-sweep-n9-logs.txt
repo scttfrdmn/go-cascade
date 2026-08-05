@@ -1,0 +1,72 @@
+# Experiment 30 — raw output, both arms, 2026-08-05
+# config.go-specialist-211.json, concurrency.jsonl, -judge-seed 20, provider=bedrock
+
+########## ARM 1: -seed-kind=scar-free-race ##########
+[seed 1/11] conc_parallel_map
+  no provably-wrong candidate; skipped
+[seed 2/11] conc_parallel_sum
+[seed 3/11] conc_safe_counter
+[seed 4/11] conc_parallel_filter
+[seed 5/11] conc_fan_in_merge
+  no provably-wrong candidate; skipped
+[seed 6/11] conc_first_success
+  no provably-wrong candidate; skipped
+[seed 7/11] conc_parallel_histogram
+  no provably-wrong candidate; skipped
+[seed 8/11] conc_bounded_pipeline
+  no provably-wrong candidate; skipped
+[seed 9/11] hard_conc_rate_limiter
+[seed 10/11] hard_conc_once_init
+[seed 11/11] hard_conc_ordered_fanout
+  no provably-wrong candidate; skipped
+
+Seeded dangerous-mode test (scar-free race): 9 known-wrong candidates from 5 problems, judged at each level.
+
+strictness  judged   false-acc    η_fa rate
+  --------------------------------------------
+strict      9        0            0.000
+balanced    9        0            0.000
+permissive  9        0            0.000
+
+Every candidate is provably wrong (execution refutes it), so every PASS is a
+false acceptance. If the η_fa rate rises as the judge loosens, the §3.1
+dangerous mode is directly demonstrated: a permissive judge certifies code
+the tests reject.
+
+These mutants keep every sync call present and paired, so nothing is missing
+on the page. A rate ABOVE the -seed-kind=race rate on the same problems is the
+§3.1 mechanism demonstrated rather than argued.
+
+########## ARM 2: -seed-kind=race (sync-deletion control) ##########
+[seed 1/11] conc_parallel_map
+[seed 2/11] conc_parallel_sum
+[seed 3/11] conc_safe_counter
+[seed 4/11] conc_parallel_filter
+[seed 5/11] conc_fan_in_merge
+[seed 6/11] conc_first_success
+  no provably-wrong candidate; skipped
+[seed 7/11] conc_parallel_histogram
+[seed 8/11] conc_bounded_pipeline
+  no provably-wrong candidate; skipped
+[seed 9/11] hard_conc_rate_limiter
+[seed 10/11] hard_conc_once_init
+[seed 11/11] hard_conc_ordered_fanout
+  no provably-wrong candidate; skipped
+
+Seeded dangerous-mode test (sync-deletion race): 27 known-wrong candidates from 8 problems, judged at each level.
+
+strictness  judged   false-acc    η_fa rate
+  --------------------------------------------
+strict      27       0            0.000
+balanced    27       0            0.000
+permissive  27       0            0.000
+
+Every candidate is provably wrong (execution refutes it), so every PASS is a
+false acceptance. If the η_fa rate rises as the judge loosens, the §3.1
+dangerous mode is directly demonstrated: a permissive judge certifies code
+the tests reject.
+
+CAVEAT: sync-DELETION mutants leave a visible imbalance (a WaitGroup with
+Add/Done and no Wait), so a low η_fa here means the judge catches races that
+have a structural tell. Compare against -seed-kind=scar-free-race, which keeps
+the scaffolding intact; that is the reading-invisible class §3.1 is about.
