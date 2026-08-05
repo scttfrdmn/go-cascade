@@ -16,7 +16,7 @@ was a small-sample artifact; the real model-accuracy floor is 0.0538), and the
 certifiable-α-vs-cost-win tension **reproduces** rather than dissolving. Read the rest of
 this file with that correction in mind.
 
-**One-line summary:** across twenty-three live experiments (plus three decided offline for $0)
+**One-line summary:** across twenty-three live experiments (plus four decided offline for $0)
 the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
@@ -51,7 +51,16 @@ draws) shows that win **does not replicate**: fan-out provably buys headroom aga
 confident-wrong answer (no cost win) and a top-tier miss (no certificate at all). At
 n≈53 a single error anywhere moves the certificate, so the deployable-α cost win is
 **achievable on a good draw, not guaranteed**; the binding constraint is model
-accuracy at small n.
+accuracy at small n. **The twenty-seventh experiment closes that thread with a bound
+rather than another draw:** at n=409 the confident-wrong class is a measured **13/409 =
+3.2%**, which *predicts* experiment 17's 2-of-6 frequency (0.181 against an exact CI of
+[0.043, 0.777]) — so the cost win was small-sample sampling of a fixed rate, not
+evidence about fan-out, and P(win) *falls* monotonically in n. And an **omniscient**
+tier-0 gate — accept exactly the cheap answers execution says are correct, unattainable
+by construction and therefore an upper bound on every fan-out, statistic and threshold
+vector — is worth only **1.83×** against always-frontier. The cheap-tier lever is not
+under-tuned; it is **exhausted**, and more than half the risk of the cheap policy is
+incurred at the *frontier* tier, where no cheap-tier intervention reaches.
 
 ## The central question
 
@@ -108,6 +117,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 24 | [arm (e) live](arm-e-live-n409.md) | the paid pass at the one tier experiment 23 did **not** rule out: does a source-text majority vote beat behavioural clustering at matched per-problem cost, on identical candidates? | **execution wins decisively, and the interesting part is *where*.** Paired on the 366 rows both selectors answered: text vote **295/366 (0.806)** vs behavioural cluster **335/366 (0.915)**, median fan-out **50** samples — ~50 votes on how the code is *written* against 2 on what it *does*, same money, and the text vote still loses. McNemar on the 50 discordant pairs: **45 text-wrong/cluster-right vs 5 the other way, p = 4.2e-09**. **The finding is the abstentions:** where the cluster abstained (nothing survived the ladder — an escalation in a real cascade), the text vote was right **1/43 (0.023)** while its vote mass barely moved (0.604 vs 0.661 elsewhere) — it is **confidently wrong exactly where execution knows it has nothing**, which is an inversion, not the gradual degradation a "weaker selector" story predicts. Agreement carries no signal (313 agreed rows: 293 vs 290); the **entire** margin is the 53 disagreements (text 2, cluster 45), i.e. when they diverge it is almost always the text vote preferring a popular wrong program. **A reporting bug found and fixed in the same pass:** the summary printed text over all 409 voted rows against the cluster over 366, reading as a 0.19 gap where the paired figure is **0.11** — both numbers correct, different denominators, no test failing. Bill **$18.77** ($4.71 matched + $14.06 oracle = 75%), against the **$4.12** originally quoted, which was the matched *budget* mistaken for the invoice |
 | 25 | [concurrency coverage](conc-coverage-n11-2026-08-04.md) | the `-race` rung — the ladder stage that caught the study's **only** confirmed judge over-acceptance — **never fired in experiment 21**, because MultiPL-E Go has 0 concurrency problems and a skipped stage scores `OK`. Exercise it on the 11 concurrency problems of the hand-written set (`concurrency.jsonl`; exactly 11 of 64 references trip the predicate) | **the rung fires (2.1 s at `-count=3` vs 605 ms plain), and the finding is the oracle's clock, not concurrency.** A generated `TestHInt64Overflow` on a counter that increments by **one** needs 20 s at a measured 215 M adds/s — sound assertion, **non-terminating test** — and it refuted the *reference* eleventh in a 30 s budget, flagging the record `OracleUnsound` with `timed_out` on all three tiers. **Without #63 this reads as η_fa = 3/26 = 0.115**, 11× experiment 21's 11/1096, from one test; the reference passes its own canonical suite in 673 ms, so it was never machine load. Excluding it: **η_fa = 0/23, all 6 disagreements over-rejections** (small 4, mid 2, large 0) — and #49's retention gives its first live data (6/6 carry source), showing the **mirror image** of §3.5: *correct* code (disjoint-index writes, mutex-merged local maps) that *reads* racy. By-product: **6 of these 11 problems were oracle-unsound in experiment 12 vs 6 of the other 53** — ~5×, so the class the paper most needs has the least trustworthy oracle. n=11 certifies nothing (α ≥ 0.19 required at δ=0.10); coverage, not a certificate. $0.8, 13 min |
 | 26 | [coder-specialist tier 0](qwen-coder-tier0-n64-2026-08-04.md) | the cheap bottom tier is the **only** cost lever that has ever worked in this study (experiment 11, 3.2–3.4×); every other lever bought accuracy with money and lost. Qwen3-Coder 30B A3B is the sharpest remaining test because it is **cheaper than the incumbent** ($0.15/$0.60 per MTok vs Maverick's $0.24/$0.97), so a win cannot be reread as "we spent more" — and it is the first *coder specialist* at tier 0 | **the premise is refuted in direction: the specialist is *less* accurate at tier 0, 0.9149 → 0.8298 paired over 47** (McNemar 5-vs-1, exact p=0.22 — clear direction, not significant at this n). Escalations rose **3 → 7** at τ=[0.1,1] and cost at the cheapest threshold rose **2.1× at 2× the risk**; no threshold vector is both cheaper and no riskier. The per-sample saving is real and **irrelevant** — 1.42× cheaper per clean sample, but **tier 0 is 0.8% of the bill** ($0.027 of $3.5), exactly as the scope doc predicted the win would have to come from escalations. Two by-products outlive the arm. **Repair, not the per-token rate, dominates cheap-tier cost:** a **5.9× spread** around the median, and the scope doc's clean 4-problem probe was **1.9× optimistic**. And **the α difference has a frontier-tier cause, not a tier-0 one** — Qwen certifies α=0.10 where Maverick certifies 0.05, which invites "its cheap tier is weak," but Qwen's mid tier is **perfect** and its *large* tier misses one problem; the final tier has no threshold (invariant #6), so that floors risk at 1/47 and α=0.05 is unreachable **whatever tier 0 does**. **A tier-0 intervention at n≈50 can be decided by one frontier draw.** Both arms carry exactly one confident-wrong tier-0 answer, so neither reaches experiment 17's zero-confident-wrong condition; in both, that class is commoner among the oracle-unsound **exclusions** than the inclusions — experiment 17's coincidence, reproduced. Also: `conc_safe_counter`, experiment 25's non-terminating test and the one id unsound in **both** prior draws, is **sound here**; the two arms' unsound sets overlap on **3 of 17** ids ever flagged. $3.5 (74% unrecorded spec), 54 min |
+| 27 | [fan-out ceiling](fanout-ceiling-n409.md) | the tier-0 fan-out is the **most-worked lever in the study** — experiments 9, 10, 12a, 13, 14 and 17 turned it across 5:2:1 / 1:1:1 / 2:1:1 / 5:1:1, six live draws at 5:1:1 alone — and it was left at "achievable on a good draw." Both the theorem (14) and the frequency (17) were measured at **n≈53**, which experiment 26 has since shown is a sample size where one observation moves the certificate. Re-ask it at n=409, and compute the bound the earlier runs did not | **the lever is exhausted, and a bound closes the thread where another draw could not.** An **omniscient** tier-0 gate — accept exactly the cheap answers execution says are correct, unattainable by construction and therefore an upper bound on every fan-out, every statistic and every threshold vector — is worth **1.83×** against always-frontier ($0.00337 vs $0.00616 at risk 0.0465 vs 0.0587). The realizable τ=[0.1,1] policy looks *better* at 2.12×, but only by carrying **more** risk (0.0733): it accepts 80 score-0 answers that are **all wrong**, so it is cheap precisely because it is wrong. At matched risk nothing reaches the bound. **Experiment 17's 2-of-6 was never about fan-out:** the confident-wrong class is a measured **13/409 = 0.0318**, and that rate predicts P(zero in 53) = **0.181** against an exact Clopper-Pearson CI of **[0.043, 0.777]** on 0.333 — consistent with sampling a *fixed* rate, so six more draws would re-estimate p, not move it, and P(win) **falls monotonically in n** (0.219 at 47 → 0.127 at 64 → ~0 at 409). The cost win was always a small-benchmark artifact. Two structural findings: the 287 correct and 13 wrong unanimous answers sit at score **exactly 0.424987** — numerically inseparable, experiment 14's theorem *measured* rather than inferred — and the gate has **three reachable settings** at 2:1:1, not the 121 the grid implies. Finally, **more than half the risk of the cheap policy is incurred at the frontier tier** (16 of 30 errors at τ=[0.1,1], on the problems tier 0 refused), which no cheap-tier intervention can reach — the same lesson experiment 26 paid $3.5 to learn. **$0, ~1 s, offline** |
 
 ### How each run answered the previous one's limitation
 
@@ -203,6 +213,28 @@ The value is in the chain, not any single number:
   the one plan buys nothing. **Three planner points on the same side close the
   question: no plan-placement variant reverses the direction.** The cheap-bottom-tier
   lever (11) remains the only thing that makes the cascade beat always-frontier on cost.
+
+### And the lever itself is now bounded — experiment 27
+
+Both levers above are ways of making tier 0 *better*. Experiment 27 asks how much that
+can be worth at all, and the answer caps the whole line of work: an **omniscient** tier-0
+gate is worth **1.83×**. Since it is unattainable by construction (it needs the answer to
+decide), it bounds every fan-out setting, every routing statistic, and every threshold
+vector — including the 5:1:1 configuration six live draws were spent on.
+
+That also reinterprets those draws. Experiment 17's "2 of 6 certify with a cost win" was
+read as a property of fan-out; at n=409 the confident-wrong class is a measured
+**13/409 = 0.0318**, and that single rate predicts P(zero in a clean set of 53) =
+**0.181**, inside the exact Clopper-Pearson CI **[0.043, 0.777]** on 0.333. So the six
+draws were sampling a fixed rate. Worse for the lever, P(win) *falls monotonically in n*
+— 0.219 at n=47, 0.127 at 64, ~0 at 409 — so the cost win was a small-benchmark artifact
+that gets rarer precisely as the evidence gets more trustworthy.
+
+**Where cost work should go instead.** At τ=[0.1,1], 16 of the 30 errors are incurred at
+the *frontier* tier, on problems tier 0 refused; the final tier has no threshold
+(invariant #6), so no routing decision touches them. And the shared spec/oracle call is
+74–91% of every bill while no routing decision touches it either. Tier 0 is the part of
+the system that has been optimized hardest and matters least.
 
 ## What is established
 
@@ -777,6 +809,19 @@ Bill **$3.5** ($0.90 recorded tier cost + ~$2.61 unrecorded spec/oracle = **74%*
   accurate at tier 0 (0.9149 → 0.8298 paired) and escalated more. So what makes Maverick
   work at that tier is unidentified — it is not "a better cheap coder," because a better
   cheap coder was tried.
+- **The cheap-tier lever is bounded at 1.83×, so the remaining headroom is small and
+  the search for it should stop** (experiment 27). An *omniscient* tier-0 gate — accept
+  exactly the cheap answers execution says are correct — is unattainable by construction
+  and therefore upper-bounds every fan-out, statistic and threshold vector; it is worth
+  1.83× against always-frontier at n=409. The realizable τ=[0.1,1] policy appears better
+  (2.12×) only because it carries more risk: it accepts 80 score-0 answers that are all
+  wrong. At matched risk nothing reaches the bound. This also retires the fan-out thread:
+  the confident-wrong rate is 13/409 = 0.0318, and that rate *predicts* experiment 17's
+  2-of-6 frequency, so those six draws were sampling a fixed rate rather than measuring
+  a fan-out effect — and P(win) falls monotonically in n. **Any future cost work should
+  target the frontier tier or the shared oracle, not tier 0**: more than half the risk of
+  the cheap policy is incurred at the frontier (16 of 30 errors at τ=[0.1,1]), and the
+  spec/oracle call is 74–91% of every bill.
 - **The `-race` rung is exercised, but only at n=11** (experiment 25). MultiPL-E Go has
   **0** concurrency problems, so experiment 21 — the only large-n run — never ran the
   ladder stage that caught the study's sole confirmed judge over-acceptance. The n=409
