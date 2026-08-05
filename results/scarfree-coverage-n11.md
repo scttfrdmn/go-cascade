@@ -2,6 +2,20 @@
 
 Experiment 28. Offline, **$0**, ~20 s of toolchain time per harvest. No model calls.
 
+> **⚠ The DECISION in this document has been superseded — the measurement has not.**
+> Experiment 29 ([`deferred-escape-n11.md`](deferred-escape-n11.md)) implemented the
+> second of the two free routes listed at the bottom of this page: the deferred form of
+> the escape operator, which had been skipping every `Lock(); defer Unlock()` site. It
+> supplies a **tenth** seed, so the count is now 10 against this page's bar of 10 and the
+> sweep is **fundable rather than declined**. The bar did not move; the measurement did.
+> Two other findings here are also revised there: **Result 3's "all 9 seeds are also
+> refuted without `-race`" is now 9 of 10** (the new seed is the first that genuinely
+> needs the rung), and the "harvest from model draws" route is **measured and closed** —
+> 8 raw / 6 unique / 5 from execution-correct bases, not clearly above 10.
+> Everything below is left exactly as written. The decline was correct on the evidence it
+> had, and rewriting it would erase the sequence that makes a pre-registered bar mean
+> anything.
+
 Issue #51 built the scar-free race operators (PR #56) to seed the one defect class §3.1
 is actually about: racy code whose synchronization scaffolding is **intact and balanced**,
 so a reading-only judge finds nothing missing on the page. The sync-deletion operator

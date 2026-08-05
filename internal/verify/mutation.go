@@ -375,6 +375,136 @@ func mutexTypeOf(f *ast.File, recv string) *ast.SelectorExpr {
 	return found
 }
 
+// clearPositions zeroes every position field in a subtree and returns a closure
+// that restores them, so a reordering mutation can be printed without inheriting
+// the original line numbers — and still be reverted, since these operators are
+// applied and undone repeatedly against one shared AST.
+//
+// It exists because go/printer lays a block out from its statements' recorded
+// source lines, not from their slice order. Swap two statements and the printer
+// sees a line number that runs backwards, which it renders as a blank line at the
+// mutation site. For an arm whose entire premise is that the defect leaves no
+// mark on the page, a stray blank line exactly where the edit happened is a
+// scar — and one that gofmt does not remove, because gofmt preserves author
+// blank lines between statements rather than normalising them away. Verified:
+// the shipped reordering operator emits one such line on hard_conc_once_init.
+//
+// Scope it to the statements that MOVED, never to the enclosing block. Clearing
+// a whole block makes the printer relay out everything in it, which destroys
+// formatting the author chose and the mutation did not touch: on
+// hard_conc_once_init that collapsed a three-line `once.Do(func(){...})` to one
+// line and dropped a blank line elsewhere in the function, turning a one-line
+// scar into a three-line one. Measured — 52 source lines in, 49 out for the block
+// form versus 52 for this one.
+//
+// The set of fields below is the layout-relevant closure over the node types
+// these operators can move — statements, and the expressions they contain. It is
+// deliberately not exhaustive over go/ast: an unhandled node keeps its position,
+// which degrades to the old blank-line artifact rather than producing wrong code.
+// If a future operator moves a construct not listed here, add it.
+func clearPositions(n ast.Node) func() {
+	var restore []func()
+	zero := func(p *token.Pos) {
+		was := *p
+		restore = append(restore, func() { *p = was })
+		*p = token.NoPos
+	}
+	ast.Inspect(n, func(x ast.Node) bool {
+		switch t := x.(type) {
+		case *ast.Ident:
+			zero(&t.NamePos)
+		case *ast.BasicLit:
+			zero(&t.ValuePos)
+		case *ast.CallExpr:
+			zero(&t.Lparen)
+			zero(&t.Rparen)
+		case *ast.BinaryExpr:
+			zero(&t.OpPos)
+		case *ast.UnaryExpr:
+			zero(&t.OpPos)
+		case *ast.ParenExpr:
+			zero(&t.Lparen)
+			zero(&t.Rparen)
+		case *ast.IndexExpr:
+			zero(&t.Lbrack)
+			zero(&t.Rbrack)
+		case *ast.CompositeLit:
+			zero(&t.Lbrace)
+			zero(&t.Rbrace)
+		case *ast.AssignStmt:
+			zero(&t.TokPos)
+		case *ast.IncDecStmt:
+			zero(&t.TokPos)
+		case *ast.IfStmt:
+			zero(&t.If)
+		case *ast.ForStmt:
+			zero(&t.For)
+		case *ast.RangeStmt:
+			zero(&t.For)
+			zero(&t.TokPos)
+		case *ast.BlockStmt:
+			zero(&t.Lbrace)
+			zero(&t.Rbrace)
+		case *ast.ReturnStmt:
+			zero(&t.Return)
+		case *ast.DeferStmt:
+			zero(&t.Defer)
+		case *ast.GoStmt:
+			zero(&t.Go)
+		}
+		return true
+	})
+	return func() {
+		for i := len(restore) - 1; i >= 0; i-- {
+			restore[i]()
+		}
+	}
+}
+
+// exitsIn reports whether any statement in stmts can leave the enclosing
+// function or loop iteration without falling through: return, break, continue,
+// goto, or a panic call. It is the veto for undeferring an Unlock — see the
+// deferred-escape operator, where a `return` inside the covered region turns a
+// would-be race into a deadlock.
+//
+// Nested function literals are NOT descended into, and that is the point: a
+// `return` inside a `func() {...}` returns from the literal, so it does not skip
+// the enclosing function's unlock. Descending would veto correct sites (a
+// `once.Do(func(){ return })` is harmless here) and the operators are already
+// starved for reach.
+//
+// It errs toward vetoing: `panic` is matched by callee name alone, so a local
+// function called `panic` would be treated as an exit. That direction is right —
+// a missed site costs one candidate, while a wrong site costs a mutant whose
+// defect is not the one its description claims.
+func exitsIn(stmts []ast.Stmt) bool {
+	found := false
+	for _, s := range stmts {
+		ast.Inspect(s, func(n ast.Node) bool {
+			if found {
+				return false
+			}
+			switch t := n.(type) {
+			case *ast.FuncLit:
+				return false // its returns exit the literal, not us
+			case *ast.ReturnStmt:
+				found = true
+			case *ast.BranchStmt:
+				found = true // break, continue, goto, fallthrough
+			case *ast.CallExpr:
+				if id, ok := t.Fun.(*ast.Ident); ok && id.Name == "panic" {
+					found = true
+				}
+			}
+			return !found
+		})
+		if found {
+			return true
+		}
+	}
+	return false
+}
+
 // hasCommentIn reports whether any comment sits inside [from,to). The scar-free
 // reordering operator uses this as a veto: moving a statement past a comment
 // leaves the comment attached to the wrong line, and a stray or contradictory
@@ -420,6 +550,21 @@ func hasCommentIn(f *ast.File, from, to token.Pos) bool {
 //  2. Move the last guarded statement out of the critical section, past the
 //     Unlock. The Lock/Unlock pair survives untouched and the section stays
 //     non-empty, so nothing reads as dangling.
+//
+//     2b. The same escape against a DEFERRED unlock: `Lock(); defer Unlock(); A; B`
+//     becomes `Lock(); A; Unlock(); B`. This needs the extra step of converting
+//     the defer to a plain call — there is no way to shorten a defer's scope
+//     in place — which is why it was skipped by the first version of operator 2
+//     and why it needs its own case. It matters because `Lock(); defer Unlock()`
+//     is, in syncCall's own words, the dominant Go idiom: on the concurrency
+//     benchmark the plain form appears in 3 references and the deferred form in
+//     hard_conc_rate_limiter alone accounts for 3 further critical sections that
+//     operator 2 could not touch.
+//
+//     The mutant is scar-free on a subtler axis than the others: `Lock(); A;
+//     Unlock(); B` is an entirely idiomatic shape. Nothing is missing, nothing is
+//     unbalanced, and the defer is gone rather than dangling — a reader has to
+//     notice that B touches guarded state.
 //
 //  3. `wg.Wait()` -> `defer wg.Wait()`. The Wait is still there and still runs;
 //     it just no longer happens before the statements that read what the
@@ -493,11 +638,95 @@ func collectScarFreeRaceSites(src string) ([]mutation, *token.FileSet, *ast.File
 					})
 				}
 
+				// Operator 2b: the same escape when the Unlock is DEFERRED. The
+				// deferred call cannot have its scope shortened in place, so the
+				// edit replaces it with a plain call positioned before the last
+				// guarded statement:
+				//
+				//   Lock(); defer Unlock(); A; B   ->   Lock(); A; Unlock(); B
+				//
+				// Requires at least two statements after the defer so the critical
+				// section keeps something in it, matching operator 2's guard.
+				if deferred {
+					guarded := block.List[unlockAt+1:]
+					if len(guarded) < 2 {
+						continue
+					}
+					// Everything from the defer to the block's end can move a line,
+					// so the veto window spans that whole range rather than just the
+					// two statements being reordered.
+					if hasCommentIn(f, block.List[unlockAt].Pos(), block.Rbrace) {
+						continue
+					}
+					// VETO: a control-flow exit anywhere in the region the defer was
+					// covering. Undeferring only unlocks on the path that falls
+					// through, so a `return` inside that region leaks the lock and the
+					// mutant DEADLOCKS instead of racing.
+					//
+					// That is a different defect class wearing this operator's clothes,
+					// and a worse one for this arm than a merely wrong answer on two
+					// counts: a deadlock is refuted by a *timeout*, whose cause can be
+					// external to the candidate (the one refutation with that property,
+					// see StageResult.TimedOut), and a Lock with a `return` between it
+					// and its Unlock is a visible imbalance — precisely the scar the
+					// deletion operator already covers and this arm exists to avoid.
+					// Measured on hard_conc_rate_limiter, where Allow's `return true`
+					// inside the critical section produced exactly this mutant.
+					if exitsIn(block.List[unlockAt+1:]) {
+						continue
+					}
+					plain := &ast.ExprStmt{X: &ast.CallExpr{Fun: unlockSel}}
+					orig := block.List
+					mutated := make([]ast.Stmt, 0, len(orig))
+					mutated = append(mutated, orig[:unlockAt]...)
+					mutated = append(mutated, guarded[:len(guarded)-1]...)
+					mutated = append(mutated, plain, guarded[len(guarded)-1])
+					blk, escapee := block, fset.Position(guarded[len(guarded)-1].Pos()).String()
+					var restore func()
+					sites = append(sites, mutation{
+						apply: func() {
+							blk.List = mutated
+							// Removing the defer shifts every following statement up
+							// one slot, so the printer sees each of their recorded
+							// lines jump and emits a blank line per jump (measured:
+							// two on hard_conc_rate_limiter). Every statement from
+							// the old defer onward genuinely moved, so clearing
+							// exactly that range is still scoped to the edit — see
+							// clearPositions on why the whole block is too wide.
+							undos := make([]func(), 0, len(mutated)-unlockAt+1)
+							for _, st := range mutated[unlockAt:] {
+								undos = append(undos, clearPositions(st))
+							}
+							// The block itself is one line shorter now, so its
+							// closing brace also has a stale line and the printer
+							// pads before it. Clearing Rbrace alone (not the whole
+							// block) removes that last blank line.
+							wasRbrace := blk.Rbrace
+							blk.Rbrace = token.NoPos
+							undos = append(undos, func() { blk.Rbrace = wasRbrace })
+							restore = func() {
+								for i := len(undos) - 1; i >= 0; i-- {
+									undos[i]()
+								}
+							}
+						},
+						revert: func() {
+							if restore != nil {
+								restore()
+								restore = nil
+							}
+							blk.List = orig
+						},
+						desc: escapee + ": move statement out of the " + recv +
+							" critical section, undeferring the Unlock",
+					})
+					continue
+				}
+
 				// Operator 2: move the last guarded statement out past the Unlock.
-				// Requires a plain (non-deferred) Unlock and at least two guarded
-				// statements, so the critical section does not end up empty — an
-				// empty one is itself a tell.
-				if deferred || unlockAt-i < 3 {
+				// Requires at least two guarded statements, so the critical section
+				// does not end up empty — an empty one is itself a tell.
+				if unlockAt-i < 3 {
 					continue
 				}
 				a, b := unlockAt-1, unlockAt
@@ -515,10 +744,29 @@ func collectScarFreeRaceSites(src string) ([]mutation, *token.FileSet, *ast.File
 					continue
 				}
 				escapee := fset.Position(block.List[a].Pos()).String()
+				blk := block
+				var restore func()
 				sites = append(sites, mutation{
-					apply:  func() { block.List[a], block.List[b] = block.List[b], block.List[a] },
-					revert: func() { block.List[a], block.List[b] = block.List[b], block.List[a] },
-					desc:   escapee + ": move statement out of the " + recv + " critical section",
+					apply: func() {
+						blk.List[a], blk.List[b] = blk.List[b], blk.List[a]
+						// Same reason as operator 2b: swapping two statements makes
+						// their recorded lines run backwards and go/printer emits a
+						// blank line at the mutation site. Measured on
+						// hard_conc_once_init, where this operator's one site was
+						// the only site of fifteen to gain a blank line. Clear only
+						// the two swapped statements, not the block.
+						undo1 := clearPositions(blk.List[a])
+						undo2 := clearPositions(blk.List[b])
+						restore = func() { undo2(); undo1() }
+					},
+					revert: func() {
+						if restore != nil {
+							restore()
+							restore = nil
+						}
+						blk.List[a], blk.List[b] = blk.List[b], blk.List[a]
+					},
+					desc: escapee + ": move statement out of the " + recv + " critical section",
 				})
 
 			case "Wait":

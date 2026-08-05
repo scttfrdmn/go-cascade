@@ -1161,26 +1161,50 @@ Retention is limited to disagreements: at n = 409 that is 166 programs rather th
 and agreeing observations carry no forensic information by construction.
 
 The other route to the same claim — *seeding* the reading-invisible class rather than
-waiting to observe it — is implemented, and we report it as declined on statistical power,
-because a reader is otherwise entitled to ask why an available experiment was not run.
-Sound seeding requires mutants whose synchronization scaffolding is intact: a deleted
-`wg.Wait()` leaves a WaitGroup that is never waited on, and the judge scored 20 of 20 on
-such mutants by noticing the imbalance rather than by reasoning about interleaving. Three
-scar-free operators were therefore built (downgrade a `Lock`/`Unlock` pair to
-`RLock`/`RUnlock`, co-mutating the declaration to `sync.RWMutex`; move the last guarded
-statement out past the `Unlock`; replace `wg.Wait()` with `defer wg.Wait()`), each
-validated to compile and to draw an actual race report. Measured against the 11
-concurrency problems, they yield 15 candidate edit sites and **9 mutants that both compile
-and race**, spread over 7 problems. Against the sync-deletion arm's 0 of 20 on the same
-problems, three or more false acceptances would be needed to reach *p* < 0.05, and a null
-would bound the scar-free false-acceptance rate at 0.283. We set a threshold of ten usable
-seeds before running the harvest and obtained nine, so the sweep was not run and the
-mechanism claim is left argued. We record that this is a close call rather than a clear
-one: a single false acceptance would be an existence proof requiring no significance test
-at all, and its probability at nine seeds exceeds 0.85 for any rate above 0.2.
+waiting to observe it — is implemented, and we report its coverage in full, because a
+reader is otherwise entitled to ask why an available experiment was not run. Sound seeding
+requires mutants whose synchronization scaffolding is intact: a deleted `wg.Wait()` leaves
+a WaitGroup that is never waited on, and the judge scored 20 of 20 on such mutants by
+noticing the imbalance rather than by reasoning about interleaving. Four scar-free
+operators exist (downgrade a `Lock`/`Unlock` pair to `RLock`/`RUnlock`, co-mutating the
+declaration to `sync.RWMutex`; move the last guarded statement out past an explicit
+`Unlock`; the same move where the `Unlock` is deferred, converting it to a plain call;
+replace `wg.Wait()` with `defer wg.Wait()`), each validated to compile and to draw an
+actual race report. Measured against the 11 concurrency problems, they yield 16 candidate
+edit sites and **10 mutants that both compile and race**, spread over 7 problems. Against
+the sync-deletion arm's 0 of 20 on the same problems, three or more false acceptances would
+be needed to reach *p* < 0.05, and a null would bound the scar-free false-acceptance rate
+at 0.259.
 
-Two aspects of that measurement are worth reporting, because both were initially wrong in
-the direction that favoured declining. First, the downgrade operator originally rewrote
+We report the sequence of that decision rather than only its outcome, because the sequence
+is what makes a pre-registered threshold worth stating. A threshold of ten usable seeds was
+registered before the harvest; the first corrected harvest returned nine, and the sweep was
+declined. The fourth operator was then added — the deferred-`Unlock` form of the escape
+operator, which had been skipping every `Lock(); defer Unlock()` site and therefore had a
+single edit site on an entire concurrency benchmark — and it supplies a tenth seed. The
+threshold was not revised; the measurement was, by a change to the instrument that the
+declining write-up itself identified as the cheapest available improvement. The seeded
+sweep consequently clears its own bar, and we report it as unfunded rather than declined.
+The mechanism claim of §3.1 is still argued: sharpening an instrument is not running an
+experiment. We note also that clearing this bar buys an *existence proof* and not a rate —
+a single false acceptance would need no significance test, with probability 0.893 at a true
+rate of 0.2, whereas a null at ten seeds bounds the rate only at 0.259.
+
+One qualitative change matters more than the count. All nine seeds of the earlier harvest
+were also refuted by the ordinary test run, so the sweep could only have measured whether a
+reader notices a program that already fails deterministically; the tenth seed is the first
+that the race detector alone refutes, because undeferring the `Unlock` widens the window
+enough that the ordinary run passes. That operator requires a control-flow veto the
+explicit form does not: an undeferred `Unlock` releases the lock only on the fall-through
+path, so a `return` inside the region the `defer` was covering produces a deadlock rather
+than a race — the wrong defect class on two counts, since a non-terminating program is
+refuted by a timeout whose cause may be external to the candidate, and a `Lock` with a
+`return` before its `Unlock` is a *visible* imbalance of exactly the kind the deletion arm
+already tests. A `return` inside a function literal is not such an exit, and vetoing on one
+would reject correct sites.
+
+Three aspects of that measurement are worth reporting, because all three were initially
+wrong in the direction that favoured declining. First, the downgrade operator originally rewrote
 only its call sites and left the receiver declared as a `sync.Mutex`, so every one of its
 mutants failed to compile; the resulting shortfall was attributed to the benchmark
 containing no `sync.RWMutex` rather than to the operator, and co-mutating the declaration
@@ -1189,12 +1213,21 @@ operator into an empty result, and an empty result is easily read as a finding. 
 the comparison was initially made against 17 mutants drawn from a different arm of the
 experiment on a different problem subset, rather than the 20 from the arm being contrasted;
 that substitution alone raised the apparent critical value and understated the sweep's
-power several-fold. We note also that the nine seeds are harvested from reference solutions
-whereas the sweep itself mutates model-generated candidates, so the figure is a proxy for a
-denominator that has not been measured — and that all nine are refuted by the ordinary test
-run as well as under the race detector, which means they do not exercise the detector as
-the only sound rung, though it does not follow that a reader would notice the defect.
-Widening the concurrency corpus would raise the denominator, and we flag the accompanying
+power several-fold. Third, the escape operator's reach was reported without noting that it
+matched only an explicit `Unlock`; since the deferred form is the ordinary Go idiom, this
+understated that operator's coverage by an order of magnitude on this corpus, and the
+missing form is where the one seed requiring the race detector came from.
+
+The seeds are harvested from reference solutions whereas the sweep itself mutates
+model-generated candidates, so the figure is a proxy for a different denominator. We have
+now measured that denominator offline, from retained candidate sources, and it does not
+raise the count: the same operators yield eight seeds naively, six counting unique programs
+— nine recorded rows contain only seven distinct programs, one of them repeated three times
+byte-identically — and five when restricted to base programs that are themselves
+execution-correct, a restriction the seeding code does not currently apply. We report the
+range rather than its most favourable end. All seven distinct base programs are race-clean,
+which confirms the operators cause the races they seed rather than exposing pre-existing
+ones. Widening the concurrency corpus would raise the denominator, and we flag the accompanying
 hazard for anyone extending a benchmark to feed a mutation operator: problems authored
 *because* these operators can mutate them tune the benchmark to the instrument, and such
 additions must be identified as post hoc.
