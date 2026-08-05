@@ -211,6 +211,44 @@ def main() -> int:
             print(f"  {str(taus):16s} {nm:10s} {acc0:9d} {esc:10d} "
                   f"{wrong / len(both):7.4f} {cost / len(both):10.5f}")
 
+    # ---- confident-wrong tier-0 answers: the actual mechanism of the cost win ----
+    print("\n" + "=" * 78)
+    print("CONFIDENT-WRONG TIER-0 ANSWERS, paired")
+    print("=" * 78)
+    print("Experiment 17 established across six draws that the deployable-alpha cost")
+    print("win happens **iff** the clean calibration set contains zero confident-wrong")
+    print("tier-0 answers — a unanimous cluster (score at the fan-out ceiling) on a")
+    print("program execution says is wrong. Fan-out provably buys discrimination")
+    print("against *flaky* cheap-tier errors and NONE against confident ones")
+    print("(experiment 14's headroom theorem), so a threshold cannot separate them and")
+    print("the certificate collapses to [1,1].")
+    print()
+    print("Read this before crediting any cost win to the model: in BOTH observed wins")
+    print("the confident-wrong answers existed and were merely oracle-unsound-EXCLUDED,")
+    print("so the win rode a coincidence between two independent error processes. A new")
+    print("tier-0 model perturbs both, and the exclusion set is not the model's doing.")
+    ceiling = max((t["score"] for arm in (a, b) for r in arm.values()
+                   for t in (r["tiers"][0],)), default=0.0)
+    print(f"\n  highest tier-0 score observed in either arm: {ceiling:.4f}")
+    print("  (the unanimous Wilson ceiling for the configured fan-out; invariant #9)")
+    for nm, arm, all_ in ((a_name, a, a_all), (b_name, b, b_all)):
+        conf = [i for i in both
+                if arm[i]["tiers"][0]["score"] >= ceiling - 1e-9
+                and not truth(arm[i]["tiers"][0])]
+        # The same class among the EXCLUDED records — the coincidence to check.
+        excl = {r["id"]: r for r in all_ if r.get("oracle_unsound")}
+        conf_excl = [i for i, r in excl.items()
+                     if r["tiers"][0]["score"] >= ceiling - 1e-9
+                     and not truth(r["tiers"][0])]
+        print(f"\n  {nm}")
+        print(f"    confident-wrong in the paired clean set: {len(conf)} "
+              f"{' '.join(conf) if conf else '(none -> a cost win is possible)'}")
+        print(f"    confident-wrong among oracle-unsound EXCLUSIONS: {len(conf_excl)} "
+              f"{' '.join(sorted(conf_excl))}")
+        if not conf and conf_excl:
+            print("    ^ the experiment-17 coincidence: the class exists but is excluded,")
+            print("      so a win here is NOT evidence of cheap-tier robustness.")
+
     # ---- per-tier spend, so the "cheaper per sample" claim is checkable ----------
     print("\n" + "=" * 78)
     print(f"RECORDED COST PER PROBLEM BY TIER, paired over {len(both)}")
