@@ -9,9 +9,98 @@ import (
 
 	"github.com/scttfrdmn/go-cascade/internal/calibrate"
 	"github.com/scttfrdmn/go-cascade/internal/cascade"
+	"github.com/scttfrdmn/go-cascade/internal/verify"
 )
 
 func bp(b bool) *bool { return &b }
+
+// The concurrency benchmark exists for exactly one reason: to make the race rung
+// fire. That rung is gated on a free AST predicate (verify.Static.UsesConcurrency),
+// so a problem whose solutions carry no goroutine, channel, select or sync use
+// SKIPS it — and a skip is scored OK, which is sound but measures nothing.
+//
+// This is not hypothetical. MultiPL-E Go has 0 concurrency problems, so the whole
+// n=409 run (experiment 21) skipped the rung on all 488 records without a single
+// test failing or a line of output saying so — the rung that caught the study's
+// only confirmed judge over-acceptance never ran at the only large n. The failure
+// mode is silent by construction, hence an explicit assertion.
+//
+// The reference is the right thing to check: it is the one program per problem
+// known to be correct, so if IT does not trip the predicate, no candidate for that
+// problem plausibly will either.
+func TestConcurrencyBenchActuallyReachesTheRaceRung(t *testing.T) {
+	const bench = "../../examples/bench/concurrency.jsonl"
+	probs, err := readBench(bench)
+	if err != nil {
+		t.Fatalf("readBench(%s): %v", bench, err)
+	}
+	if len(probs) == 0 {
+		t.Fatal("no problems: an empty concurrency set covers nothing")
+	}
+
+	refs, err := loadReferences("../../examples/bench", probs)
+	if err != nil {
+		t.Fatalf("loadReferences: %v", err)
+	}
+	// -refs is load-bearing here (invariant #4): without a reference the oracle
+	// soundness check cannot run, and a paired run over these ids would be
+	// calibrating against unvalidated generated tests.
+	if len(refs) != len(probs) {
+		t.Errorf("references %d/%d; every concurrency problem needs one so -refs can gate oracle soundness",
+			len(refs), len(probs))
+	}
+
+	for _, p := range probs {
+		src, ok := refs[p.ID]
+		if !ok {
+			t.Errorf("%s: no reference solution", p.ID)
+			continue
+		}
+		st, err := verify.Analyse(src)
+		if err != nil {
+			t.Errorf("%s: reference does not parse: %v", p.ID, err)
+			continue
+		}
+		if !st.UsesConcurrency {
+			t.Errorf("%s: reference does not trip UsesConcurrency, so the race rung would be "+
+				"SKIPPED (skips score OK — this problem contributes no race coverage)", p.ID)
+		}
+	}
+
+	// The other direction, and the one that rots: concurrency.jsonl is a hand-curated
+	// SUBSET of the hand-written benchmark, so adding a concurrency problem to
+	// problems.jsonl / hard/ / scale/ without adding it here silently shrinks the
+	// coverage set. Nothing else would notice — this run reports over its own n.
+	have := make(map[string]bool, len(probs))
+	for _, p := range probs {
+		have[p.ID] = true
+	}
+	var missing []string
+	err = filepath.WalkDir("../../examples/bench", func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || d.Name() != "solution.go" {
+			return err
+		}
+		src, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		st, aerr := verify.Analyse(string(src))
+		if aerr != nil {
+			return nil // a non-parsing reference is a different bug, caught elsewhere
+		}
+		if id := filepath.Base(filepath.Dir(path)); st.UsesConcurrency && !have[id] {
+			missing = append(missing, id)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk references: %v", err)
+	}
+	if len(missing) > 0 {
+		t.Errorf("concurrency references absent from %s: %v — add them or the race-coverage "+
+			"run silently under-reports its own scope", bench, missing)
+	}
+}
 
 func TestCountJudgeErrors(t *testing.T) {
 	// tier 0: judge PASS, truth wrong  -> false accept
