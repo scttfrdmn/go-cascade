@@ -52,6 +52,18 @@ the model makes — and the benchmark contains **no concurrency problems**, so t
 false-acceptance, was never exercised at scale.
 Every cost-saving figure in the earlier informal treatment of this design remains
 structural estimation rather than measurement, and should still not be cited.
+The cost side is now measured, and the honest summary is narrower than the oracle
+result: **the cascade's measured advantage is a *routing* advantage** — 2.2× at n = 409
+at an operating point above the tightest certifiable α — and the shared
+test-generation call, which is identical under every policy and so cancels from the
+oracle comparisons but not from the cost ones, is **≈6.6× the frontier routing bill**. On total cost per
+problem the 2.2× is **1.07×**, and the policy that certifies at a deployable α is
+**0.92×**, marginally *more* expensive than always-frontier. The cheap-tier routing
+lever is additionally bounded: an unattainable gate with oracular knowledge of which
+cheap answers are correct would be worth 1.83× (1.06× total), so this is a limit of the
+design at these price ratios rather than a tuning shortfall. §3.4's claim that
+verification reduces cost at fixed risk is unaffected — it is a statement about the
+routing term, and it holds there.
 
 ---
 
@@ -549,6 +561,17 @@ Go contributes three further specifics:
 
 Compiler and test output constitute a large, free information gain, so the action
 space at each stage becomes $\{\text{accept},\text{repair},\text{escalate}\}$.
+
+> **"Free" is exact for the compiler and inexact for the suite.** Executing the tests
+> costs milliseconds of wall-clock, which is what the argument needs and what §3.3
+> quantifies. *Obtaining* them costs one frontier-model call per problem, and the live
+> evaluation measures that at ≈6.6× the entire frontier-tier routing bill (§4.2, §5.6).
+> Nothing in this section's optimality argument depends on the difference — the oracle
+> call is made once, before any routing decision, so it is a constant in (13) and cannot
+> change which action is chosen. But it means the cost *reductions* derived here and in
+> §3.1 are reductions in the routing term, which is the minority of what the method
+> costs to operate. §5.6 restates the measured ratios on total cost.
+
 The rule generalizes (4) to a comparison of marginal slopes:
 
 $$\max\left(\frac{\Delta p_{\mathrm{repair}}}{c_{\mathrm{repair}}},\ \frac{\Delta p_{\mathrm{escalate}}}{c_{k+1}}\right)\ \gtrless\ \frac{1}{\lambda}. \tag{13}$$
@@ -701,6 +724,21 @@ Verifier cost is wall-clock stage time multiplied by a configured
 USD-per-core-second. Both are reported per query, separately, alongside the risk
 statement. Runs without a valid certificate are labelled `UNCERTIFIED` and the
 tool declines to state a bound.
+
+**A gap in this accounting, and it is the largest cost term in the method.** The
+per-tier figures above cover the *routing* calls only. Generating the test suite that
+serves as the oracle is itself a frontier-model call, made once per problem before any
+tier is consulted, and it is recorded nowhere in the per-query accounting — every
+internal caller of the specification step discards its cost. Because the call is
+identical under every routing policy, its omission cancels exactly in any comparison
+between two *oracles* run on identical candidates — which is why the §5.5 results are
+unaffected by it, and why the omission survived the entire evaluation without producing a
+wrong comparative number. It does **not** cancel in an absolute cost figure, nor in a
+comparison between two *policies*: there the term is common to both arms but appears in
+the numerator and denominator of a ratio rather than dropping out, so it drives that
+ratio toward 1. And it dominates — ≈\$0.0408 per problem against a frontier-tier routing
+cost of ≈\$0.00616 per query, i.e. ≈87% of the total. Any cost claim about this method
+must state whether it is net of the oracle; see the qualification in §5.6.
 
 ### 4.3 Two design corrections discovered by building it
 
@@ -1014,6 +1052,57 @@ cheap-tier confident-error rate, not fan-out* (an analytic dichotomy — fan-out
 discrimination headroom against *flaky* errors and none against *confident* ones — is
 in `results/headroom_theorem.py`).
 
+**Every cost ratio in this section and in §5.6 is a *routing* ratio, and the routing
+term is a small minority of what the method costs to run.** This is the single most
+important qualification on the paper's cost story, and it was not stated in earlier
+revisions. The figures above compare what the tiers are billed; they omit the shared
+test-generation call, which is charged once per problem, is identical under every
+routing policy, and is therefore invisible to any comparison *between* policies. It is
+also the dominant term: measured at **\$0.0408 per problem** for a pinned spec (two Go
+test partitions, ≈2,700 output tokens at a frontier per-token rate), against a
+frontier-tier routing cost of **\$0.00616 per query** at n = 409. The oracle is thus
+**≈6.6× the entire frontier routing bill and 12.5× the largest routing saving any
+policy achieves.** Independently corroborated by provider billing: **≈\$197 of real
+spend across the study against roughly \$40 derivable from the records, with the
+test-generation model alone at 91%.**
+
+Restating the n = 409 result on total cost per solved problem — the quantity a
+deployment actually pays — rather than on routing alone:
+
+| policy | routing | + oracle | total | vs frontier |
+|---|---|---|---|---|
+| always-frontier | \$0.00616 | \$0.0408 | \$0.04696 | 1.00× |
+| cascade, τ = [0.1, 1] | \$0.00290 | \$0.0408 | \$0.04370 | **1.07×** |
+| cascade, τ = [1, 1] (certified at α ≤ 0.10) | \$0.01008 | \$0.0408 | \$0.05088 | **0.92×** |
+
+**So the 2.2× routing win is 1.07× in total, and the policy that certifies at a
+deployable α is 0.92×, i.e. slightly *more* expensive than always-frontier.** The
+collapse is structural rather than a property of these numbers: for a shared cost $S$
+and frontier routing cost $f$, a routing ratio $R$ becomes $(S+f)/(S+f/R)$, which tends
+to 1 as $S/f$ grows, *whatever* $R$ is. With $S/f \approx 6.6$ no achievable $R$ — not
+the 9.0× measured for a cheap bottom tier at n = 64, and not the omniscient upper bound
+of §5.6 — produces a total-cost win above about 1.2×.
+
+The table replays offline from the n = 409 records
+(`python3 results/total_cost.py results/s55-fixed.records.execution.json`), which also
+prints the break-even oracle price for a target total-cost ratio: reaching 1.5× total
+requires the oracle ≈11× cheaper, and 2× requires ≈114×. The oracle price is a flag
+rather than a constant in that script, because the \$0.0408 figure is a single live
+measurement and the total-cost ratios are sensitive to it; it should be reconciled
+against provider billing before being quoted.
+
+Two consequences for how §3.4's cost argument should be read. First, the argument is
+**sound but narrow**: verification does reduce *routing* cost at fixed risk, and that is
+what §3.4 proves; it does not follow that a verification-saturated cascade is cheaper to
+operate than always-frontier, because the verifier's own oracle is a shared cost the
+routing analysis never sees. Second, the cost model of §2.2 charges $c_k$ per tier and
+treats verification as (cheap) wall-clock, which is accurate for the *executable* rungs —
+they are compiler and test invocations, and the ladder's ordering economises them
+correctly — but omits the model call that produces the tests. **A cost model for this
+method must include the oracle term explicitly**, and any future cost lever should be
+evaluated against total cost, since a lever confined to the tiers can move at most ~13%
+of the bill.
+
 **Two design levers the paper does not analyze, tested and reported negative.** A
 cheaper/more-accurate bottom tier is the cost lever that works (above). A
 *generalist-instructs-specialist* two-stage tier (a strong model plans, a cheap model
@@ -1077,7 +1166,42 @@ The larger sample is the trustworthy one, and the honest claim is *α ≈ 0.08 c
 reproduces at 6× the scale** rather than dissolving: certified thresholds are `[1, 1]`
 (full escalation, 1.6× *pricier* than always-frontier) below α = 0.11 and `[0.1, 1]`
 (**2.2× cheaper** than always-frontier at matched risk) at or above it. The transition is
-sharp and sits above the tightest certifiable α.
+sharp and sits above the tightest certifiable α. Both ratios are *routing* ratios; on
+total cost per problem they are 0.92× and 1.07× respectively — see the qualification at
+the end of §5.6's cost discussion above.
+
+**The cheap-tier routing lever is exhausted, and this is now a bound rather than a
+sequence of draws.** The fragility reported above was measured across six 5:1:1 draws at
+n ≈ 53, a sample size at which — as the tier-swap arm below demonstrates — a single
+observation can decide the certificate. Replaying the n = 409 records settles it. Define
+the *omniscient* tier-0 gate: one that accepts exactly those cheap-tier candidates
+execution shows to be correct and escalates the rest. It is unattainable by construction,
+since deciding requires the answer it is meant to predict, and it therefore upper-bounds
+every fan-out, every routing statistic, and every threshold vector simultaneously. Its
+value is **1.83× against always-frontier** (\$0.00337 vs \$0.00616 per query, at risk
+0.0465 vs 0.0587) — **1.06× on total cost.** The realizable τ = [0.1, 1] policy appears
+to exceed the bound at 2.12×, but only by carrying higher risk (0.0733): it accepts 80
+candidates scoring zero, all of which are wrong, so it is cheap precisely because it is
+wrong. The bound binds at matched risk, and at matched risk nothing reaches it.
+
+This also reinterprets the six-draw frequency. At n = 409 the confident-wrong class —
+unanimous at the fan-out's Wilson ceiling and refuted by execution — is **13/409 =
+0.0318**, and since the empirical rule was exact (zero such answers in the clean
+calibration set ⟹ a threshold below 1 ⟹ a cost win), P(win) is simply the probability
+that a clean set of size $m$ contains none. That rate predicts **0.181** at $m = 53$
+against an exact (Clopper–Pearson) 95% interval of **[0.043, 0.777]** on the observed
+2/6 = 0.333. The six draws are therefore consistent with sampling a *fixed* rate; further
+draws would re-estimate it, not move it. And **P(win) decreases monotonically in $n$**
+(0.219 at 47, 0.127 at 64, ≈0 at 409), so the deployable-α cost win is a small-benchmark
+phenomenon that becomes *rarer* precisely as the evidence becomes more trustworthy.
+Two structural observations accompany it: the 287 correct and 13 wrong unanimous
+candidates sit at a score of **exactly 0.424987** — numerically identical, so the
+flaky/confident dichotomy above is measured here rather than inferred — and tier-0 score
+takes only **three distinct values** at this fan-out, so the threshold grid's 121 points
+represent tuning freedom that does not exist. Finally, at τ = [0.1, 1] **16 of the 30
+errors are incurred at the frontier tier**, on problems the cheap tier declined; the
+final tier carries no threshold by construction, so no routing decision can reach them.
+Apparatus: `results/fanout_ceiling.py`, write-up `results/fanout-ceiling-n409.md`.
 
 Finally, a coverage limitation this benchmark introduces and the 64-problem set did not
 have: MultiPL-E Go contains **no concurrency problems at all**, so the `-race` stage —

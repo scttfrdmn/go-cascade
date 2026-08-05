@@ -582,6 +582,52 @@ Concretely: experiment 21 reports **$8.15** for 488 problems against only $5.14 
 every paired comparison, which is why it went unnoticed — but no absolute figure here is the
 invoice.
 
+### And every *policy* ratio on this page is a routing ratio
+
+The cancellation above is exactly why the oracle result is safe and the **cost** result is
+not. A paired comparison between two *oracles* on identical candidates is unaffected by a
+term both arms pay. A comparison between two *policies* — cascade vs always-frontier — is
+a comparison of the term that the shared oracle dwarfs:
+
+| policy (n=409) | routing | + oracle | total | vs frontier |
+|---|---|---|---|---|
+| always-frontier | $0.00616 | $0.0408 | $0.04696 | 1.00× |
+| cascade τ=[0.1,1] | $0.00290 | $0.0408 | $0.04370 | **1.07×** |
+| cascade τ=[1,1] (certifies at α≤0.10) | $0.01008 | $0.0408 | $0.05088 | **0.92×** |
+
+```bash
+python3 results/total_cost.py results/s55-fixed.records.execution.json
+python3 results/total_cost.py -spec 0.01 results/s55-fixed.records.execution.json  # sensitivity
+```
+
+The oracle price is a **flag, not a constant**, because $0.0408 is a single live
+measurement and every total-cost ratio is sensitive to it. Reconcile it against a bill
+line before quoting one.
+
+**The 2.12× routing win is 1.07× in total, and the policy that certifies at a deployable α
+is 0.92× — slightly *pricier* than always-frontier.** The collapse is structural, not an
+artifact of these particular numbers: for a shared cost *S* and frontier routing cost *f*,
+a routing ratio *R* becomes (S+f)/(S+f/R), which tends to 1 as S/f grows **whatever R is**.
+At S/f ≈ 6.6 no achievable *R* clears ~1.2× — not experiment 26's 9.0× measured at n=64,
+and not experiment 27's omniscient bound (1.83× routing → **1.06× total**).
+
+Three consequences, and they set the direction for any further cost work:
+
+1. **Quote total cost, or say "routing" explicitly.** Every ratio in the table above this
+   section is routing-only. That is the right denominator for asking "does the router
+   route well" and the wrong one for "is this cheaper to operate."
+2. **A lever confined to the tiers can move at most ~13% of the bill.** Tier 0 specifically
+   is 0.8% (experiment 26). This is the arithmetic behind experiment 27's conclusion that
+   the cheap-tier lever is exhausted — even the unattainable bound is worth 6% total.
+3. **The only cost term large enough to matter is the oracle itself**, and break-even is
+   steep: a 1.5× *total* win needs the oracle ~11× cheaper, and 2× needs ~114×. A cheaper
+   spec model is the obvious candidate and runs straight into this study's own findings —
+   a weaker test author writes buggier suites, and experiment 19 showed generated-oracle
+   errors are **over-rejections**, which cost escalations rather than risk and are
+   therefore *invisible to the certificate*. That makes it a measurable trade-off
+   (spec cost vs `OracleUnsound` rate vs escalation rate) under invariant #3 as a hard
+   constraint, not a free win.
+
 Two traps in reading it back, each of which produced a wrong answer first:
 
 1. **Claude bills under service `Amazon Bedrock Service`, not `Amazon Bedrock`.** Filtering
