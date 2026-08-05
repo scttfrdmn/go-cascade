@@ -1,0 +1,356 @@
+[
+  {
+    "id": "conc_parallel_map",
+    "problem": "Apply f to every element of a slice using at most workers goroutines, returning the results in input order. A workers value of zero or less means one worker per element. An empty input yields an empty result.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.12085198061245214,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0009228577311
+      },
+      {
+        "tier": "mid",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0070533222627836
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0097085218110094
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "conc_parallel_sum",
+    "problem": "Compute the sum of a slice of integers using up to workers goroutines to add disjoint partitions concurrently. The result must equal the sequential sum for any partitioning. An empty slice sums to 0.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.12085198061245214,
+        "correct": false,
+        "true_correct": false,
+        "cost_usd": 0.0007475218595015999
+      },
+      {
+        "tier": "mid",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.006779820504217199
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.012478321376139101
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "conc_safe_counter",
+    "problem": "Given a number of goroutines and a per-goroutine increment count, start that many goroutines, have each increment a shared counter that many times, wait for all to finish, and return the final total. Access to the counter must be free of data races.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.4249871175779984,
+        "correct": false,
+        "true_correct": false,
+        "cost_usd": 0.001857763962957,
+        "timed_out": true
+      },
+      {
+        "tier": "mid",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": false,
+        "cost_usd": 0.006479537242493001,
+        "timed_out": true
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": false,
+        "true_correct": false,
+        "cost_usd": 0.010244319989917998,
+        "timed_out": true
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound": true,
+    "oracle_unsound_diag": "reference refuted at VA:accept stage: {\"Time\":\"2026-08-04T19:23:43.558246-07:00\",\"Action\":\"start\",\"Package\":\"gocascade/candidate\"}\n{\"Time\":\"2026-08-04T19:23:43.685171-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeGoroutines\"}\n{\"Time\":\"2026-08-04T19:23:43.685215-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeGoroutines\",\"Output\":\"=== RUN   TestHNegativeGoroutines\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.685222-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeGoroutines\",\"Output\":\"--- PASS: TestHNegativeGoroutines (0.00s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.685227-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeGoroutines\",\"Elapsed\":0}\n{\"Time\":\"2026-08-04T19:23:43.685233-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeIncrements\"}\n{\"Time\":\"2026-08-04T19:23:43.685234-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeIncrements\",\"Output\":\"=== RUN   TestHNegativeIncrements\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.685235-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeIncrements\",\"Output\":\"--- PASS: TestHNegativeIncrements (0.00s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.685236-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeIncrements\",\"Elapsed\":0}\n{\"Time\":\"2026-08-04T19:23:43.685238-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHBothNegative\"}\n{\"Time\":\"2026-08-04T19:23:43.685239-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHBothNegative\",\"Output\":\"=== RUN   TestHBothNegative\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.68524-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHBothNegative\",\"Output\":\"--- PASS: TestHBothNegative (0.00s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.685241-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHBothNegative\",\"Elapsed\":0}\n{\"Time\":\"2026-08-04T19:23:43.685242-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeGoroutinesZeroIncrements\"}\n{\"Time\":\"2026-08-04T19:23:43.685243-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeGoroutinesZeroIncrements\",\"Output\":\"=== RUN   TestHNegativeGoroutinesZeroIncrements\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.685249-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeGoroutinesZeroIncrements\",\"Output\":\"--- PASS: TestHNegativeGoroutinesZeroIncrements (0.00s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.685251-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHNegativeGoroutinesZeroIncrements\",\"Elapsed\":0}\n{\"Time\":\"2026-08-04T19:23:43.685252-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHLargeGoroutines\"}\n{\"Time\":\"2026-08-04T19:23:43.685253-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHLargeGoroutines\",\"Output\":\"=== RUN   TestHLargeGoroutines\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.725356-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHLargeGoroutines\",\"Output\":\"--- PASS: TestHLargeGoroutines (0.04s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.725372-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHLargeGoroutines\",\"Elapsed\":0.04}\n{\"Time\":\"2026-08-04T19:23:43.72538-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHLargeIncrements\"}\n{\"Time\":\"2026-08-04T19:23:43.725381-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHLargeIncrements\",\"Output\":\"=== RUN   TestHLargeIncrements\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.727188-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHLargeIncrements\",\"Output\":\"--- PASS: TestHLargeIncrements (0.00s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.727195-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHLargeIncrements\",\"Elapsed\":0}\n{\"Time\":\"2026-08-04T19:23:43.727197-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHManyGoroutinesFewIncrements\"}\n{\"Time\":\"2026-08-04T19:23:43.727198-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHManyGoroutinesFewIncrements\",\"Output\":\"=== RUN   TestHManyGoroutinesFewIncrements\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.730323-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHManyGoroutinesFewIncrements\",\"Output\":\"--- PASS: TestHManyGoroutinesFewIncrements (0.00s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.730333-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHManyGoroutinesFewIncrements\",\"Elapsed\":0}\n{\"Time\":\"2026-08-04T19:23:43.730337-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHExactProduct\"}\n{\"Time\":\"2026-08-04T19:23:43.730339-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHExactProduct\",\"Output\":\"=== RUN   TestHExactProduct\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.73034-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHExactProduct\",\"Output\":\"--- PASS: TestHExactProduct (0.00s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.730341-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHExactProduct\",\"Elapsed\":0}\n{\"Time\":\"2026-08-04T19:23:43.730343-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHRepeatedCallsAreIndependent\"}\n{\"Time\":\"2026-08-04T19:23:43.730346-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHRepeatedCallsAreIndependent\",\"Output\":\"=== RUN   TestHRepeatedCallsAreIndependent\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.73035-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHRepeatedCallsAreIndependent\",\"Output\":\"--- PASS: TestHRepeatedCallsAreIndependent (0.00s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.730353-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHRepeatedCallsAreIndependent\",\"Elapsed\":0}\n{\"Time\":\"2026-08-04T19:23:43.730354-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHRaceDetection\"}\n{\"Time\":\"2026-08-04T19:23:43.730356-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHRaceDetection\",\"Output\":\"=== RUN   TestHRaceDetection\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.730613-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHRaceDetection\",\"Output\":\"--- PASS: TestHRaceDetection (0.00s)\\n\"}\n{\"Time\":\"2026-08-04T19:23:43.730624-07:00\",\"Action\":\"pass\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHRaceDetection\",\"Elapsed\":0}\n{\"Time\":\"2026-08-04T19:23:43.730635-07:00\",\"Action\":\"run\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHInt64Overflow\"}\n{\"Time\":\"2026-08-04T19:23:43.730638-07:00\",\"Action\":\"output\",\"Package\":\"gocascade/candidate\",\"Test\":\"TestHInt64Overflow\",\"Output\":\"=== RUN   TestHInt64Overflow\\n\"}",
+    "shadow": true
+  },
+  {
+    "id": "conc_parallel_filter",
+    "problem": "Return the elements of a slice for which keep returns true, in input order, evaluating keep on up to workers goroutines concurrently. An empty input yields an empty result.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0008035104432125
+      },
+      {
+        "tier": "mid",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0073592573762156
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.01298402486
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "conc_fan_in_merge",
+    "problem": "Given several receive-only channels each yielding integers in ascending order and then closing, return a single ascending slice of all their values. Drain the channels concurrently.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0005791961049281
+      },
+      {
+        "tier": "mid",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0064002979868133004
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0107683883864734
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "conc_first_success",
+    "problem": "Given a slice of functions each returning (int, error), run them concurrently and return the result of the first one to succeed with a nil error, cancelling the rest via the provided context. If all fail, return the last error observed.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0007320738695241999
+      },
+      {
+        "tier": "mid",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.009291710608339802
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.013540265333465602
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "conc_parallel_histogram",
+    "problem": "Count the occurrences of each integer in a slice, sharding the work across up to workers goroutines and merging the partial counts into one map. The result must equal a sequential tally. Access to shared state must be race-free.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.12085198061245214,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0008824584471124999
+      },
+      {
+        "tier": "mid",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0095504132283461
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.012787026710275802
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "conc_bounded_pipeline",
+    "problem": "Given a slice, apply stage1 then stage2 to each element, where the two stages run as concurrent pipeline steps connected by a channel, and return the results in input order. An empty input yields an empty result.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0009013731604383
+      },
+      {
+        "tier": "mid",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0060057480922758
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0104432139196453
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_conc_rate_limiter",
+    "problem": "Implement a token-bucket rate limiter with capacity and refill count. Allow(n) atomically consumes n tokens if at least n are available and reports whether it succeeded; refill adds up to capacity. It must be safe for concurrent callers, and the total number of tokens ever granted must never exceed what the bucket could supply. Model the interface so correctness under concurrency is testable.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0.4249871175779984,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0012533416080789
+      },
+      {
+        "tier": "mid",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.0110637407385711
+      },
+      {
+        "tier": "large",
+        "score": 0.2698308834937703,
+        "correct": true,
+        "true_correct": true,
+        "cost_usd": 0.018217868765993697
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "shadow": true
+  },
+  {
+    "id": "hard_conc_once_init",
+    "problem": "Provide a lazily-initialised cache: the first call to Get(key, compute) for a key runs compute exactly once even under concurrent callers, and every caller for that key observes the same value. compute is expensive and must never run twice for the same key.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0009242839067453001
+      },
+      {
+        "tier": "mid",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0082605503228125
+      },
+      {
+        "tier": "large",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.013766565736421899
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound": true,
+    "oracle_unsound_diag": "generated tests do not compile against their own API (V3:vet): V3:vet: # gocascade/candidate\n# [gocascade/candidate]\nvet: ./visible_test.go:119:9: undefined: sync",
+    "shadow": true
+  },
+  {
+    "id": "hard_conc_ordered_fanout",
+    "problem": "Process a slice concurrently with up to workers goroutines and return results in input order, but each result also carries the index; the shared progress counter reporting how many items are done must be readable concurrently and equal len(input) at the end. Results must be exactly one per input.",
+    "tiers": [
+      {
+        "tier": "small",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0010693605606289
+      },
+      {
+        "tier": "mid",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0103783596695469
+      },
+      {
+        "tier": "large",
+        "score": 0,
+        "correct": false,
+        "cost_usd": 0.0191963996726219
+      }
+    ],
+    "cache_hit": false,
+    "cache_correct": false,
+    "cache_cost_usd": 0,
+    "contaminated": false,
+    "oracle_unsound": true,
+    "oracle_unsound_diag": "generated tests do not compile against their own API (V3:vet): V3:vet: hidden_test.go:91:6: assignment copies lock value to _: sync/atomic.Int64 contains sync/atomic.noCopy",
+    "shadow": true
+  }
+]
