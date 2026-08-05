@@ -1017,9 +1017,12 @@ merely over-rejected). The one confirmed case of the dangerous direction — a j
 *accepting* wrong code (η_fa > 0) — was a **scar-free data race**: a defect a reader
 cannot see, caught by the executable oracle under `V_5`. For logic defects and
 races-with-a-visible-tell, a strong judge was reliable and strictness-robust (37/37
-such seeded defects caught, permissive setting included). So §3.1's floor is real, but
-its bite is concentrated exactly where the paper says execution's soundness matters:
-reading-invisible defects.
+such seeded defects caught, permissive setting included). So §3.1's floor is real; that
+its bite is concentrated exactly where the paper says execution's soundness matters —
+reading-invisible defects — is the natural reading of these observations but remains
+*argued* rather than established, because it rests on a single live event: the seeded
+sweep that would test the class directly is declined on power later in this section, and
+absence of false acceptances on the *other* defect classes is not evidence about this one.
 
 **A validation-relevant hazard the paper does not discuss: oracle *unsoundness* from
 generated tests.** §3.6/§5.1 treat the oracle as sound by construction (execution ⇒
@@ -1156,6 +1159,45 @@ acceptance path reads it, and no verifier stage may consume it, since a field th
 influenced acceptance would be a new oracle input with no soundness argument behind it.
 Retention is limited to disagreements: at n = 409 that is 166 programs rather than 1096,
 and agreeing observations carry no forensic information by construction.
+
+The other route to the same claim — *seeding* the reading-invisible class rather than
+waiting to observe it — is implemented, and we report it as declined on statistical power,
+because a reader is otherwise entitled to ask why an available experiment was not run.
+Sound seeding requires mutants whose synchronization scaffolding is intact: a deleted
+`wg.Wait()` leaves a WaitGroup that is never waited on, and the judge scored 20 of 20 on
+such mutants by noticing the imbalance rather than by reasoning about interleaving. Three
+scar-free operators were therefore built (downgrade a `Lock`/`Unlock` pair to
+`RLock`/`RUnlock`, co-mutating the declaration to `sync.RWMutex`; move the last guarded
+statement out past the `Unlock`; replace `wg.Wait()` with `defer wg.Wait()`), each
+validated to compile and to draw an actual race report. Measured against the 11
+concurrency problems, they yield 15 candidate edit sites and **9 mutants that both compile
+and race**, spread over 7 problems. Against the sync-deletion arm's 0 of 20 on the same
+problems, three or more false acceptances would be needed to reach *p* < 0.05, and a null
+would bound the scar-free false-acceptance rate at 0.283. We set a threshold of ten usable
+seeds before running the harvest and obtained nine, so the sweep was not run and the
+mechanism claim is left argued. We record that this is a close call rather than a clear
+one: a single false acceptance would be an existence proof requiring no significance test
+at all, and its probability at nine seeds exceeds 0.85 for any rate above 0.2.
+
+Two aspects of that measurement are worth reporting, because both were initially wrong in
+the direction that favoured declining. First, the downgrade operator originally rewrote
+only its call sites and left the receiver declared as a `sync.Mutex`, so every one of its
+mutants failed to compile; the resulting shortfall was attributed to the benchmark
+containing no `sync.RWMutex` rather than to the operator, and co-mutating the declaration
+recovers four seeds. Deferring a type constraint to the compiler converts an unreachable
+operator into an empty result, and an empty result is easily read as a finding. Second,
+the comparison was initially made against 17 mutants drawn from a different arm of the
+experiment on a different problem subset, rather than the 20 from the arm being contrasted;
+that substitution alone raised the apparent critical value and understated the sweep's
+power several-fold. We note also that the nine seeds are harvested from reference solutions
+whereas the sweep itself mutates model-generated candidates, so the figure is a proxy for a
+denominator that has not been measured — and that all nine are refuted by the ordinary test
+run as well as under the race detector, which means they do not exercise the detector as
+the only sound rung, though it does not follow that a reader would notice the defect.
+Widening the concurrency corpus would raise the denominator, and we flag the accompanying
+hazard for anyone extending a benchmark to feed a mutation operator: problems authored
+*because* these operators can mutate them tune the benchmark to the instrument, and such
+additions must be identified as post hoc.
 
 Two corrections to §5.6's earlier text. First, **α = 0.05 does not certify at n = 409**.
 The n = 64 pinned run that did certify recorded 0 errors in 52 problems; at 409 problems

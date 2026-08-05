@@ -8,6 +8,7 @@ import (
 	"go/printer"
 	"go/token"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -215,6 +216,23 @@ func KilledMutants(ctx context.Context, r *Runner, src, visible, hidden string, 
 type KilledMutant struct {
 	Source string
 	Desc   string
+
+	// DataRace is true when ThreadSanitizer actually reported a race, as opposed
+	// to the mutant merely failing under `-race` (a wrong answer, or a timeout).
+	// Experiment 28's first pass conflated the two and reported six "race seeds"
+	// of which one — a deferred wg.Wait() on conc_safe_counter — produced no race
+	// at all, just `got 0 want 400`. For the scar-free arm this is a hard filter
+	// (see ScarFreeRaceKilledMutants); the deletion arm keeps the flag forensic so
+	// the shared harvest stays comparable.
+	DataRace bool
+
+	// PlainRefuted is true when the ordinary test run (no -race) also refutes the
+	// mutant. It is recorded, never filtered on: for a *race* seed it means the
+	// defect is not reading-invisible after all — a reader sees a deterministically
+	// wrong program — which is a property of the seed set that belongs in the
+	// write-up rather than a reason to discard, since discarding on one arm only
+	// would make the two arms' η_fa rates incomparable (raceKilledFrom's contract).
+	PlainRefuted bool
 }
 
 // collectRaceSites finds statements whose deletion introduces a data race
@@ -306,6 +324,57 @@ func syncCall(fset *token.FileSet, stmt ast.Stmt) (recv, method string, sel *ast
 	return exprText(fset, sel.X), sel.Sel.Name, sel, true
 }
 
+// mutexTypeOf finds the `sync.Mutex` or `sync.RWMutex` type expression declaring
+// the lock a receiver refers to, so the downgrade operator can co-mutate it to
+// `sync.RWMutex` in the same edit. Returns nil when no such declaration is found.
+//
+// RWMutex is matched as well as Mutex, and not for symmetry: a source that
+// already declares an RWMutex needs no type change but is still a valid site, and
+// an earlier version that matched only `Mutex` would have skipped it. Rewriting
+// RWMutex to RWMutex is a no-op, so one code path covers both.
+//
+// It matches on the receiver's final identifier (`c.mu` and `r.mu` both look for
+// `mu`) across every `var` spec and struct field in the file, which is a
+// heuristic: a file declaring two distinct mutexes both named `mu` could have the
+// wrong one rewritten. That is acceptable *only* because the harvest filter is
+// downstream — a mismatched rewrite either fails to compile or fails to race, and
+// either way the mutant is discarded rather than counted. Do not lift this helper
+// somewhere that lacks that backstop.
+func mutexTypeOf(f *ast.File, recv string) *ast.SelectorExpr {
+	name := recv
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		name = name[i+1:]
+	}
+	var found *ast.SelectorExpr
+	consider := func(names []*ast.Ident, typ ast.Expr) {
+		sel, ok := typ.(*ast.SelectorExpr)
+		if !ok || found != nil {
+			return
+		}
+		pkg, isIdent := sel.X.(*ast.Ident)
+		if !isIdent || pkg.Name != "sync" ||
+			(sel.Sel.Name != "Mutex" && sel.Sel.Name != "RWMutex") {
+			return
+		}
+		for _, n := range names {
+			if n.Name == name {
+				found = sel
+				return
+			}
+		}
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch d := n.(type) {
+		case *ast.ValueSpec:
+			consider(d.Names, d.Type)
+		case *ast.Field:
+			consider(d.Names, d.Type)
+		}
+		return found == nil
+	})
+	return found
+}
+
 // hasCommentIn reports whether any comment sits inside [from,to). The scar-free
 // reordering operator uses this as a veto: moving a statement past a comment
 // leaves the comment attached to the wrong line, and a stray or contradictory
@@ -331,12 +400,27 @@ func hasCommentIn(f *ast.File, from, to token.Pos) bool {
 // false-accepting a *model-authored* race live. The reading-invisible class needs
 // mutants with nothing missing. Three operators:
 //
-//  1. Lock/Unlock -> RLock/RUnlock. Every call is still present and paired; the
-//     guarded write is simply no longer exclusive. Only compiles on an RWMutex,
-//     which the build filter enforces rather than a type check.
+//  1. Lock/Unlock -> RLock/RUnlock, co-mutating the receiver's declaration from
+//     sync.Mutex to sync.RWMutex. Every call is still present and paired; the
+//     guarded write is simply no longer exclusive, and a read lock held over a
+//     write is the reading-invisible defect par excellence — nothing is missing
+//     from the page, the lock is simply the wrong one.
+//
+//     The co-mutation is not optional and its absence was a measurement bug. An
+//     earlier version edited only the call sites and left the declaration alone,
+//     relying on "the build filter enforces the RWMutex rather than a type
+//     check". On a benchmark of plain sync.Mutex that silently yields ZERO
+//     mutants — all six sites compile-fail on `mu.RLock undefined` — and
+//     experiment 28 first reported that as a property of the corpus ("no
+//     sync.RWMutex anywhere in examples/bench") rather than of the operator.
+//     Deferring a type constraint to the compiler turns an unreachable operator
+//     into an empty result, and an empty result reads as a finding. Both halves
+//     of the type change belong to the same edit.
+//
 //  2. Move the last guarded statement out of the critical section, past the
 //     Unlock. The Lock/Unlock pair survives untouched and the section stays
 //     non-empty, so nothing reads as dangling.
+//
 //  3. `wg.Wait()` -> `defer wg.Wait()`. The Wait is still there and still runs;
 //     it just no longer happens before the statements that read what the
 //     goroutines wrote.
@@ -382,16 +466,32 @@ func collectScarFreeRaceSites(src string) ([]mutation, *token.FileSet, *ast.File
 					continue
 				}
 
-				// Operator 1: downgrade the pair to a read lock. Both halves are
-				// edited together — a lone RLock against an Unlock would not
-				// compile, and worse, would be an imbalance a reader could spot.
+				// Operator 1: downgrade the pair to a read lock. All three edits
+				// are one mutation — a lone RLock against an Unlock would not
+				// compile, and worse, would be an imbalance a reader could spot,
+				// while RLock against a plain sync.Mutex does not compile at all.
+				// The declaration comes along; see the operator's doc comment for
+				// why leaving it behind is a measurement bug and not a shortcut.
 				lockSel, unlSel := sel, unlockSel
-				sites = append(sites, mutation{
-					apply:  func() { lockSel.Sel.Name, unlSel.Sel.Name = "RLock", "RUnlock" },
-					revert: func() { lockSel.Sel.Name, unlSel.Sel.Name = "Lock", "Unlock" },
-					desc: pos + ": downgrade " + recv +
-						" Lock/Unlock to RLock/RUnlock (guarded write loses exclusivity)",
-				})
+				if decl := mutexTypeOf(f, recv); decl != nil {
+					// Capture the original type name rather than assuming "Mutex":
+					// on a source already declaring an RWMutex, reverting to Mutex
+					// would leave the AST wrong for every later site in the file.
+					was := decl.Sel.Name
+					sites = append(sites, mutation{
+						apply: func() {
+							lockSel.Sel.Name, unlSel.Sel.Name = "RLock", "RUnlock"
+							decl.Sel.Name = "RWMutex"
+						},
+						revert: func() {
+							lockSel.Sel.Name, unlSel.Sel.Name = "Lock", "Unlock"
+							decl.Sel.Name = was
+						},
+						desc: pos + ": downgrade " + recv +
+							" Lock/Unlock to RLock/RUnlock, declaration to sync.RWMutex" +
+							" (guarded write loses exclusivity)",
+					})
+				}
 
 				// Operator 2: move the last guarded statement out past the Unlock.
 				// Requires a plain (non-deferred) Unlock and at least two guarded
@@ -483,16 +583,33 @@ func RaceKilledMutants(ctx context.Context, r *Runner, src, visible, hidden stri
 // finds nothing missing. This is the seed generator for the class §3.1 is
 // actually about, and the one the deletion operator provably cannot reach.
 //
-// It can legitimately return nothing. The operators need an RWMutex, a critical
-// section with two or more statements, or a Wait with reads after it; a solution
-// with none of those yields no sites. That is a property of the program, not a
-// failure, and the caller must report it as coverage rather than as η_fa = 0.
+// It can legitimately return nothing. The operators need a mutex-guarded section,
+// a critical section with two or more statements, or a Wait with reads after it; a
+// solution with none of those yields no sites. That is a property of the program,
+// not a failure, and the caller must report it as coverage rather than as η_fa = 0.
+//
+// Unlike the deletion arm this one requires an actual ThreadSanitizer report, not
+// merely a `-race` failure. The whole point of the arm is that the defect is a
+// race a reader cannot see; a mutant that returns the wrong answer deterministically
+// is a different defect class wearing this operator's clothes, and counting it
+// inflates the denominator with seeds that test nothing about race-blindness.
+// Experiment 28's first pass did exactly that on conc_safe_counter.
 func ScarFreeRaceKilledMutants(ctx context.Context, r *Runner, src, visible, hidden string, n, raceCount int, timeout time.Duration) ([]KilledMutant, error) {
 	sites, fset, f, err := collectScarFreeRaceSites(src)
 	if err != nil {
 		return nil, err
 	}
-	return raceKilledFrom(ctx, r, sites, fset, f, src, visible, hidden, n, raceCount, timeout)
+	all, err := raceKilledFrom(ctx, r, sites, fset, f, src, visible, hidden, n, raceCount, timeout)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]KilledMutant, 0, len(all))
+	for _, m := range all {
+		if m.DataRace {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }
 
 // raceKilledFrom is the harvest loop shared by both race operator sets: print
@@ -548,9 +665,22 @@ func raceKilledFrom(ctx context.Context, r *Runner, sites []mutation, fset *toke
 		// flakiness is exactly what a reader cannot rely on catching.
 		race := ws.run(ctx, timeout*time.Duration(raceCount)+30*time.Second, true,
 			"test", "-race", "-count="+strconv.Itoa(raceCount), "./...")
-		if race.Err != nil || race.TimedOut {
-			out = append(out, KilledMutant{Source: mutant, Desc: m.desc}) // race-refuted
+		if race.Err == nil && !race.TimedOut {
+			continue
 		}
+		// Distinguish "ThreadSanitizer reported a race" from "failed under -race",
+		// and record whether the plain run refutes it too. Neither is a filter here
+		// — the shared harvest must treat both arms identically or their η_fa rates
+		// stop being comparable, which is the entire reason this loop is shared.
+		// ScarFreeRaceKilledMutants applies the DataRace requirement on top.
+		plain := ws.run(ctx, timeout*time.Duration(raceCount)+30*time.Second, false,
+			"test", "-count="+strconv.Itoa(raceCount), "./...")
+		out = append(out, KilledMutant{
+			Source:       mutant,
+			Desc:         m.desc,
+			DataRace:     strings.Contains(race.Output, "DATA RACE"),
+			PlainRefuted: plain.Err != nil || plain.TimedOut,
+		})
 	}
 	return out, nil
 }
