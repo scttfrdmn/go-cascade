@@ -1,0 +1,27 @@
+{
+  "valid": false,
+  "alpha": 0.05,
+  "delta": 0.1,
+  "n_calibration": 56,
+  "n_shadow": 56,
+  "n_excluded_contaminated": 0,
+  "n_excluded_oracle_unsound": 8,
+  "method": "fixed-sequence",
+  "grid_size": 121,
+  "tiers": [
+    "small",
+    "mid",
+    "large"
+  ],
+  "thresholds": [
+    0.5,
+    0
+  ],
+  "empirical_risk": 0,
+  "realized_risk": 0,
+  "p_value": 0.056561627350253246,
+  "expected_cost_usd": 0.005349328720594599,
+  "mutation_score_mean": 0,
+  "note": "calibrated on the cache-bypass shadow stream; no threshold vector certifies alpha=0.050 at delta=0.100 with n=56. Lowest achievable empirical risk is 0.000. Raise alpha, add calibration data, or add a tier.",
+  "created_at": "2026-08-05T03:58:17.170469Z"
+}

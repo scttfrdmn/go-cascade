@@ -16,7 +16,7 @@ was a small-sample artifact; the real model-accuracy floor is 0.0538), and the
 certifiable-α-vs-cost-win tension **reproduces** rather than dissolving. Read the rest of
 this file with that correction in mind.
 
-**One-line summary:** across twenty-two live experiments (plus three decided offline for $0)
+**One-line summary:** across twenty-three live experiments (plus three decided offline for $0)
 the executable oracle was
 sound every time (β = 0, realized risk = empirical risk) and **certified a
 strictly lower risk bound than the judge oracle on identical candidates, a gap
@@ -107,6 +107,7 @@ refute (the dangerous direction). "β" = judge failed a program the tests accept
 | 23 | [arm (e) feasibility](README.md#experiment-23--552-arm-e-self-consistency-at-matched-cost-0-so-far-offline) | §5.5(2)'s last unimplemented arm — self-consistency at matched cost. Asks first, for $0, what the matched budget actually buys | **the arm is implemented and the free check rules it out at every tier but the cheapest.** Matched budget $0.0101/q under τ=[1,1]; at the profiled 2:1:1 fan-out that buys median **49** cheap-tier samples (0.0% below a 3-vote), **2** mid (79.2% below), **1** frontier (**99.5%** below). So a frontier arm (e) at matched cost is **always-frontier relabelled** and a mid-tier one is a coin flip — run as §5.5(2) literally specifies it (tier unnamed) it would have **reported a degenerate configuration as a null about self-consistency**, the same trap as experiment 22's uniform absorption. Only the cheap tier is well-posed, and there it is exactly §3.5's contrast: **49 votes on how the code is written vs 2 on what it does**, same money. Built as a fair foil, not a strawman — normalised-source vote (formatting/comments/import order do not split it), **raw plurality mass** not the Wilson bound (invariant #9 governs the *routing* score; arm (e) crosses no threshold), and it never consults the verifier to pick a winner. Both selectors scored on the **same candidates at the same cost**, so the selector is isolated; cluster abstentions reported separately, not scored wrong (invariant #4). `selfconsistency` **refuses `-sample` on a ruled-out tier.** Paid pass **run — experiment 24** |
 | 24 | [arm (e) live](arm-e-live-n409.md) | the paid pass at the one tier experiment 23 did **not** rule out: does a source-text majority vote beat behavioural clustering at matched per-problem cost, on identical candidates? | **execution wins decisively, and the interesting part is *where*.** Paired on the 366 rows both selectors answered: text vote **295/366 (0.806)** vs behavioural cluster **335/366 (0.915)**, median fan-out **50** samples — ~50 votes on how the code is *written* against 2 on what it *does*, same money, and the text vote still loses. McNemar on the 50 discordant pairs: **45 text-wrong/cluster-right vs 5 the other way, p = 4.2e-09**. **The finding is the abstentions:** where the cluster abstained (nothing survived the ladder — an escalation in a real cascade), the text vote was right **1/43 (0.023)** while its vote mass barely moved (0.604 vs 0.661 elsewhere) — it is **confidently wrong exactly where execution knows it has nothing**, which is an inversion, not the gradual degradation a "weaker selector" story predicts. Agreement carries no signal (313 agreed rows: 293 vs 290); the **entire** margin is the 53 disagreements (text 2, cluster 45), i.e. when they diverge it is almost always the text vote preferring a popular wrong program. **A reporting bug found and fixed in the same pass:** the summary printed text over all 409 voted rows against the cluster over 366, reading as a 0.19 gap where the paired figure is **0.11** — both numbers correct, different denominators, no test failing. Bill **$18.77** ($4.71 matched + $14.06 oracle = 75%), against the **$4.12** originally quoted, which was the matched *budget* mistaken for the invoice |
 | 25 | [concurrency coverage](conc-coverage-n11-2026-08-04.md) | the `-race` rung — the ladder stage that caught the study's **only** confirmed judge over-acceptance — **never fired in experiment 21**, because MultiPL-E Go has 0 concurrency problems and a skipped stage scores `OK`. Exercise it on the 11 concurrency problems of the hand-written set (`concurrency.jsonl`; exactly 11 of 64 references trip the predicate) | **the rung fires (2.1 s at `-count=3` vs 605 ms plain), and the finding is the oracle's clock, not concurrency.** A generated `TestHInt64Overflow` on a counter that increments by **one** needs 20 s at a measured 215 M adds/s — sound assertion, **non-terminating test** — and it refuted the *reference* eleventh in a 30 s budget, flagging the record `OracleUnsound` with `timed_out` on all three tiers. **Without #63 this reads as η_fa = 3/26 = 0.115**, 11× experiment 21's 11/1096, from one test; the reference passes its own canonical suite in 673 ms, so it was never machine load. Excluding it: **η_fa = 0/23, all 6 disagreements over-rejections** (small 4, mid 2, large 0) — and #49's retention gives its first live data (6/6 carry source), showing the **mirror image** of §3.5: *correct* code (disjoint-index writes, mutex-merged local maps) that *reads* racy. By-product: **6 of these 11 problems were oracle-unsound in experiment 12 vs 6 of the other 53** — ~5×, so the class the paper most needs has the least trustworthy oracle. n=11 certifies nothing (α ≥ 0.19 required at δ=0.10); coverage, not a certificate. $0.8, 13 min |
+| 26 | [coder-specialist tier 0](qwen-coder-tier0-n64-2026-08-04.md) | the cheap bottom tier is the **only** cost lever that has ever worked in this study (experiment 11, 3.2–3.4×); every other lever bought accuracy with money and lost. Qwen3-Coder 30B A3B is the sharpest remaining test because it is **cheaper than the incumbent** ($0.15/$0.60 per MTok vs Maverick's $0.24/$0.97), so a win cannot be reread as "we spent more" — and it is the first *coder specialist* at tier 0 | **the premise is refuted in direction: the specialist is *less* accurate at tier 0, 0.9149 → 0.8298 paired over 47** (McNemar 5-vs-1, exact p=0.22 — clear direction, not significant at this n). Escalations rose **3 → 7** at τ=[0.1,1] and cost at the cheapest threshold rose **2.1× at 2× the risk**; no threshold vector is both cheaper and no riskier. The per-sample saving is real and **irrelevant** — 1.42× cheaper per clean sample, but **tier 0 is 0.8% of the bill** ($0.027 of $3.5), exactly as the scope doc predicted the win would have to come from escalations. Two by-products outlive the arm. **Repair, not the per-token rate, dominates cheap-tier cost:** a **5.9× spread** around the median, and the scope doc's clean 4-problem probe was **1.9× optimistic**. And **the α difference has a frontier-tier cause, not a tier-0 one** — Qwen certifies α=0.10 where Maverick certifies 0.05, which invites "its cheap tier is weak," but Qwen's mid tier is **perfect** and its *large* tier misses one problem; the final tier has no threshold (invariant #6), so that floors risk at 1/47 and α=0.05 is unreachable **whatever tier 0 does**. **A tier-0 intervention at n≈50 can be decided by one frontier draw.** Both arms carry exactly one confident-wrong tier-0 answer, so neither reaches experiment 17's zero-confident-wrong condition; in both, that class is commoner among the oracle-unsound **exclusions** than the inclusions — experiment 17's coincidence, reproduced. Also: `conc_safe_counter`, experiment 25's non-terminating test and the one id unsound in **both** prior draws, is **sound here**; the two arms' unsound sets overlap on **3 of 17** ids ever flagged. $3.5 (74% unrecorded spec), 54 min |
 
 ### How each run answered the previous one's limitation
 
@@ -565,21 +566,55 @@ each spec keys on `cache.ProblemHash(problem + pinned + api)`, so across distinc
 reuse is exactly zero, and calibration forces `cache_dir=""` anyway (invariant #8). Check a
 cache key's cardinality before claiming a cache saves anything.
 
-## Proposed: a coder-specialist tier 0 (scoped, unapproved, unrun)
+## Experiment 26 — a coder-specialist tier 0 is not a cost lever ($3.5)
 
-Scope in [`qwen-coder-tier0-scope.md`](qwen-coder-tier0-scope.md); config in
+Write-up [`qwen-coder-tier0-n64-2026-08-04.md`](qwen-coder-tier0-n64-2026-08-04.md); scope
+in [`qwen-coder-tier0-scope.md`](qwen-coder-tier0-scope.md); config
 `examples/bench/config.qwen-coder-211.json`.
 
 The cheap bottom tier is the only cost lever in this study that has ever worked
 (experiment 11, 3.2–3.4×). Every other lever bought accuracy with money and lost — an Opus
 planner was 3.1× *pricier* (15), a Haiku planner did not rescue it (16), plan-once-reuse was
-negative (18). Qwen3 Coder 30B A3B is the first candidate that is **cheaper than the
-incumbent, not merely better**: verified us-west-2 rates $0.15/$0.60 per MTok against
-Maverick's $0.12/$0.97, and a measured 4-problem probe put a real sample at **$0.000092 vs
-Maverick's profiled $0.000174** — 1.9× cheaper. So a win there cannot be reread as "we spent
-more."
+negative (18). Qwen3-Coder 30B A3B was the sharpest remaining test because it is **cheaper
+than the incumbent, not merely different** — verified us-west-2 on-demand rates $0.15/$0.60
+per MTok against Maverick's $0.24/$0.97 — so a win could not be reread as "we spent more."
+It is also the first *coder specialist* at tier 0; every prior cheap tier was general.
 
-Two findings that make this cheap to try, both verified live rather than assumed:
+**The premise is refuted in direction. A coder specialist did not raise cheap-tier accuracy,
+it lowered it: 0.9149 → 0.8298 paired over the 47 problems usable in both arms** (McNemar
+5-vs-1, exact p=0.22 — directionally clear, not significant at this n). Escalations rose
+3 → 7 at τ=[0.1,1] and cost at the cheapest threshold rose **2.1× at 2× the risk**. There is
+no threshold vector on this draw where the specialist is both cheaper and no riskier.
+
+**The per-sample saving is real and irrelevant**, which is the scope doc's own prediction
+confirmed: 1.42× cheaper per clean sample, and **tier 0 is 0.8% of the bill** ($0.027 of
+$3.5), so a cheaper tier-0 line cannot pay for itself. Two by-products worth keeping:
+
+- **Repair, not the per-token rate, dominates cheap-tier cost.** Tier-0 cost per problem
+  spans $0.000182–$0.002023, a **5.9× spread** around the median, entirely repair rounds.
+  The scope doc's 4-problem clean probe ($0.000092/sample) was **1.9× optimistic** against
+  the measured median. Price a tier with `repair_depth` set as configured, not from a clean
+  generation.
+- **The α difference has a frontier-tier cause, not a tier-0 one — and reporting it the
+  obvious way would have been wrong.** Qwen certifies α=0.10 where Maverick certifies 0.05,
+  which invites "its cheap tier is too weak." Per-tier misses say otherwise: Qwen's mid tier
+  is **perfect (0 misses)** and its *large* tier misses one problem
+  (`hard_num_mean_overflow`). The final tier has no threshold (invariant #6), so a frontier
+  miss floors empirical risk at 1/47 = 0.0213 and α=0.05 is unreachable **whatever tier 0
+  does**. Both arms share the mid and large models; it is the same problem Maverick's *mid*
+  tier missed. So **a tier-0 intervention at n≈50 can be decided by a single frontier
+  draw** — exactly the failure mode experiment 17 saw in 1 of its 6 draws. Read future
+  cheap-tier arms at α≥0.10, or at an n where one top-tier sample cannot move the
+  certificate.
+
+Both arms carry exactly one confident-wrong tier-0 answer in the clean set, so neither
+reaches experiment 17's zero-confident-wrong condition and neither gets the clean win. In
+both arms the class is **more common among the oracle-unsound exclusions than the inclusions**
+(3-of-12 and 5-of-8) — experiment 17's coincidence, reproduced: the cheap tier's confident
+mistakes keep landing on problems whose generated oracle is independently unsound, and the
+exclusion set is not the model's doing.
+
+Two infrastructure findings from the scoping, both verified live rather than assumed:
 
 - **There is no second endpoint.** `qwen.qwen3-coder-30b-a3b-v1:0`,
   `qwen.qwen3-coder-480b-a35b-v1:0`, `moonshotai.kimi-k2.5`, `zai.glm-4.7` and
@@ -589,18 +624,39 @@ Two findings that make this cheap to try, both verified live rather than assumed
   opposite at first. It calls `ListInferenceProfiles`, which returns only `us.*` profiles;
   the open-weight IDs are bare. Use `aws bedrock list-foundation-models --region us-west-2`.
 
-What the arm **cannot** test: certifiable α. Invariant #9 caps tier 0's routing score by
-**fan-out**, not accuracy — the Wilson unanimous ceiling is 0.2698/0.4249/0.6488 at n=1/2/5,
-and the n=409 records confirm tier 0's maximum observed score is exactly **0.42499**, the
-n=2 ceiling, while tier-0 accuracy is already 0.7702. Under τ=[1,1] tier 0 can never accept
-regardless of which model sits there. Read it as a test of escalation rate and mean
-cost/query. Tier 0 is 3.4% of recorded tier cost, so the win must come from **fewer
-escalations**, not from a cheaper tier-0 line. Falsifiable prediction: escalations and mean
-cost fall, certifiable α does not move; if α *does* improve, my reading of the ceiling is
-wrong, which is the more interesting outcome.
+And two defects in the scope doc itself, caught before spending — each would have produced a
+wrong number:
 
-Estimated at **~$3.20 on the 64-problem hand-written set** (the recommended first pass — it
-is also the set that still has concurrency coverage) and **~$20 at n=409**. Unapproved.
+1. **`-refs examples/bench/refs` resolves 28 of 64 references**, not 64: `hard/` and `scale/`
+   carry their own `refs/` subdirectories. That leaves **36 problems with no
+   oracle-soundness gate at all** (`validateOracle` returns `OracleSound` on a missing
+   reference — correct behaviour, and exactly what makes the mistake silent) and is not
+   comparable to the matched Maverick arm. The `loaded 64/64` stderr line is the check.
+2. **Maverick's "$0.12/MTok in" is its *batch* rate**; Converse bills on-demand at $0.24.
+   The config has always used 0.24, so no published figure moves, but the error ran in the
+   conservative direction — Qwen is cheaper on **both** legs, not only output.
+   `list-foundation-models` returns four rows per Meta model, and batch/on-demand differ by
+   exactly 2×. Filter on `usagetype`.
+
+Denominators, because the arms share nothing — not candidates, not generated tests, and **not
+the exclusion set** (oracle soundness is a property of the *generated* suite, regenerated per
+run): Maverick 52 usable of 64, Qwen **56** of 64, **47 paired**. The per-arm tier-0 rates
+(0.8846 over 52 vs 0.8393 over 56) are each correct and **not comparable** — their 0.045 gap
+is half the paired 0.085. `results/compare_tier0.py` computes every comparative figure over
+the intersection with McNemar's exact test, prints per-arm rates only under a NOT-comparable
+header, and with `-pair-out` hands the paired subsets to the shipped
+`calibrate -from-records` rather than reimplementing LTT (a second untested copy of the
+fixed-sequence ordering is how invariant #7 gets quietly broken).
+
+**Instability, third data point.** `conc_safe_counter` — the non-terminating
+`TestHInt64Overflow` that was experiment 25's entire headline, and the one id flagged unsound
+in both prior draws — came out **sound here**; the spec model did not write that test this
+draw. The two arms' unsound sets overlap on **3 of the 17 ids ever flagged**. Experiment 19's
+"rejection-side rates are not stable at n=64" now reproduces across three subcommands and two
+oracles.
+
+Bill **$3.5** ($0.90 recorded tier cost + ~$2.61 unrecorded spec/oracle = **74%**) against
+~$3.6 scoped. 64/64, 54 min, no kill.
 
 ## What is NOT established (open, honest)
 
@@ -707,9 +763,20 @@ is also the set that still has concurrency coverage) and **~$20 at n=409**. Unap
 - **Judge β depends on the prompt.** The judge ran with "when in doubt, FAIL";
   its false-rejection counts would move under a different operating point. The
   strictness knob exists (`--judge-strictness`) but was only exercised on small n.
-- **Small n in experiments 1–20, and in 25** (n ≤ 64). Those counts have wide intervals; treat
-  directions, not magnitudes, as the finding. **Experiment 21 is the exception** (n=409
-  usable on a standard benchmark) and is where a magnitude can be quoted.
+- **Small n in experiments 1–20, and in 25–26** (n ≤ 64). Those counts have wide intervals;
+  treat directions, not magnitudes, as the finding. **Experiment 21 is the exception** (n=409
+  usable on a standard benchmark) and is where a magnitude can be quoted. Experiment 26 shows
+  how sharp this bites for *interventions*: a tier-0 model swap at n=47 paired had its
+  certificate decided by **one frontier-tier miss**, a tier the intervention did not touch.
+  Read a cheap-tier arm at α ≥ 0.10, where a single top-tier error is inside the budget, or
+  at an n where one such sample cannot move the bound.
+- **No cheap-tier model swap has ever produced a cost win, and the one that did is
+  unexplained.** Experiment 11's 3.2–3.4× (Llama 4 Maverick at 2:1:1) is still the only
+  working cost lever in the study, and experiment 26 shows it is **not** attributable to
+  model quality: a purpose-built coder specialist that is cheaper per sample was *less*
+  accurate at tier 0 (0.9149 → 0.8298 paired) and escalated more. So what makes Maverick
+  work at that tier is unidentified — it is not "a better cheap coder," because a better
+  cheap coder was tried.
 - **The `-race` rung is exercised, but only at n=11** (experiment 25). MultiPL-E Go has
   **0** concurrency problems, so experiment 21 — the only large-n run — never ran the
   ladder stage that caught the study's sole confirmed judge over-acceptance. The n=409
@@ -767,5 +834,14 @@ costs, which omit the shared spec/oracle term entirely — Cost Explorer shows *
 of real Bedrock spend against roughly $40 published, with the oracle model alone at 91%.
 See [§A correction to every cost figure on this page](#a-correction-to-every-cost-figure-on-this-page-no-experiment-no-cost)
 for the breakdown and for the two traps in querying it back. Recent runs quote both terms:
-experiment 24 billed $18.77 against a $4.12 *budget*, and experiment 25 cost $0.34 recorded
-plus ~$0.45 unrecorded spec ≈ $0.8.
+experiment 24 billed $18.77 against a $4.12 *budget*, experiment 25 cost $0.34 recorded
+plus ~$0.45 unrecorded spec ≈ $0.8, and experiment 26 cost $0.90 recorded plus ~$2.61 spec
+≈ $3.5 (spec **74%**) against ~$3.6 scoped — the first run scoped with the spec term
+included up front, and it landed.
+
+Experiment 26 adds a second lesson about pricing a *tier* rather than a run: its scope doc
+priced Qwen3-Coder from a 4-problem probe at $0.000092/sample and the run measured
+$0.000172 (median, clean) — **1.9× optimistic**, because the probe generated once while
+`repair_depth: 2` makes a failing candidate cost extra turns. Tier-0 cost per problem spans
+a **5.9×** range around the median, all of it repair. Price a tier at its median with
+repair enabled.
