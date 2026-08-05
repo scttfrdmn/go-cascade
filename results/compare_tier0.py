@@ -46,6 +46,18 @@ What it reports:
 
 Ground truth is `true_correct` falling back to `correct`, mirroring `TierObs.truth()`
 in internal/calibrate/ltt.go.
+
+With `-pair-out <stem>` it also writes `<stem>.A.json` / `<stem>.B.json`, each arm
+restricted to the paired denominator, so that
+
+    go-cascade calibrate -from-records <stem>.A.json -alpha X -delta 0.10 -baselines
+
+certifies each arm through the **real** LTT implementation on one denominator. The
+alternative — reimplementing Hoeffding-Bentkus and the fixed-sequence ordering here —
+would put a second, untested copy of a load-bearing statistical claim into a throwaway
+analysis script (invariant #7 lives in `Calibrate`, and its grid ordering must stay
+data-independent). Escalation and cost above are safe to recompute here because they
+are arithmetic over recorded scores; a *certificate* is not.
 """
 
 import json
@@ -113,9 +125,17 @@ def pct(k: int, n: int) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
+    argv = sys.argv[1:]
+    pair_out = None
+    if "-pair-out" in argv:
+        i = argv.index("-pair-out")
+        if i + 1 >= len(argv):
+            sys.exit("-pair-out needs a path stem")
+        pair_out = argv[i + 1]
+        del argv[i:i + 2]
+    if len(argv) != 2:
         sys.exit(__doc__)
-    a_path, b_path = sys.argv[1], sys.argv[2]
+    a_path, b_path = argv[0], argv[1]
     a_all, b_all = load(a_path), load(b_path)
     a, b = usable(a_all), usable(b_all)
     a_name = pathlib.Path(a_path).name
@@ -215,6 +235,18 @@ def main() -> int:
         ids = sorted(arm)
         ok = sum(truth(arm[i]["tiers"][0]) for i in ids)
         print(f"  {nm:52s} tier-0 acc {pct(ok, len(ids))}")
+
+    # ---- the paired subsets, for certification by the real LTT ------------------
+    if pair_out:
+        for suffix, arm in (("A", a), ("B", b)):
+            p = pathlib.Path(f"{pair_out}.{suffix}.json")
+            p.write_text(json.dumps([arm[i] for i in both], indent=1))
+            print(f"\nwrote {p} ({len(both)} paired records)")
+        print("  Certify each through the real implementation, one denominator:")
+        print(f"    go-cascade calibrate -from-records {pair_out}.A.json "
+              f"-alpha A -delta 0.10 -baselines -o /tmp/a.json")
+        print(f"    go-cascade calibrate -from-records {pair_out}.B.json "
+              f"-alpha A -delta 0.10 -baselines -o /tmp/b.json")
     return 0
 
 
