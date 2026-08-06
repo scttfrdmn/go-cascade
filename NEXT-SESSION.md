@@ -7,10 +7,16 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be at the cost-tagging cross-region fix (the
-   follow-up to PR #75 / issue #74), 74 PRs merged. That PR was **open and unmerged**
-   when this file was written — if it still is, confirm CI green and I'll tell you
-   whether to merge; don't merge unilaterally.
+1. **Check git state.** `main` should be `99a657a` — the cost-tagging cross-region fix
+   (PR #76, follow-up to #75 / issue #74) — with 74 PRs merged and nothing in flight.
+   If a PR *is* open, confirm CI green and I'll tell you whether to merge; don't merge
+   unilaterally.
+   **First actual task: verify the cost attribution in Cost Explorer.** It lags ~1 day,
+   so the tagging has never been confirmed end to end — only that the runtime accepts
+   the ARN. Query `Project=smoke-test` (the ~$0.01 probe on 2026-08-05, expect two tiny
+   line items: haiku and qwen) and `Project=go-cascade`. If `smoke-test` shows nothing
+   while untagged spend moved, the mechanism does not work and every "tagged from here
+   on" claim in this file is wrong.
 2. **Read the project board** —
    https://github.com/users/scttfrdmn/projects/62 — which is now where the open work
    lives, one issue per gap (#49–#53). This file no longer restates the backlog.
