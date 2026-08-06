@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -319,11 +320,24 @@ func TestScarFreeSeedCountOnTheConcurrencyBenchmark(t *testing.T) {
 	for _, op := range []string{"defer-wait", "downgrade", "escape"} {
 		if raceOnly[op] > 0 {
 			// Deliberately Logf, not Errorf: more -race-only seeds is a better arm.
-			t.Logf("operator %s: %d of %d seeds refuted ONLY under -race. Not a failure — "+
-				"it strengthens the arm — but it is machine-dependent (this is what differs "+
-				"between a 2-core CI runner and a 12-core dev box), so say which machine "+
-				"produced any per-operator figure quoted in a write-up.",
-				op, raceOnly[op], gotByOperator[op])
+			//
+			// This is only visible under `go test -v` — a passing test's output is
+			// buffered and discarded, and writing to os.Stderr instead does NOT escape
+			// that (measured, not assumed). So do not read the absence of this line in
+			// a CI log as the absence of a crossing. That is tolerable only because the
+			// ACTIONABLE direction is the floor above, which fails loudly; a crossing
+			// needs no action beyond not quoting a per-operator figure without its
+			// machine, which is recorded permanently in the write-up instead.
+			//
+			// NumCPU, not GOMAXPROCS(0): the mutant runs are child processes with a
+			// curated env (workspace.go) that does not carry GOMAXPROCS, so their
+			// parallelism is the machine's core count, not this binary's setting.
+			t.Logf("operator %s: %d of %d seeds refuted ONLY under -race on this machine "+
+				"(NumCPU=%d). Not a failure — it strengthens the arm — but PlainRefuted is "+
+				"machine-dependent, so name the machine beside any per-operator figure "+
+				"quoted in a write-up. See results/deferred-escape-n11.md, correction of "+
+				"2026-08-06.",
+				op, raceOnly[op], gotByOperator[op], runtime.NumCPU())
 		}
 	}
 }
