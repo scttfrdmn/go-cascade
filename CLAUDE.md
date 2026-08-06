@@ -383,7 +383,7 @@ a test, but the tests will not catch every way of violating them.
   problem seed counts and mutant sources were unrecoverable and the run was not resumable. On
   a null that cost little; on a positive event it would have destroyed the only interesting
   follow-up (*what* did the judge miss?), which is exactly the gap `TierObs.DisagreementSource`
-  closes on the paired arm. **Fixed** (`cascade.SeededRecord`, PR #72): `-records`/`-resume`
+  closes on the paired arm. **Fixed** (`cascade.SeededRecord`, PR #73): `-records`/`-resume`
   now work, `KilledMutant`'s `Source`/`Desc`/`DataRace`/`PlainRefuted` are persisted per
   mutant with the per-level verdicts, checkpointed after every problem — a persistence path,
   not new instrumentation, and forensic only (nothing on the acceptance path reads a record

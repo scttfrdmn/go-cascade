@@ -158,7 +158,7 @@ than findings:
 Free to fix, and the thing to fix before any re-run at larger n. Not fixed here: adding a
 feature is a separate reviewable change from running the authorized sweep.
 
-**Fixed after this run** (PR #72). `-seed-kind` now honours `-records` and `-resume`:
+**Fixed after this run** (PR #73). `-seed-kind` now honours `-records` and `-resume`:
 `cascade.SeededRecord` persists per-problem seed counts, each mutant's `Desc`/`Source`/
 `DataRace`/`PlainRefuted`, and the per-level verdicts, checkpointed after every problem.
 Four choices made while writing it, each because the obvious version loses something:

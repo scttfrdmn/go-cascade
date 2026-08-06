@@ -251,7 +251,7 @@ the pre-registered arithmetic gave the larger probability — 0, 1, or 2 events 
    scar-free arm would have crossed model versions inside a two-arm comparison,
    invisibly. The critical value is ≥3 against both, so the verdict is unchanged — but
    that is luck, and it is only *checkable* because the control was re-measured.
-3. **`-seed-kind` wrote no records, only stdout — now FIXED (PR #72).** It had no
+3. **`-seed-kind` wrote no records, only stdout — now FIXED (PR #73).** It had no
    `-records` path, unlike every other `calibrate` mode: per-problem seed counts and
    **mutant sources** were unrecoverable and the run was not resumable. Cheap on a null;
    fatal on a positive event, where the only interesting follow-up is *what* the judge
