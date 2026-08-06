@@ -348,6 +348,42 @@ go-cascade solve --exec-wrapper "firejail --net=none --private" "..."
 
 or run the whole thing in a disposable container.
 
+## Cost attribution
+
+`--provider=bedrock` runs bill under a **tagged application inference profile**,
+so a shared AWS account can separate this tool's spend from everything else in
+it. On by default:
+
+```bash
+go-cascade solve ...                        # billed under Project=go-cascade
+go-cascade calibrate ... -cost-tag exp-31   # a per-experiment value
+go-cascade solve --cost-tag "" ...          # opt out; bare model IDs, untagged
+```
+
+On first use of a model the provider creates one profile per `(tag, model)`
+pair, tags it, and passes its ARN as the Converse request's model. Creation is
+idempotent — the profile name is derived from the tag and model ID, so later runs
+reuse it rather than fragmenting the spend across rows. If it can't (say
+`bedrock:CreateInferenceProfile` isn't granted), the run **proceeds untagged with
+a warning** rather than failing: a lost sample is worse than a lost invoice line.
+
+Three things worth knowing:
+
+- **The tag key is `Project`, not something go-cascade-specific.** A cost-allocation
+  key only breaks spend down after it is *activated*, and activation does not
+  backfill — spend recorded before it stays unattributed forever. Reusing an
+  already-active key means attribution starts with the first run.
+- **`ConverseInput.RequestMetadata` is not the mechanism**, despite looking like
+  it. It filters *invocation logs*, not bills, and would have attributed nothing
+  while returning no error.
+- **Untagged spend is unrecoverable after the fact.** That is why this defaults
+  on rather than being opt-in: the failure mode is silent, one-way, and only
+  discovered when you try to reconcile.
+
+`go-cascade models` lists both system-defined and application profiles, so the
+profiles this creates are visible there (it still does not list the bare-ID
+open-weight catalog — see the Disclaimer).
+
 ## Where it breaks
 
 - **Verifier hacking.** Optimizing against tests produces code that passes
