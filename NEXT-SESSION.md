@@ -7,10 +7,9 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be at `1d3ebf6` (PR #71, the experiment-30
-   write-up). 71 PRs merged. **Two PRs may still be open** — #73 (`-seed-kind` records
-   persistence, issue #72) and #75 (Bedrock cost tagging, issue #74). If a PR is open,
-   confirm CI green and I'll tell you whether to merge; don't merge unilaterally.
+1. **Check git state.** `main` should be at the Bedrock cost-tagging merge (PR #75,
+   issue #74), 73 PRs merged, nothing open. If a PR *is* open, confirm CI green and
+   I'll tell you whether to merge; don't merge unilaterally.
 2. **Read the project board** —
    https://github.com/users/scttfrdmn/projects/62 — which is now where the open work
    lives, one issue per gap (#49–#53). This file no longer restates the backlog.
@@ -318,8 +317,7 @@ and blocks *all* Bash; Read/Grep/Glob keep working, so do read-only work and ret
 
 ## Quick reference (state as of 2026-08-05, end of seventh session)
 
-- Public repo: github.com/scttfrdmn/go-cascade. main `1d3ebf6`, 71 PRs merged
-  (**#73 and #75 may be open** — `-seed-kind` records, and Bedrock cost tagging).
+- Public repo: github.com/scttfrdmn/go-cascade. **73 PRs merged, nothing open.**
   Project board: https://github.com/users/scttfrdmn/projects/62. **#49, #51 and #52 are
   closed; #50 and #53 remain, both `needs-spend-approval`** — #50 concurrency coverage
   ($2–4), #53's paid arm (e) sampling pass ($4.12, scoped by the shipped tool). #51's
@@ -334,8 +332,8 @@ and blocks *all* Bash; Read/Grep/Glob keep working, so do read-only work and ret
   `results/scarfree-coverage-n11.md`, `deferred-escape-n11.md`,
   `scarfree-sweep-n9.md`, and `results/scarfree_coverage.py` for the power arithmetic.
   The gap that run exposed — **`-seed-kind` wrote stdout only**: no per-problem counts,
-  no mutant sources, not resumable — is closed by **PR #73** (issue #72), `-records` /
-  `-resume` via `cascade.SeededRecord`. If that PR is still open, the gap is still open.
+  no mutant sources, not resumable — is **closed** (PR #73, issue #72): `-records` /
+  `-resume` via `cascade.SeededRecord`, forensic only.
 - **From the session before:** `go-cascade absorption` (§5.5(4) dial + multi-seed null
   envelope, `internal/calibrate/absorb.go`) and `go-cascade selfconsistency` (arm (e)
   feasibility gate + sampling arm, `internal/calibrate/selfconsistency.go`,
