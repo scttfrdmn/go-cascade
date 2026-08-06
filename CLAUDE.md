@@ -221,6 +221,32 @@ a test, but the tests will not catch every way of violating them.
   assembled** — the two model families have different ARN shapes (`us.*` Claude is an
   account-scoped inference-profile ARN, `qwen.*` an account-less foundation-model one),
   so a hand-built ARN works for one family and fails for the other.
+- **A profile's `models` list is not the ARN you copied from, and only the SECOND run
+  looks at it.** `CreateInferenceProfile` from a **cross-region** source stores the
+  *underlying* foundation models, one per routable region, with the routing prefix
+  **stripped**: copying `us.anthropic.claude-haiku-4-5-20251001-v1:0` yields three
+  `…::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0` entries — no `us.`. So
+  comparing the source's ARN tail against the profile's tails never matches for any
+  Claude tier, `findProfile` rejects a profile **we ourselves created**, and the run
+  falls back to untagged. It is invisible on the first run, which returns the ARN
+  straight from creation and never consults `findProfile` — so the Claude tiers, **91%
+  of real spend**, would be tagged exactly once and never again, with only a stderr
+  warning. Hence `modelIdentity` folds the routing prefix, as an **allowlist**
+  (`us.`/`eu.`/`apac.`/`global.`/`us-gov.` — this account uses two of them) and not by
+  stripping the first dotted segment, since a *bare* ID's first segment is its vendor
+  (`qwen.`, `anthropic.`) and folding that would equate two vendors' same-named models.
+  Two process lessons, both cheap and both learned the hard way here: **a live probe
+  must run TWICE** — one call exercises creation, the next exercises lookup, and they
+  fail independently; and **a fake that is simpler than the API passes code the API
+  rejects.** The original fake echoed the source ARN into `models`, which is why nine
+  green tests and a merged PR did not catch this. It now reproduces the real shape
+  (`modelsFor`), verified to fail against the old comparison before being trusted.
+- **`AWS_REGION` in the environment overrides a test's own default**, so a probe can
+  silently verify a region the study does not use — the first cost-tag smoke run
+  checked `us-east-1` because the env said so, while `config.Default().Region` and every
+  experiment are `us-west-2`. Both worked, but "it passed" was about the wrong region.
+  Pass the region explicitly when a live check is meant to be evidence about a
+  particular one.
 - **Long `calibrate` runs checkpoint and resume.** A paired run over n=64 takes
   ~60–90 min and can be SIGTERM'd externally (issue #21). The loop writes records
   after *every* problem, treats a cancelled context as a clean stop (not a

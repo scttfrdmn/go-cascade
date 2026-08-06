@@ -7,9 +7,10 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be at the Bedrock cost-tagging merge (PR #75,
-   issue #74), 73 PRs merged, nothing open. If a PR *is* open, confirm CI green and
-   I'll tell you whether to merge; don't merge unilaterally.
+1. **Check git state.** `main` should be at the cost-tagging cross-region fix (the
+   follow-up to PR #75 / issue #74), 74 PRs merged. That PR was **open and unmerged**
+   when this file was written — if it still is, confirm CI green and I'll tell you
+   whether to merge; don't merge unilaterally.
 2. **Read the project board** —
    https://github.com/users/scttfrdmn/projects/62 — which is now where the open work
    lives, one issue per gap (#49–#53). This file no longer restates the backlog.
@@ -387,10 +388,25 @@ and blocks *all* Bash; Read/Grep/Glob keep working, so do read-only work and ret
   back to the bare ID, warns once per model, caches the fallback); and
   `ConverseInput.RequestMetadata` is **not** the mechanism despite looking like it — it
   filters *invocation logs*, which are not even configured here, so it would have
-  attributed nothing and returned no error. Still unverified: **one ~$0.01 probe per ARN
-  family** to confirm a tagged profile ARN is accepted by `converse` for both the `us.*`
-  Claude and bare-ID open-weight shapes; Cost Explorer's ~1-day lag means the attribution
-  itself is only confirmable the following day.
+  attributed nothing and returned no error.
+- **The live probe RAN and it found a bug the fakes could not** (`internal/model/
+  costtag_smoke_test.go`, `GO_CASCADE_LIVE_SMOKE=1`, ~$0.01, tag value `smoke-test` so a
+  probe never lands in an experiment's row). Both ARN families are accepted by `converse`
+  in us-west-2 — but only after fixing `wrapsModel`: a profile copied from a
+  **cross-region** source (`us.anthropic.…`) lists the *underlying* foundation models,
+  one per routable region, with the routing prefix **stripped**, so the old tail
+  comparison rejected a profile we had just created ourselves. Invisible on the first run,
+  which returns the ARN straight from `CreateInferenceProfile` and never reaches
+  `findProfile` — so **every run after the first** would have fallen back to untagged for
+  the Claude tiers, i.e. 91% of real spend, with only a stderr warning. Hence: **run a
+  live probe twice**, and distrust a fake that is simpler than the API (the original
+  echoed the source ARN into `models`, which is why nine green tests shipped the bug).
+  `modelIdentity` folds the prefix as an **allowlist**, not by stripping the first dotted
+  segment — a bare ID's first segment is its vendor. Pinned by
+  `TestWrapsModelFoldsTheCrossRegionRoutingPrefix` (verified to fail against the old
+  comparison). Two `smoke-test-*` profiles now exist in the account; they are reused, not
+  duplicated. **Still unconfirmed: the attribution itself** — Cost Explorer lags ~1 day,
+  so query `Project=smoke-test` / `Project=go-cascade` on 2026-08-06 or later.
 - Bedrock models ACTIVE (us-west-2): maverick-17b, haiku-4-5, sonnet-4-5, sonnet-4-6,
   opus-4-5 (+ newer opus/sonnet/fable-5 profiles — keep configs pinned to the models
   each experiment used, for cross-run cost comparability). Re-run `go-cascade models`

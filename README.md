@@ -384,6 +384,22 @@ Three things worth knowing:
 profiles this creates are visible there (it still does not list the bare-ID
 open-weight catalog — see the Disclaimer).
 
+The unit tests are fake-based and never touch AWS. One live check is opt-in,
+because whether the runtime *accepts* a profile ARN is not something a fake can
+establish:
+
+```bash
+GO_CASCADE_LIVE_SMOKE=1 AWS_REGION=us-west-2 AWS_PROFILE=... \
+  go test ./internal/model/ -run Smoke -v
+```
+
+It spends ~$0.01 (two 24-token completions, one per ARN family) and creates two
+profiles under a separate `smoke-test` tag value, so a probe never lands in an
+experiment's cost row. **Run it twice** — the first call exercises profile
+creation, the second exercises lookup, and they fail independently. It does not
+verify the attribution itself: Cost Explorer lags about a day, so that is a
+next-day query under `Project=smoke-test`.
+
 ## Where it breaks
 
 - **Verifier hacking.** Optimizing against tests produces code that passes
