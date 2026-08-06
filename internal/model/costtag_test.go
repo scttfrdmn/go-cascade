@@ -101,12 +101,42 @@ func (f *fakeProfileAPI) CreateInferenceProfile(_ context.Context, in *bedrock.C
 		InferenceProfileArn:  aws.String(arn),
 		Status:               btypes.InferenceProfileStatusActive,
 		Type:                 btypes.InferenceProfileTypeApplication,
-		Models:               []btypes.InferenceProfileModel{{ModelArn: aws.String(src)}},
+		Models:               modelsFor(src),
 	})
 	return &bedrock.CreateInferenceProfileOutput{
 		InferenceProfileArn: aws.String(arn),
 		Status:              btypes.InferenceProfileStatusActive,
 	}, nil
+}
+
+// modelsFor reproduces what CreateInferenceProfile actually stores in `models`,
+// which is NOT the source ARN echoed back. This fake originally echoed it, and
+// that single simplification hid a real bug through a whole PR: for a CROSS-REGION
+// source the created profile lists the UNDERLYING foundation models, one per
+// routable region, with the routing prefix STRIPPED. Copying from
+// `us.anthropic.claude-haiku-4-5-20251001-v1:0` gives three
+// `…::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0` entries — so a
+// naive tail comparison never matched, and because creation returns its ARN
+// directly, nothing noticed until the SECOND live run.
+//
+// A fake that is easier than the API is a fake that passes code the API rejects.
+// Shapes verified live in us-west-2 on 2026-08-06.
+func modelsFor(source string) []btypes.InferenceProfileModel {
+	id := arnTail(source)
+	for _, p := range crossRegionPrefixes {
+		if strings.HasPrefix(id, p) {
+			bare := id[len(p):]
+			var out []btypes.InferenceProfileModel
+			for _, region := range []string{"us-east-1", "us-east-2", "us-west-2"} {
+				out = append(out, btypes.InferenceProfileModel{
+					ModelArn: aws.String("arn:aws:bedrock:" + region + "::foundation-model/" + bare),
+				})
+			}
+			return out
+		}
+	}
+	// A bare foundation-model source is stored as itself, single-region.
+	return []btypes.InferenceProfileModel{{ModelArn: aws.String(source)}}
 }
 
 func (f *fakeProfileAPI) ListFoundationModels(_ context.Context, _ *bedrock.ListFoundationModelsInput,
@@ -207,22 +237,42 @@ func TestResolveCachesPerModel(t *testing.T) {
 // A second run must find the first run's profile instead of creating another. Two
 // profiles for one model split its spend across two Cost Explorer rows, so the
 // total stops being readable off one line — the failure is a wrong bill, not an error.
+//
+// Run for BOTH families, and that is the point: only the first run exercises
+// creation, so a lookup bug specific to one ARN shape is invisible until the
+// second. Live, the cross-region family failed here and the bare-ID one passed.
 func TestResolveReusesAnExistingProfile(t *testing.T) {
-	f := newFake()
-	ctx := context.Background()
-	const id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+	for _, id := range []string{
+		"us.anthropic.claude-haiku-4-5-20251001-v1:0", // cross-region source
+		"qwen.qwen3-coder-30b-a3b-v1:0",               // bare foundation model
+	} {
+		t.Run(id, func(t *testing.T) {
+			f := newFake()
+			ctx := context.Background()
 
-	first := newResolver(f, DefaultCostTag, "us-west-2").resolve(ctx, id)
-	if f.createCalls != 1 {
-		t.Fatalf("first run createCalls = %d, want 1", f.createCalls)
-	}
-	// A fresh resolver is a fresh process: no in-memory cache, only what AWS holds.
-	second := newResolver(f, DefaultCostTag, "us-west-2").resolve(ctx, id)
-	if second != first {
-		t.Errorf("second run resolved to %q, want the existing %q", second, first)
-	}
-	if f.createCalls != 1 {
-		t.Errorf("createCalls = %d after a second run, want 1 — a duplicate profile splits the spend", f.createCalls)
+			first := newResolver(f, DefaultCostTag, "us-west-2").resolve(ctx, id)
+			if first == id {
+				t.Fatalf("first run did not resolve %s at all", id)
+			}
+			if f.createCalls != 1 {
+				t.Fatalf("first run createCalls = %d, want 1", f.createCalls)
+			}
+			// A fresh resolver is a fresh process: no in-memory cache, only what AWS
+			// holds. This is the run that catches an identity-comparison bug — and it
+			// must assert the ARN, not just the create count, since falling back to the
+			// bare ID also leaves createCalls at 1.
+			second := newResolver(f, DefaultCostTag, "us-west-2").resolve(ctx, id)
+			if second == id {
+				t.Errorf("second run fell back to the bare model id: the profile from run 1 "+
+					"was not recognised as wrapping %s, so every run after the first is UNTAGGED", id)
+			}
+			if second != first {
+				t.Errorf("second run resolved to %q, want the existing %q", second, first)
+			}
+			if f.createCalls != 1 {
+				t.Errorf("createCalls = %d after a second run, want 1 — a duplicate profile splits the spend", f.createCalls)
+			}
+		})
 	}
 }
 
@@ -393,6 +443,50 @@ func TestProfileNameStableAndCollisionResistant(t *testing.T) {
 	// separated from other traffic, so two tags sharing a profile defeats it.
 	if profileName("go-cascade", "m") == profileName("other-project", "m") {
 		t.Error("two tag values produced the same profile name")
+	}
+}
+
+// A profile copied from a CROSS-REGION source lists the underlying foundation
+// models WITHOUT the routing prefix, so identity comparison must fold the prefix
+// away or a Claude profile never matches its own source.
+//
+// This is a regression test for a live bug the fakes did not catch, and could not
+// have as they were written: creation returns its ARN directly, so findProfile is
+// only reached on the SECOND run. The first live run passed; the second warned and
+// fell back to untagged — which for the Claude tiers is 91% of real spend, tagged
+// exactly once and never again. The ARNs below are verbatim from that run.
+func TestWrapsModelFoldsTheCrossRegionRoutingPrefix(t *testing.T) {
+	// What CreateInferenceProfile actually produced from
+	// us.anthropic.claude-haiku-4-5-20251001-v1:0 — note: no "us." on the models.
+	created := btypes.InferenceProfileSummary{Models: []btypes.InferenceProfileModel{
+		{ModelArn: aws.String("arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0")},
+		{ModelArn: aws.String("arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0")},
+		{ModelArn: aws.String("arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0")},
+	}}
+	const source = "arn:aws:bedrock:us-west-2:942542972736:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+	if !wrapsModel(created, source) {
+		t.Error("a profile must match the cross-region source it was copied from; " +
+			"unfolded, every Claude tier falls back to untagged from the second run on")
+	}
+	// Every routing prefix Bedrock uses, not just us.: this account has global.* too.
+	for _, p := range []string{"us.", "global.", "eu.", "apac.", "us-gov."} {
+		src := "arn:aws:bedrock:us-west-2:942542972736:inference-profile/" + p +
+			"anthropic.claude-haiku-4-5-20251001-v1:0"
+		if !wrapsModel(created, src) {
+			t.Errorf("prefix %q is not folded", p)
+		}
+	}
+	// Folding must not equate different models. A vendor prefix is NOT a routing
+	// prefix, so it must survive — otherwise two vendors' same-named models collide
+	// and one model's spend bills under the other's row.
+	other := btypes.InferenceProfileSummary{Models: []btypes.InferenceProfileModel{
+		{ModelArn: aws.String("arn:aws:bedrock:us-west-2::foundation-model/qwen.some-model-v1:0")},
+	}}
+	if wrapsModel(other, "arn:aws:bedrock:us-west-2::foundation-model/anthropic.some-model-v1:0") {
+		t.Error("two vendors' models with the same name must not be equated")
+	}
+	if wrapsModel(created, "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-opus-4-5-20251101-v1:0") {
+		t.Error("a different Claude model must not match")
 	}
 }
 

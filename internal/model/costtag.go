@@ -213,18 +213,50 @@ func (r *resolver) findProfile(ctx context.Context, name, source string) (string
 
 // wrapsModel reports whether a profile tracks the given source.
 //
-// The comparison is on the trailing model identifier rather than the whole ARN: a
-// profile created from one region's foundation-model ARN legitimately lists
-// several regions' ARNs for the same model, so full-ARN equality would reject a
-// profile we ourselves created.
+// The comparison is on the model identity rather than the whole ARN, and that
+// needs two normalisations — both of which were found by a LIVE second run, not
+// by a fake:
+//
+// (1) A profile lists one ARN per region it can route to, so full-ARN equality
+// would reject a profile we ourselves created.
+//
+// (2) A profile copied from a CROSS-REGION source lists the UNDERLYING
+// foundation models, without the routing prefix. Copying from
+// `us.anthropic.claude-haiku-4-5-20251001-v1:0` yields a profile whose models are
+// `{us-east-1,us-east-2,us-west-2}::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0`
+// — no `us.`. So comparing the source's tail against the profile's tails never
+// matches for any Claude tier, and this failure is invisible on the FIRST run:
+// creation returns the ARN directly and never consults findProfile. Every run
+// after the first would warn and fall back to untagged, for 91% of real spend.
 func wrapsModel(s btypes.InferenceProfileSummary, source string) bool {
-	want := arnTail(source)
+	want := modelIdentity(source)
 	for _, m := range s.Models {
-		if m.ModelArn != nil && arnTail(*m.ModelArn) == want {
+		if m.ModelArn != nil && modelIdentity(*m.ModelArn) == want {
 			return true
 		}
 	}
 	return false
+}
+
+// crossRegionPrefixes are Bedrock's inference-routing prefixes. A system-defined
+// profile ID is one of these plus the underlying model ID, and the profiles copied
+// from it carry the model ID alone, so identity comparison must fold them away.
+//
+// This is an allowlist rather than "strip the first dotted segment" because a
+// bare model ID also starts with a dotted segment — its vendor (`qwen.`,
+// `anthropic.`, `amazon.`) — and stripping that could equate two vendors' models
+// with the same name. The account in use has both `us.` and `global.` today;
+// the others are Bedrock's documented set.
+var crossRegionPrefixes = []string{"us-gov.", "us.", "eu.", "apac.", "global."}
+
+func modelIdentity(arn string) string {
+	id := arnTail(arn)
+	for _, p := range crossRegionPrefixes {
+		if strings.HasPrefix(id, p) {
+			return id[len(p):]
+		}
+	}
+	return id
 }
 
 func arnTail(arn string) string {
