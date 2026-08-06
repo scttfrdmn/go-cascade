@@ -251,12 +251,20 @@ the pre-registered arithmetic gave the larger probability — 0, 1, or 2 events 
    scar-free arm would have crossed model versions inside a two-arm comparison,
    invisibly. The critical value is ≥3 against both, so the verdict is unchanged — but
    that is luck, and it is only *checkable* because the control was re-measured.
-3. **`-seed-kind` writes no records, only stdout.** No `-rec-out` path, unlike every other
-   `calibrate` mode: per-problem seed counts and **mutant sources** are unrecoverable and
-   the run is not resumable. Cheap on a null; fatal on a positive event, where the only
-   interesting follow-up is *what* the judge missed. `KilledMutant` already carries
-   `Source`/`Desc`/`DataRace`/`PlainRefuted`, so this is a persistence path, not new
-   instrumentation. **Fix it before any re-run at larger n.**
+3. **`-seed-kind` wrote no records, only stdout — now FIXED (PR #72).** It had no
+   `-records` path, unlike every other `calibrate` mode: per-problem seed counts and
+   **mutant sources** were unrecoverable and the run was not resumable. Cheap on a null;
+   fatal on a positive event, where the only interesting follow-up is *what* the judge
+   missed. `cascade.SeededRecord` now persists the per-problem seed count, each mutant's
+   `Desc`/`Source`/`DataRace`/`PlainRefuted`, and the per-level verdicts, checkpointed
+   after every problem, with `-resume` — a persistence path, not new instrumentation, and
+   forensic only. Four properties worth not undoing: the table is **derived from the
+   records** (a printed rate and a persisted one cannot drift); **zero-seed rows are
+   recorded with a reason** (which problems yield nothing is a coverage fact about the
+   operator set, and a sampling failure is a different null from an operator with no site);
+   a **cross-arm resume is refused** (it would pool two rates into one denominator); and a
+   **partial row is kept but re-run** (skipping it leaves the file short of its own
+   harvested count, which reads as a smaller denominator rather than as missing data).
 4. **The surviving asymmetry is bound tightness, not observed rate** — 9 seeds bound the
    scar-free class at ≤0.283 against the control's ≤0.105. Overlapping intervals are not a
    mechanism, but the class §3.1 is about is the one we can least afford to sample, and

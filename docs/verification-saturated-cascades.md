@@ -1233,10 +1233,19 @@ would turn the null into a claim about deterministically wrong programs in race 
 The deletion arm, conversely, records that same flag without filtering on it, because
 filtering one arm and not the other would make the two rates incomparable, which is the
 entire purpose of running both. One limitation of the harness is worth recording for anyone
-reproducing this: the seeding mode writes aggregate output only, so per-problem seed counts
-and the mutant programs themselves are not retained and the run is not resumable. On a null
-that costs little; on a positive event it would have destroyed the only interesting
-follow-up question, namely which program the judge misread.
+reproducing this: at the time of the run the seeding mode wrote aggregate output only, so
+per-problem seed counts and the mutant programs themselves were not retained and the run was
+not resumable. On a null that costs little; on a positive event it would have destroyed the
+only interesting follow-up question, namely which program the judge misread. The mode now
+persists a record per problem — the seed count, each mutant's operator, source, race-report
+flag and plain-refutation flag, and the per-level verdicts — checkpointed after every problem
+and resumable, with the printed table derived from those records so a reported rate and a
+stored one cannot disagree. Zero-seed problems are recorded with the reason they yielded
+nothing, because which problems are unreachable is a property of the operator set rather than
+an absence of data, and a resume that would pool one defect class's rows into another's file
+is refused. As with the retained candidate sources of §5.6, everything recorded here is
+forensic: no stage of the acceptance path reads a record back, and no seed is filtered on what
+it carries.
 
 One qualitative change matters more than the count. All nine seeds of the earlier harvest
 were also refuted by the ordinary test run, so the sweep could only have measured whether a
