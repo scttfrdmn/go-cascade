@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Power arithmetic for the seeded scar-free race sweep (experiments 28 and 29).
+"""Power arithmetic for the seeded scar-free race sweep (experiments 28, 29 and 30).
+
+THE SWEEP HAS NOW RUN (experiment 30) AND BOTH ARMS ARE NULL: scar-free 0/9,
+sync-deletion 0/27, at every strictness level. Fisher p = 1.0. This file is therefore
+the record of how a spend decision was priced, plus (at the bottom) what the spend
+bought — which was a null that the arithmetic here assigned the larger probability.
+Read results/scarfree-sweep-n9.md for the run itself.
+
 
     python3 results/scarfree_coverage.py
 
@@ -90,6 +97,30 @@ SCARFREE_SEEDS = 10
 # the sweep's power by 3-7x in the plausible range. Both numbers are real results in
 # this repo, which is exactly why the swap survived a read-through.
 DELETION_SEEDS = 20
+
+# EXPERIMENT 30 RAN THE SWEEP. Both arms are NULL: scar-free 0/9, sync-deletion 0/27,
+# at all three strictness levels (results/scarfree-sweep-n9.md). Fisher 0/9 vs 0/27 is
+# p = 1.0 — the comparison this script prices asks whether the scar-free rate is ABOVE
+# the deletion rate, and both rates are zero, so there is no gap to test.
+#
+# Two realized numbers differ from the ones priced above, and both matter more than the
+# verdict did:
+#
+#   1. The scar-free denominator came back 9, not 10, from 5 problems rather than 7.
+#      SCARFREE_SEEDS below is the REFERENCE harvest — the instrument's reach — and
+#      ProfileSeeded mutates a tier-0 MODEL DRAW, so the run's yield is a separate
+#      stochastic quantity. It is left at 10 deliberately: it is the pinned coverage
+#      measurement that the Go test asserts, not a record of what the sweep drew.
+#   2. The control came back 0/27 from 8 problems, NOT the 0/20 on file from
+#      2026-07-25. Same operator, same benchmark, same config, different draw. The
+#      critical value at n=9 is >=3 against both, so the verdict is unchanged — but
+#      that is luck, and it is only checkable because the control was re-measured in
+#      the same session rather than cited across one.
+#
+# DELETION_SEEDS stays 20 so this script keeps reproducing the arithmetic that priced
+# the DECISION. Read experiment 30 for what the run returned.
+DELETION_SEEDS_EXP30 = 27
+SCARFREE_SEEDS_EXP30 = 9
 
 # The bar was registered BEFORE experiment 28's corrected harvest ran, precisely so it
 # could not be moved to fit the answer: run the paid sweep iff >= 10 seeds survive the
@@ -221,6 +252,33 @@ def main() -> None:
         print("  resolves nothing. That trade is the human's call, not this script's.")
         print("\n  SPEND IS NOT SELF-AUTHORIZING. Quote a real price against a past bill")
         print("  (results/README.md), not a per-token estimate, and get it approved.")
+        print("\n  That happened: priced at ~$1.20 (the seeded path skips the cascade tier")
+        print("  loop, so it is cheaper than the ~$3 the decline assumed), authorized")
+        print("  explicitly, and RUN. See the experiment-30 block below for the result.")
+
+    print("\n" + "=" * 78)
+    print("WHAT THE SWEEP ACTUALLY RETURNED (experiment 30)")
+    print("=" * 78)
+    print(f"  scar-free   0/{SCARFREE_SEEDS_EXP30} false acceptances "
+          f"(5 problems), all three strictness levels")
+    print(f"  sync-delete 0/{DELETION_SEEDS_EXP30} false acceptances "
+          f"(8 problems), all three strictness levels")
+    p30 = fisher_one_sided(0, SCARFREE_SEEDS_EXP30, 0, DELETION_SEEDS_EXP30)
+    print(f"\n  Fisher one-sided, 0/{SCARFREE_SEEDS_EXP30} vs "
+          f"0/{DELETION_SEEDS_EXP30}: p = {p30:.4f}")
+    print(f"  critical value was >={crit_value(SCARFREE_SEEDS_EXP30, 0, DELETION_SEEDS_EXP30)}"
+          f" of {SCARFREE_SEEDS_EXP30}; it returned 0.")
+    print(f"  scar-free null bound: eta_fa <= {cp_upper(0, SCARFREE_SEEDS_EXP30):.3f}")
+    print(f"  deletion  null bound: eta_fa <= {cp_upper(0, DELETION_SEEDS_EXP30):.3f}")
+    print("\n  The comparison the sweep exists to make asks whether the scar-free rate")
+    print("  is ABOVE the deletion rate. Both are 0.000, so there is no gap to test and")
+    print("  §3.1's reading-invisible mechanism stays ARGUED on its one live event.")
+    print("  The surviving asymmetry is in BOUND TIGHTNESS, not observed rate: 9 seeds")
+    print("  bound the scar-free class only at 0.283 while 27 bound the control at")
+    print("  0.105. Overlapping intervals are not a mechanism — but the class §3.1 is")
+    print("  about is the one we can least afford to sample, which is a fact about the")
+    print("  operators' reach, not about the judge.")
+    print("\n  Do NOT read the zeros as eta_fa = 0.")
 
     print("\n" + "=" * 78)
     print("WHAT WOULD MAKE IT BETTER-POWERED")

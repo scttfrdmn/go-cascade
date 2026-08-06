@@ -1020,9 +1020,13 @@ races-with-a-visible-tell, a strong judge was reliable and strictness-robust (37
 such seeded defects caught, permissive setting included). So §3.1's floor is real; that
 its bite is concentrated exactly where the paper says execution's soundness matters —
 reading-invisible defects — is the natural reading of these observations but remains
-*argued* rather than established, because it rests on a single live event: the seeded
-sweep that would test the class directly is declined on power later in this section, and
-absence of false acceptances on the *other* defect classes is not evidence about this one.
+*argued* rather than established, because it rests on a single live event. The seeded
+sweep that tests the class directly has now been run, and it returned a null in *both*
+arms (nine scar-free mutants and twenty-seven sync-deletion mutants, no false acceptance
+at any strictness setting), so it neither confirms nor weakens the reading; the arithmetic
+and the outcome are reported later in this section. Absence of false acceptances on the
+*other* defect classes was never evidence about this one, and absence on this class at
+nine seeds bounds its rate at 0.283, which is not evidence either.
 
 **A validation-relevant hazard the paper does not discuss: oracle *unsoundness* from
 generated tests.** §3.6/§5.1 treat the oracle as sound by construction (execution ⇒
@@ -1183,12 +1187,56 @@ declined. The fourth operator was then added — the deferred-`Unlock` form of t
 operator, which had been skipping every `Lock(); defer Unlock()` site and therefore had a
 single edit site on an entire concurrency benchmark — and it supplies a tenth seed. The
 threshold was not revised; the measurement was, by a change to the instrument that the
-declining write-up itself identified as the cheapest available improvement. The seeded
-sweep consequently clears its own bar, and we report it as unfunded rather than declined.
-The mechanism claim of §3.1 is still argued: sharpening an instrument is not running an
-experiment. We note also that clearing this bar buys an *existence proof* and not a rate —
-a single false acceptance would need no significance test, with probability 0.893 at a true
-rate of 0.2, whereas a null at ten seeds bounds the rate only at 0.259.
+declining write-up itself identified as the cheapest available improvement. Clearing the
+bar makes the sweep fundable rather than authorized, and what it buys is an *existence
+proof* and not a rate — a single false acceptance would need no significance test, with
+probability 0.893 at a true rate of 0.2, whereas a null at ten seeds bounds the rate only
+at 0.259.
+
+**The sweep was then priced, authorized, and run, and both arms are null.** On the same 11
+concurrency problems and in the same session, the scar-free arm judged **9** provably-wrong
+candidates and the sync-deletion control judged **27**, with **no false acceptance in
+either arm at any of the three strictness settings**. Fisher's exact one-sided test on 0 of
+9 against 0 of 27 gives *p* = 1.0: the sweep asks whether the scar-free rate exceeds the
+deletion rate, and both rates are zero, so there is no gap to test. **§3.1's
+reading-invisible mechanism therefore remains argued**, on the same single live event, and
+this is the branch the pre-registered arithmetic assigned the larger probability — zero,
+one, or two events all fall short of the critical value of three. The one asymmetry that
+survives is in *bound tightness* rather than in observed rate: 9 seeds bound the scar-free
+rate at 0.283 while 27 bound the control at 0.105, which says the class §3.1 concerns is
+the class this instrument can least afford to sample, and is a fact about operator reach
+rather than about the judge. We state the obvious caution explicitly: a zero at this
+denominator is not an estimate of zero.
+
+Two realized quantities differ from the ones that priced the decision, and both are more
+instructive than the verdict. First, **the realized scar-free denominator was 9 from 5
+problems, not the harvest's 10 from 7**, because the seeding path mutates a tier-0 *model
+draw* rather than a reference — a separate stochastic quantity, flagged before the run
+rather than after — and the two problem sets differ in both directions. A near-equal total
+spread over fewer problems is more concentrated, and several mutants of one base program
+are not independent draws of the defect class, so the effective denominator is *below* 9
+and the 0.283 bound is correspondingly optimistic. Second, **the control returned 0 of 27
+from 8 problems rather than the 0 of 20 from 9 previously recorded** — the same operator on
+the same benchmark under the same configuration, a different draw. That is why the control
+was re-measured in the same session rather than quoted from the earlier run: pairing a
+figure from one session against an arm from another would have crossed model versions
+inside a two-arm comparison, and would have done so invisibly, since both figures are
+genuine measurements. The critical value happens to be three against either denominator,
+so this verdict is unchanged — but that is luck, and it is checkable only because the
+control was re-run.
+
+Two properties of the arm are load-bearing and were verified rather than assumed. The
+scar-free denominator admits only mutants for which the race detector emits an actual race
+report, not merely mutants that fail under `-race`: a mutant that returns a deterministically
+wrong answer is a defect of the class the deletion arm already covers, and counting it here
+would turn the null into a claim about deterministically wrong programs in race clothing.
+The deletion arm, conversely, records that same flag without filtering on it, because
+filtering one arm and not the other would make the two rates incomparable, which is the
+entire purpose of running both. One limitation of the harness is worth recording for anyone
+reproducing this: the seeding mode writes aggregate output only, so per-problem seed counts
+and the mutant programs themselves are not retained and the run is not resumable. On a null
+that costs little; on a positive event it would have destroyed the only interesting
+follow-up question, namely which program the judge misread.
 
 One qualitative change matters more than the count. All nine seeds of the earlier harvest
 were also refuted by the ordinary test run, so the sweep could only have measured whether a

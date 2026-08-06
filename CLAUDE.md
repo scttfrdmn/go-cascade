@@ -358,16 +358,48 @@ a test, but the tests will not catch every way of violating them.
   scar-free race. (The old mock figure — judge certifies α=0.15 at 0 empirical while
   realized risk is 0.22 — still illustrates the §3.1 floor, but **is a mock number,
   not a measurement of any model.**)
-- **The scar-free race sweep was DECLINED at 9 seeds against a pre-registered bar of 10,
-  then a fourth operator moved the measurement to 10 and it now CLEARS that bar — the bar
-  never moved. Nothing has been spent.** (experiments 28 and 29,
+- **The scar-free race sweep was DECLINED at 9 seeds against a pre-registered bar of 10, a
+  fourth operator moved the measurement to 10 and it CLEARED that bar — the bar never moved
+  — and then it RAN and BOTH ARMS ARE NULL: scar-free 0/9, sync-deletion 0/27, every
+  strictness level, Fisher p = 1.0** (experiment 30, `results/scarfree-sweep-n9.md`, ~32 min,
+  ~$1.20). The sweep's own output states the test — *"a rate ABOVE the `-seed-kind=race` rate
+  on the same problems is the §3.1 mechanism demonstrated rather than argued"* — and **both
+  rates are zero, so there is no gap to test.** §3.1's reading-invisible mechanism stays
+  **ARGUED** on its one live event; this was the branch the pre-registered arithmetic gave the
+  larger probability, so a null is the outcome, not a surprise. **Three things the run taught
+  that outlive its verdict.** (i) **The realized denominator is not the instrument's reach.**
+  `ProfileSeeded` mutates a tier-0 **model draw**, so the arm drew **9 from 5 problems** where
+  the reference harvest reaches 10 from 7 — and the problem sets differ in *both* directions.
+  A near-equal total over fewer problems is more **concentrated**, and several mutants of one
+  base are not independent draws, so the effective n is *below* 9 and ≤0.283 is optimistic.
+  Quote the realized denominator, never the bar's. (ii) **Re-run a control in-session rather
+  than citing one across sessions.** The deletion arm came back **0/27 from 8 problems**, not
+  the **0/20 from 9** on file from 2026-07-25 — same operator, same benchmark, same config,
+  different draw. Citing the old figure beside today's would have crossed model versions
+  inside a two-arm comparison: the same error shape as *one denominator per paired comparison*,
+  and invisible, because both numbers are real results in this repo. The verdict is unchanged
+  only by luck (the critical value is ≥3 against both), and that is checkable *only* because
+  the control was re-measured. (iii) **`-seed-kind` writes no records, only stdout** — per-
+  problem seed counts and mutant sources are unrecoverable and the run is not resumable. On a
+  null that costs little; on a positive event it would have destroyed the only interesting
+  follow-up (*what* did the judge miss?), which is exactly the gap `TierObs.DisagreementSource`
+  closes on the paired arm. `KilledMutant` already carries `Source`/`Desc`/`DataRace`/
+  `PlainRefuted`, so it is a persistence path, not new instrumentation. **Fix it before any
+  re-run at larger n.** The one surviving asymmetry is **bound tightness, not observed rate**:
+  9 seeds bound the scar-free class at ≤0.283 where 27 bound the control at ≤0.105 — the class
+  §3.1 is about is the one we can least afford to sample, a fact about **operator reach**, not
+  the judge. **Do not read the zeros as η_fa = 0.** The pre-run coverage arithmetic follows,
+  and is what made the spend decision legible:
+  (experiments 28 and 29,
   `results/scarfree-coverage-n11.md`, `results/deferred-escape-n11.md`,
   `results/scarfree_coverage.py`). On the 11-problem concurrency set: **16 AST sites → 10
   seeds** (compile + a real ThreadSanitizer report), 7 of 11 problems, split 4 `defer-wait`
   / 4 downgrade / 1 escape / 1 escape-defer. Against the sync-deletion control **0/20** the
   critical value is **≥3 of 10**, a null bounds η_fa at **≤0.259**, P(≥1 event) is 0.893 at
   η_fa=0.2. **Clearing a registered bar makes a run fundable, not authorized** — and n=10
-  buys an *existence proof*, not a rate, so read the arithmetic before quoting a price.
+  buys an *existence proof*, not a rate, so read the arithmetic before quoting a price. (Both
+  steps then happened in order: priced at ~$1.20 — cheaper than the decline's ~$3, because the
+  seeded path skips the cascade tier loop entirely — authorized explicitly, and run.)
   The tenth seed came from implementing the **deferred form** of the escape operator, which
   had been skipping every `Lock(); defer Unlock()` — the dominant Go idiom, so the operator
   had exactly one site on a concurrency benchmark. It needs a control-flow **veto** the
