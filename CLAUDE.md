@@ -379,13 +379,25 @@ a test, but the tests will not catch every way of violating them.
   inside a two-arm comparison: the same error shape as *one denominator per paired comparison*,
   and invisible, because both numbers are real results in this repo. The verdict is unchanged
   only by luck (the critical value is ≥3 against both), and that is checkable *only* because
-  the control was re-measured. (iii) **`-seed-kind` writes no records, only stdout** — per-
-  problem seed counts and mutant sources are unrecoverable and the run is not resumable. On a
-  null that costs little; on a positive event it would have destroyed the only interesting
+  the control was re-measured. (iii) **`-seed-kind` wrote no records, only stdout** — per-
+  problem seed counts and mutant sources were unrecoverable and the run was not resumable. On
+  a null that cost little; on a positive event it would have destroyed the only interesting
   follow-up (*what* did the judge miss?), which is exactly the gap `TierObs.DisagreementSource`
-  closes on the paired arm. `KilledMutant` already carries `Source`/`Desc`/`DataRace`/
-  `PlainRefuted`, so it is a persistence path, not new instrumentation. **Fix it before any
-  re-run at larger n.** The one surviving asymmetry is **bound tightness, not observed rate**:
+  closes on the paired arm. **Fixed** (`cascade.SeededRecord`, PR #73): `-records`/`-resume`
+  now work, `KilledMutant`'s `Source`/`Desc`/`DataRace`/`PlainRefuted` are persisted per
+  mutant with the per-level verdicts, checkpointed after every problem — a persistence path,
+  not new instrumentation, and forensic only (nothing on the acceptance path reads a record
+  back). Four properties are load-bearing, each because the obvious version loses something:
+  the printed table is **derived from the records** rather than accumulated beside them, so a
+  printed η_fa and a persisted one cannot drift; **zero-seed rows are recorded with a
+  reason**, because which problems yield nothing is a coverage fact about the *operator set*
+  (three of the eleven were structurally unreachable) and "no verified candidate to mutate" is
+  a sampling failure where "no mutant compiled and was refuted" is a claim about the
+  operators — skipping the row collapses two different nulls into an absence; a **resume
+  across defect classes is refused**, since appending scar-free rows to a sync-deletion file
+  pools the two rates into one denominator; and a **partially-judged row is kept but re-run**,
+  because skipping it leaves the file short of the seeds it says it harvested and the
+  shortfall reads as a smaller denominator, not as missing data. The one surviving asymmetry is **bound tightness, not observed rate**:
   9 seeds bound the scar-free class at ≤0.283 where 27 bound the control at ≤0.105 — the class
   §3.1 is about is the one we can least afford to sample, a fact about **operator reach**, not
   the judge. **Do not read the zeros as η_fa = 0.** The pre-run coverage arithmetic follows,

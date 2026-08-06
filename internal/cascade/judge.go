@@ -388,6 +388,93 @@ type SeededJudgeResult struct {
 	FalseAccept int // judge said PASS on a wrong candidate (η_fa)
 }
 
+// SeededRecord is one problem's row of the seeded sweep, persisted so the run is
+// auditable and resumable. Experiment 30 ran without it and the loss was concrete:
+// the sweep printed aggregate tallies only, so per-problem seed counts had to be
+// reconstructed from a stderr progress log, the mutant sources were gone, and a
+// kill would have discarded the whole run. On that null it cost little; on a
+// positive event it would have destroyed the only interesting follow-up question,
+// namely *which* program the judge misread — which is exactly the gap
+// TierObs.DisagreementSource closes on the paired arm.
+//
+// This is a persistence path, not new instrumentation: every field below is
+// already computed by the harvest (verify.KilledMutant) or by the judging loop.
+//
+// Forensic only, same constraint as DisagreementSource and TierObs.TimedOut:
+// nothing on the acceptance path may read a record back, and no seed may be
+// filtered on what is recorded here. Filtering the *deletion* arm on DataRace, for
+// instance, would make the two arms' η_fa rates incomparable, which is the entire
+// reason raceKilledFrom is a shared harvest.
+type SeededRecord struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"` // seed class: logic | race | scar-free-race
+
+	// Seeds is how many mutants the HARVEST produced — the per-problem denominator
+	// experiment 30 could not recover. The concentration matters as much as the
+	// total: several mutants of one base program are not independent draws of the
+	// defect class, so a sweep's effective n is below its nominal one whenever this
+	// is lopsided.
+	//
+	// It equals len(Mutants) except on a row whose judging failed part-way, where it
+	// stays at the harvested count while Mutants holds only what was presented. The
+	// two are kept distinct rather than reconciled: a rate must be divided by what
+	// was judged, but a coverage claim about the operator set is about what was
+	// harvested, and collapsing them loses one of the two.
+	Seeds   int             `json:"seeds"`
+	Mutants []SeededMutant  `json:"mutants"`
+	Levels  []SeededVerdict `json:"levels"`
+
+	// NoSeed says why a row harvested nothing, and is the reason a zero is recorded
+	// at all rather than skipped. Which problems yield no seed is a coverage fact
+	// about the operator set, not an absence of data: experiment 30's per-problem
+	// table needed that column and had to recover it from a progress log. It also
+	// keeps two different nulls apart — "the tier produced no candidate worth
+	// mutating" is a sampling failure, "the candidate had no mutable site" is a
+	// statement about the operators.
+	NoSeed string `json:"no_seed,omitempty"`
+}
+
+// SeededMutant is one provably-wrong candidate and the properties of the seed that
+// bear on how the arm should be read.
+type SeededMutant struct {
+	// Desc names the operator that produced the mutant. Per-operator seed counts
+	// are what let a write-up say "one operator carries the set" — or retract it,
+	// as experiment 28 had to.
+	Desc string `json:"desc"`
+
+	// Source is the mutant program. This is the field whose absence made
+	// experiment 30's defect classes unrecoverable. It is the bulk of the record
+	// and is retained deliberately: a seeded sweep judges tens of candidates, not
+	// the 1096 observations of a paired run, so there is no size argument for
+	// dropping it.
+	Source string `json:"source"`
+
+	// DataRace records that ThreadSanitizer actually reported a race, rather than
+	// the mutant merely failing under -race. A hard filter on the scar-free arm,
+	// forensic on the deletion arm (see the type comment).
+	DataRace bool `json:"data_race,omitempty"`
+
+	// PlainRefuted records that the ordinary (no -race) run also refutes the
+	// mutant. For a race seed that means the defect is not reading-invisible after
+	// all — a reader sees a deterministically wrong program — which is a caveat on
+	// seed quality and never a reason to discard. Experiment 28's whole seed set
+	// carried it; experiment 29's tenth seed was the first that did not.
+	PlainRefuted bool `json:"plain_refuted,omitempty"`
+
+	// Verdicts is the judge's PASS/FAIL per strictness level, keyed by level. A
+	// PASS is a false acceptance, since every mutant here is provably wrong.
+	// Recorded per mutant so a single false acceptance can be traced to the exact
+	// program and level that produced it.
+	Verdicts map[prompt.JudgeStrictness]bool `json:"verdicts"`
+}
+
+// SeededVerdict is one strictness level's tally for one problem.
+type SeededVerdict struct {
+	Level       prompt.JudgeStrictness `json:"level"`
+	Judged      int                    `json:"judged"`
+	FalseAccept int                    `json:"false_accept"`
+}
+
 // SeedKind selects which class of provably-wrong candidate the seeded test
 // harvests.
 type SeedKind int
@@ -405,6 +492,20 @@ const (
 	SeedScarFreeRace
 )
 
+// SeedKindName labels the defect class. The class has to travel with every number
+// the sweep produces, in the report and in the record alike: a scar-free rate and
+// a sync-deletion rate are not comparable, and an unlabelled tally invites pooling
+// them — which would average away the one difference the two arms exist to show.
+func SeedKindName(k SeedKind) string {
+	switch k {
+	case SeedRace:
+		return "race"
+	case SeedScarFreeRace:
+		return "scar-free-race"
+	}
+	return "logic"
+}
+
 // ProfileSeeded runs the judge dangerous-mode experiment for one problem. It
 // samples a correct-ish solution, harvests up to nSeed mutants that COMPILE and
 // are KILLED by the hidden tests (provably wrong, but a single edit from
@@ -413,8 +514,10 @@ const (
 // acceptances as the judge loosens is the strictness knob alone — the §3.1
 // dangerous mode, isolated and non-trivial by construction.
 //
-// It returns nil (not an error) when no killed mutant could be produced for the
-// problem, so the caller can skip it rather than count a vacuous zero.
+// When no killed mutant could be produced it returns a record with Seeds == 0 and
+// NoSeed set, rather than nil: the caller must skip such a problem rather than
+// count a vacuous zero in the rate, but *which* problems yielded nothing is a
+// coverage fact about the operator set and is worth persisting.
 //
 // seedKind selects the defect class: SeedLogic harvests single-edit logic
 // mutants killed by ordinary testing; SeedRace harvests sync-deletion mutants
@@ -422,15 +525,20 @@ const (
 // synchronization scaffolding is intact, which is the genuinely
 // reading-invisible class (SeedRace's deletions leave an imbalance a reviewer
 // catches without reasoning about interleaving).
-func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, nSeed int,
+//
+// The returned SeededRecord is the tally *and* the audit trail: the per-level
+// counts are derived from the same per-mutant verdicts it persists, so a printed
+// rate and a recorded one cannot disagree. id labels the row and is used for
+// resume; it carries no meaning inside the experiment.
+func (r *Router) ProfileSeeded(ctx context.Context, id, problem, judgeModel string, nSeed int,
 	levels []prompt.JudgeStrictness, seedKind SeedKind,
-) (map[prompt.JudgeStrictness]*SeededJudgeResult, int, error) {
+) (*SeededRecord, error) {
 	if judgeModel == "" {
 		judgeModel = r.judgeModelDefault()
 	}
 	spec, err := r.spec(ctx, problem, "", &Result{})
 	if err != nil {
-		return nil, 0, fmt.Errorf("spec phase: %w", err)
+		return nil, fmt.Errorf("spec phase: %w", err)
 	}
 
 	// Draw one seed solution from the cheapest tier and harvest wrong mutants.
@@ -440,11 +548,13 @@ func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, 
 	local := &Result{}
 	cands, err := r.sampleTier(ctx, 0, problem, spec, local, nil, plan)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	_, winner := cluster.Score(cluster.Group(cands))
 	if winner == nil {
-		return nil, 0, nil // nothing verified to mutate from
+		// Recorded, not skipped: a zero-seed row is a coverage observation. The
+		// caller reports it as a skip either way, but the file keeps the reason.
+		return &SeededRecord{ID: id, Kind: SeedKindName(seedKind), NoSeed: "no verified candidate to mutate"}, nil
 	}
 	seed := cands[indexOf(cands, winner.Rep)].Source
 
@@ -461,27 +571,58 @@ func (r *Router) ProfileSeeded(ctx context.Context, problem, judgeModel string, 
 			nSeed, r.cfg.TestTimeout)
 	}
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if len(mutants) == 0 {
-		return nil, 0, nil // no provably-wrong candidate available for this problem
+		// No usable seed. This is the interesting null: the operator set found no site
+		// on this candidate, or every mutant failed to compile, or (on the scar-free
+		// arm) none produced an actual data race. Distinguishing it from "no candidate"
+		// above is what makes a coverage claim about the operators checkable.
+		return &SeededRecord{ID: id, Kind: SeedKindName(seedKind), NoSeed: "no mutant compiled and was refuted"}, nil
 	}
 
-	out := make(map[prompt.JudgeStrictness]*SeededJudgeResult, len(levels))
+	rec := &SeededRecord{
+		ID:      id,
+		Kind:    SeedKindName(seedKind),
+		Seeds:   len(mutants),
+		Mutants: make([]SeededMutant, 0, len(mutants)),
+	}
+	tally := make(map[prompt.JudgeStrictness]*SeededVerdict, len(levels))
 	for _, lvl := range levels {
-		out[lvl] = &SeededJudgeResult{Level: lvl}
+		tally[lvl] = &SeededVerdict{Level: lvl}
+	}
+	// Append the level tallies in the caller's order before judging, so a record
+	// written after a mid-run failure still says which levels were asked for.
+	flush := func() *SeededRecord {
+		rec.Levels = make([]SeededVerdict, 0, len(levels))
+		for _, lvl := range levels {
+			rec.Levels = append(rec.Levels, *tally[lvl])
+		}
+		return rec
 	}
 	for _, m := range mutants {
+		sm := SeededMutant{
+			Desc:         m.Desc,
+			Source:       m.Source,
+			DataRace:     m.DataRace,
+			PlainRefuted: m.PlainRefuted,
+			Verdicts:     make(map[prompt.JudgeStrictness]bool, len(levels)),
+		}
 		for _, lvl := range levels {
 			pass, _, jerr := r.judgeAt(ctx, lvl, judgeModel, problem, spec.API, m.Source)
 			if jerr != nil {
-				return out, len(mutants), jerr
+				// Keep the partial row rather than discarding it: the mutants already
+				// judged are real observations, and their sources are the expensive part.
+				rec.Mutants = append(rec.Mutants, sm)
+				return flush(), jerr
 			}
-			out[lvl].Judged++
+			sm.Verdicts[lvl] = pass
+			tally[lvl].Judged++
 			if pass {
-				out[lvl].FalseAccept++ // PASS on a provably-wrong program
+				tally[lvl].FalseAccept++ // PASS on a provably-wrong program
 			}
 		}
+		rec.Mutants = append(rec.Mutants, sm)
 	}
-	return out, len(mutants), nil
+	return flush(), nil
 }

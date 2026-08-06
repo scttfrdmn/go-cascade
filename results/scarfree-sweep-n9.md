@@ -158,6 +158,31 @@ than findings:
 Free to fix, and the thing to fix before any re-run at larger n. Not fixed here: adding a
 feature is a separate reviewable change from running the authorized sweep.
 
+**Fixed after this run** (PR #73). `-seed-kind` now honours `-records` and `-resume`:
+`cascade.SeededRecord` persists per-problem seed counts, each mutant's `Desc`/`Source`/
+`DataRace`/`PlainRefuted`, and the per-level verdicts, checkpointed after every problem.
+Four choices made while writing it, each because the obvious version loses something:
+
+- **the table is derived from the records, not accumulated beside them**, so a printed
+  η_fa and a persisted one cannot drift — the failure mode this experiment's own
+  per-problem table nearly had;
+- **zero-seed rows are recorded, with a reason.** *Which* problems yield nothing is a
+  coverage fact about the operator set (three of these eleven were structurally
+  unreachable, above), and "no verified candidate to mutate" is a sampling failure while
+  "no mutant compiled and was refuted" is a statement about the operators. Skipping the
+  row collapses two different nulls into an absence;
+- **a resume across defect classes is refused**, not merged. Appending scar-free rows to a
+  sync-deletion file would pool the two rates into one denominator, which is the one
+  comparison the two arms exist to keep separate;
+- **a partially-judged row is kept on disk but re-run**, since skipping it would leave the
+  file permanently short of the seeds it says it harvested — and that shortfall reads as a
+  smaller denominator, not as missing data.
+
+Everything recorded is forensic only, on the same constraint as `TierObs.DisagreementSource`
+and `TierObs.TimedOut`: nothing on the acceptance path reads a record back, and no seed is
+filtered on what it carries. The numbers in this write-up are unchanged — the run that
+produced them predates the fix and cannot be recovered retroactively.
+
 ---
 
 ## What this changes

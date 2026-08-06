@@ -9,6 +9,7 @@ import (
 
 	"github.com/scttfrdmn/go-cascade/internal/calibrate"
 	"github.com/scttfrdmn/go-cascade/internal/cascade"
+	"github.com/scttfrdmn/go-cascade/internal/prompt"
 	"github.com/scttfrdmn/go-cascade/internal/verify"
 )
 
@@ -267,6 +268,165 @@ func TestParseSeedKind(t *testing.T) {
 			t.Errorf("%q and %q map to the same SeedKind", prev, s)
 		}
 		seen[k] = s
+	}
+}
+
+// The record's Kind uses the FLAG spelling and the report uses prose. Both are
+// wanted — a record has to be matchable back to the command that produced it, and
+// a table has to say "sync-deletion race" rather than "race" — but they must stay
+// distinguishable, because the resume guard compares a file's Kind against
+// cascade.SeedKindName. If prose ever leaked into a record, resuming a real run
+// would abort claiming the file held a different defect class.
+func TestSeedKindNamesAreFlagSpellingsAndDistinctFromProse(t *testing.T) {
+	for _, s := range []string{"logic", "race", "scar-free-race"} {
+		k, ok := parseSeedKind(s)
+		if !ok {
+			t.Fatalf("parseSeedKind(%q) rejected its own spelling", s)
+		}
+		if got := cascade.SeedKindName(k); got != s {
+			t.Errorf("SeedKindName(%v) = %q, want the flag spelling %q — a record's kind must round-trip through -seed-kind", k, got, s)
+		}
+	}
+	// Prose labels must be distinct from each other too: pooling a scar-free rate
+	// with a sync-deletion one under a shared heading is the failure both names guard.
+	seen := map[string]bool{}
+	for _, k := range []cascade.SeedKind{cascade.SeedLogic, cascade.SeedRace, cascade.SeedScarFreeRace} {
+		p := seedKindName(k)
+		if seen[p] {
+			t.Errorf("two seed kinds share the prose label %q", p)
+		}
+		seen[p] = true
+	}
+}
+
+// tallySeeded must derive the table from the records, so the printed rate and the
+// persisted one cannot drift. Experiment 30 accumulated tallies alongside the run
+// and persisted nothing, which is how its per-problem seed counts ended up
+// reconstructed from a stderr log.
+func TestTallySeededDerivesFromRecords(t *testing.T) {
+	levels := []prompt.JudgeStrictness{prompt.JudgeStrict, prompt.JudgePermissive}
+	recs := []cascade.SeededRecord{
+		{ID: "a", Kind: "scar-free-race", Seeds: 2, Levels: []cascade.SeededVerdict{
+			{Level: prompt.JudgeStrict, Judged: 2, FalseAccept: 0},
+			{Level: prompt.JudgePermissive, Judged: 2, FalseAccept: 1},
+		}},
+		// A harvest that yielded nothing must not inflate the problem denominator: a
+		// zero over more problems reads as stronger evidence than it is.
+		{ID: "b", Kind: "scar-free-race", Seeds: 0},
+		{ID: "c", Kind: "scar-free-race", Seeds: 1, Levels: []cascade.SeededVerdict{
+			{Level: prompt.JudgeStrict, Judged: 1, FalseAccept: 0},
+			{Level: prompt.JudgePermissive, Judged: 1, FalseAccept: 1},
+		}},
+	}
+	recs[1].NoSeed = "no mutant compiled and was refuted"
+	totals, totalWrong, used := tallySeeded(recs, levels)
+	if totalWrong != 3 {
+		t.Errorf("harvested seeds = %d, want 3", totalWrong)
+	}
+	if used != 2 {
+		t.Errorf("problems used = %d, want 2 (the empty harvest must not count)", used)
+	}
+	if got := totals[prompt.JudgeStrict]; got.Judged != 3 || got.FalseAccept != 0 {
+		t.Errorf("strict = %+v, want judged 3 / false-accept 0", got)
+	}
+	if got := totals[prompt.JudgePermissive]; got.Judged != 3 || got.FalseAccept != 2 {
+		t.Errorf("permissive = %+v, want judged 3 / false-accept 2", got)
+	}
+}
+
+// A row whose judging stopped part-way is kept on disk — its verdicts were paid
+// for and are real — but must NOT be skipped on resume. Skipping it would leave the
+// file permanently short of the seeds it says it harvested, and the shortfall is
+// invisible in an aggregate table: the denominator just reads smaller.
+func TestSeededCompleteRejectsPartialRows(t *testing.T) {
+	full := cascade.SeededRecord{
+		Seeds:   2,
+		Mutants: []cascade.SeededMutant{{Desc: "x"}, {Desc: "y"}},
+		Levels: []cascade.SeededVerdict{
+			{Level: prompt.JudgeStrict, Judged: 2},
+			{Level: prompt.JudgePermissive, Judged: 2},
+		},
+	}
+	if !seededComplete(full) {
+		t.Error("a fully-judged row was treated as partial; resume would redo paid work")
+	}
+	// Judging died after the first mutant.
+	short := full
+	short.Mutants = full.Mutants[:1]
+	short.Levels = []cascade.SeededVerdict{{Level: prompt.JudgeStrict, Judged: 1}}
+	if seededComplete(short) {
+		t.Error("a partially-judged row was treated as complete; resume would skip it forever")
+	}
+	// Every mutant harvested, but one level never ran.
+	lopsided := full
+	lopsided.Levels = []cascade.SeededVerdict{
+		{Level: prompt.JudgeStrict, Judged: 2},
+		{Level: prompt.JudgePermissive, Judged: 1},
+	}
+	if seededComplete(lopsided) {
+		t.Error("a row missing one level's verdicts was treated as complete")
+	}
+	// No levels at all: the harvest happened, nothing was judged.
+	if seededComplete(cascade.SeededRecord{Seeds: 1, Mutants: []cascade.SeededMutant{{}}}) {
+		t.Error("a row with no verdicts at all was treated as complete")
+	}
+	// A zero-seed row IS finished — the harvest ran and found nothing. Re-running it
+	// on resume would redraw a tier for a problem already known to yield no seed,
+	// which on a paid arm is spend for a result already on disk.
+	if !seededComplete(cascade.SeededRecord{ID: "x", NoSeed: "no mutant compiled and was refuted"}) {
+		t.Error("a zero-seed row was treated as partial; resume would pay to redraw it")
+	}
+}
+
+// The seeded record must carry the fields whose absence made experiment 30's
+// defect classes unrecoverable, and it must survive the round-trip through the
+// checkpoint writer — a resumable run reads back what it wrote.
+func TestSeededRecordRoundTripsWithSourcesAndOperators(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "seeded.json")
+	want := []cascade.SeededRecord{{
+		ID: "conc_safe_counter", Kind: "scar-free-race", Seeds: 1,
+		Mutants: []cascade.SeededMutant{{
+			Desc: "escape-defer: move shared write outside the deferred-unlock region",
+			// The program itself. This is the field the write-up needed and did not have.
+			Source:       "package main\n\nfunc main() {}\n",
+			DataRace:     true,
+			PlainRefuted: false,
+			Verdicts:     map[prompt.JudgeStrictness]bool{prompt.JudgeStrict: false},
+		}},
+		Levels: []cascade.SeededVerdict{{Level: prompt.JudgeStrict, Judged: 1, FalseAccept: 0}},
+	}}
+	if err := writeJSONFile(path, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadSeededRecords(path)
+	if err != nil {
+		t.Fatalf("loadSeededRecords: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d records, want 1", len(got))
+	}
+	m := got[0].Mutants[0]
+	if m.Source != want[0].Mutants[0].Source {
+		t.Error("mutant source did not survive the round-trip; the forensic follow-up is lost")
+	}
+	if m.Desc == "" {
+		t.Error("operator description did not survive; per-operator seed counts are unrecoverable")
+	}
+	// DataRace is a hard filter on the scar-free arm and forensic on the deletion
+	// arm, so an arm-comparability claim rests on it being persisted, not inferred.
+	if !m.DataRace {
+		t.Error("DataRace did not survive the round-trip")
+	}
+	if pass, ok := m.Verdicts[prompt.JudgeStrict]; !ok || pass {
+		t.Errorf("per-mutant verdict did not survive: %+v", m.Verdicts)
+	}
+	if got[0].Kind != "scar-free-race" {
+		t.Errorf("kind = %q; the defect class must travel with the numbers", got[0].Kind)
+	}
+	// A missing file is a cold start, not an error: -resume on the first run must work.
+	empty, err := loadSeededRecords(filepath.Join(t.TempDir(), "absent.json"))
+	if err != nil || empty != nil {
+		t.Errorf("absent records file: got (%v, %v), want (nil, nil)", empty, err)
 	}
 }
 

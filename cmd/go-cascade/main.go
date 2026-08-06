@@ -296,7 +296,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 	step := fs.Float64("step", 0.1, "threshold grid resolution")
 	method := fs.String("method", string(calibrate.FixedSequence), "multiplicity control: fixed-sequence or bonferroni")
 	outPath := fs.String("o", "thresholds.json", "certificate output path")
-	recOut := fs.String("records", "", "also write the raw calibration records here")
+	recOut := fs.String("records", "", "also write the raw records here (calibration records; seeded-sweep records under -judge-seed)")
 	fromRec := fs.String("from-records", "", "replay calibration from saved records instead of profiling again")
 	refsDir := fs.String("refs", "", "directory of execution-validated reference solutions (id/solution.go under any subtree); a generated test suite that refutes its reference is flagged oracle-unsound and excluded from calibration")
 	pinAPI := fs.Bool("pin-api", false, "pin each problem's API to its reference's exported signatures so the spec model writes tests against the same contract the reference implements (removes the reference/spec name mismatch that leaves -refs inconclusive); implies -refs")
@@ -387,7 +387,7 @@ func cmdCalibrate(ctx context.Context, args []string) error {
 		if !ok {
 			return fmt.Errorf("unknown -seed-kind %q (want logic, race, or scar-free-race)", *seedKind)
 		}
-		return runSeededSweep(ctx, cfg, prov, probs, *judgeModel, *judgeSeed, kind)
+		return runSeededSweep(ctx, cfg, prov, probs, *judgeModel, *judgeSeed, kind, *recOut, *resume)
 	}
 
 	// Judge-sweep runs --compare once per strictness level to trace the judge
@@ -764,7 +764,12 @@ func parseSeedKind(s string) (cascade.SeedKind, bool) {
 	return cascade.SeedLogic, false
 }
 
-func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider, probs []benchProblem, judgeModel string, nSeed int, seedKind cascade.SeedKind) error {
+// runSeededSweep writes its records after every problem when -records is set, on
+// the same contract as the main calibrate loop: the expensive artifacts are the
+// mutant sources and the judge verdicts, and a run that keeps them only in memory
+// loses everything to a kill. Experiment 30 ran without this and its per-problem
+// seed counts had to be reconstructed from a progress log.
+func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider, probs []benchProblem, judgeModel string, nSeed int, seedKind cascade.SeedKind, recOut string, resume bool) error {
 	levels := []prompt.JudgeStrictness{prompt.JudgeStrict, prompt.JudgeBalanced, prompt.JudgePermissive}
 	r, err := cascade.New(cfg, prov, nil)
 	if err != nil {
@@ -772,32 +777,124 @@ func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider
 	}
 	defer r.Close() //nolint:errcheck // scratch dir
 
-	totals := map[prompt.JudgeStrictness]*cascade.SeededJudgeResult{}
-	for _, lvl := range levels {
-		totals[lvl] = &cascade.SeededJudgeResult{Level: lvl}
+	var recs []cascade.SeededRecord
+	done := map[string]bool{}
+	if resume && recOut != "" {
+		prior, lerr := loadSeededRecords(recOut)
+		if lerr != nil {
+			return lerr
+		}
+		partial := 0
+		for _, rec := range prior {
+			// Refuse to resume across defect classes. Appending scar-free rows to a
+			// sync-deletion file would pool the two rates into one denominator, which
+			// is precisely the comparison the two arms exist to keep separate.
+			if rec.Kind != cascade.SeedKindName(seedKind) {
+				return fmt.Errorf("cannot resume: %s holds %q seeds and this run is %q — pooling two defect classes in one file would make the rates incomparable; use a separate -records path per arm",
+					recOut, rec.Kind, cascade.SeedKindName(seedKind))
+			}
+			// A row whose judging failed part-way is kept on disk (its verdicts are
+			// real) but is NOT treated as done: resuming past it would leave the file
+			// permanently short of the seeds it says it harvested, and the shortfall
+			// would be invisible in the aggregate table. Drop it and re-run the
+			// problem. The replacement is a fresh model draw, not the same mutants.
+			if !seededComplete(rec) {
+				partial++
+				continue
+			}
+			recs = append(recs, rec)
+			done[rec.ID] = true
+		}
+		if len(done) > 0 || partial > 0 {
+			fmt.Fprintf(os.Stderr, "resuming: %d problems already recorded, skipping them", len(done))
+			if partial > 0 {
+				fmt.Fprintf(os.Stderr, "; %d partially-judged row(s) discarded and re-run", partial)
+			}
+			fmt.Fprintln(os.Stderr)
+		}
 	}
-	usedProblems, totalWrong := 0, 0
+	checkpoint := func() error {
+		if recOut == "" {
+			return nil
+		}
+		return writeJSONFile(recOut, recs)
+	}
+
+	interrupted := false
 	for i, p := range probs {
+		if done[p.ID] {
+			continue
+		}
+		// A cancelled context is a clean stop, not a per-problem skip: treating it as
+		// a skip would walk the whole remaining list printing failures and, worse,
+		// record nothing while looking like a completed run.
+		if ctx.Err() != nil {
+			interrupted = true
+			break
+		}
 		fmt.Fprintf(os.Stderr, "[seed %d/%d] %s\n", i+1, len(probs), p.ID)
-		res, nWrong, perr := r.ProfileSeeded(ctx, p.Problem, judgeModel, nSeed, levels, seedKind)
+		rec, perr := r.ProfileSeeded(ctx, p.ID, p.Problem, judgeModel, nSeed, levels, seedKind)
+		if rec != nil {
+			// Keep a partial row even when judging failed part-way: its mutants were
+			// paid for and its verdicts are real observations.
+			recs = append(recs, *rec)
+			if cerr := checkpoint(); cerr != nil {
+				return cerr
+			}
+		}
 		if perr != nil {
+			if ctx.Err() != nil {
+				interrupted = true
+				break
+			}
 			fmt.Fprintf(os.Stderr, "  skipped: %v\n", perr)
 			continue
 		}
-		if res == nil || nWrong == 0 {
-			fmt.Fprintf(os.Stderr, "  no provably-wrong candidate; skipped\n")
+		if rec == nil || rec.Seeds == 0 {
+			reason := "no provably-wrong candidate"
+			if rec != nil && rec.NoSeed != "" {
+				reason = rec.NoSeed
+			}
+			fmt.Fprintf(os.Stderr, "  %s; skipped\n", reason)
 			continue
 		}
-		usedProblems++
-		totalWrong += nWrong
-		for _, lvl := range levels {
-			totals[lvl].Judged += res[lvl].Judged
-			totals[lvl].FalseAccept += res[lvl].FalseAccept
-		}
+		fmt.Fprintf(os.Stderr, "  %d seeds\n", rec.Seeds)
+	}
+	if cerr := checkpoint(); cerr != nil {
+		return cerr
+	}
+	if recOut != "" {
+		fmt.Fprintf(os.Stderr, "wrote %d seeded records to %s\n", len(recs), recOut)
+	} else {
+		// Say it out loud. Experiment 30 ran this way and its per-problem seed counts
+		// and mutant sources were unrecoverable afterwards; on a null that cost
+		// little, on a positive event it would have destroyed the only interesting
+		// follow-up (which program did the judge pass?).
+		fmt.Fprintln(os.Stderr, "NOTE: no -records path given, so mutant sources and per-problem "+
+			"seed counts are NOT persisted and this run is not resumable.")
+	}
+	if interrupted {
+		fmt.Fprintf(os.Stderr, "INTERRUPTED at %d/%d problems (context cancelled). "+
+			"Records checkpointed; re-run the same command with -resume to finish the rest.\n",
+			len(recs), len(probs))
 	}
 
-	fmt.Printf("\nSeeded dangerous-mode test (%s): %d known-wrong candidates from %d problems, judged at each level.\n",
+	// Totals are derived from the records, not accumulated alongside them, so a
+	// printed rate and a recorded one cannot drift apart.
+	totals, totalWrong, usedProblems := tallySeeded(recs, levels)
+
+	fmt.Printf("\nSeeded dangerous-mode test (%s): %d known-wrong candidates harvested from %d problems.\n",
 		seedKindName(seedKind), totalWrong, usedProblems)
+	// The header counts what was harvested; the table counts what was judged. They
+	// differ only when a level stopped short, and then the per-level denominator is
+	// the one a rate may be divided by. Say which is which rather than printing two
+	// numbers and letting the reader assume they match.
+	for _, lvl := range levels {
+		if totals[lvl].Judged != totalWrong {
+			fmt.Printf("PARTIAL: %s judged %d of %d harvested — divide by the per-level 'judged' column, not the header.\n",
+				lvl, totals[lvl].Judged, totalWrong)
+		}
+	}
 	fmt.Printf("\n%-11s %-8s %-12s %s\n", "strictness", "judged", "false-acc", "η_fa rate")
 	fmt.Println("  " + strings.Repeat("-", 44))
 	for _, lvl := range levels {
@@ -836,9 +933,13 @@ func runSeededSweep(ctx context.Context, cfg *config.Config, prov model.Provider
 	return nil
 }
 
-// seedKindName labels the defect class in the report. The class has to appear in
-// the output: a scar-free rate and a sync-deletion rate are not comparable
-// numbers, and an unlabelled table invites pooling them.
+// seedKindName labels the defect class in the report prose. The class has to
+// appear in the output: a scar-free rate and a sync-deletion rate are not
+// comparable numbers, and an unlabelled table invites pooling them.
+//
+// This is deliberately not cascade.SeedKindName: that one returns the -seed-kind
+// flag spelling, which is what belongs in a record so a file can be matched back
+// to the command that produced it. Here we want prose.
 func seedKindName(k cascade.SeedKind) string {
 	switch k {
 	case cascade.SeedRace:
@@ -847,6 +948,74 @@ func seedKindName(k cascade.SeedKind) string {
 		return "scar-free race"
 	}
 	return "logic"
+}
+
+// seededComplete reports whether every harvested mutant of a row was judged at
+// every level asked for. A row that stopped mid-problem is a real observation but
+// not a finished one, so it must not be skipped on resume.
+func seededComplete(rec cascade.SeededRecord) bool {
+	// A zero-seed row is finished: the harvest ran and found nothing. Re-running it
+	// would redraw the tier for a problem already known to yield no seed, and on a
+	// paid arm that is spend for a result already on disk.
+	if rec.Seeds == 0 {
+		return true
+	}
+	if len(rec.Mutants) != rec.Seeds {
+		return false
+	}
+	for _, v := range rec.Levels {
+		if v.Judged != rec.Seeds {
+			return false
+		}
+	}
+	return len(rec.Levels) > 0
+}
+
+func loadSeededRecords(path string) ([]cascade.SeededRecord, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var recs []cascade.SeededRecord
+	if err := json.Unmarshal(b, &recs); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return recs, nil
+}
+
+// tallySeeded derives the report from the records rather than from a parallel
+// accumulator, so the printed η_fa and the persisted one cannot disagree — and a
+// resumed run's table covers the whole file, not just the problems this process
+// judged.
+//
+// usedProblems counts records that actually yielded a seed. A problem whose sites
+// all failed to compile or came back without a data race contributes nothing to
+// either column and must not inflate the denominator.
+func tallySeeded(recs []cascade.SeededRecord, levels []prompt.JudgeStrictness) (map[prompt.JudgeStrictness]*cascade.SeededJudgeResult, int, int) {
+	totals := map[prompt.JudgeStrictness]*cascade.SeededJudgeResult{}
+	for _, lvl := range levels {
+		totals[lvl] = &cascade.SeededJudgeResult{Level: lvl}
+	}
+	totalWrong, usedProblems := 0, 0
+	for _, rec := range recs {
+		if rec.Seeds == 0 {
+			continue
+		}
+		usedProblems++
+		totalWrong += rec.Seeds
+		for _, v := range rec.Levels {
+			t, ok := totals[v.Level]
+			if !ok {
+				continue
+			}
+			t.Judged += v.Judged
+			t.FalseAccept += v.FalseAccept
+		}
+	}
+	return totals, totalWrong, usedProblems
 }
 
 // runJudgeSweep traces the judge oracle's false-acceptance (η_fa) /
