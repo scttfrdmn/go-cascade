@@ -7,10 +7,10 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be at `d8633b5` (PR #70, the deferred-escape
-   operator). 70 PRs merged. **The experiment-30 PR (the scar-free sweep write-up) may
-   still be open** — if a PR is open, confirm CI green and I'll tell you whether to
-   merge; don't merge unilaterally.
+1. **Check git state.** `main` should be at `1d3ebf6` (PR #71, the experiment-30
+   write-up). 71 PRs merged. **Two PRs may still be open** — #73 (`-seed-kind` records
+   persistence, issue #72) and #75 (Bedrock cost tagging, issue #74). If a PR is open,
+   confirm CI green and I'll tell you whether to merge; don't merge unilaterally.
 2. **Read the project board** —
    https://github.com/users/scttfrdmn/projects/62 — which is now where the open work
    lives, one issue per gap (#49–#53). This file no longer restates the backlog.
@@ -318,21 +318,24 @@ and blocks *all* Bash; Read/Grep/Glob keep working, so do read-only work and ret
 
 ## Quick reference (state as of 2026-08-05, end of seventh session)
 
-- Public repo: github.com/scttfrdmn/go-cascade. main `d8633b5`, 70 PRs merged
-  (the experiment-30 write-up PR may be open). Project board:
-  https://github.com/users/scttfrdmn/projects/62. **#49, #51 and #52 are closed;
-  #50 and #53 remain, both `needs-spend-approval`** — #50 concurrency coverage
+- Public repo: github.com/scttfrdmn/go-cascade. main `1d3ebf6`, 71 PRs merged
+  (**#73 and #75 may be open** — `-seed-kind` records, and Bedrock cost tagging).
+  Project board: https://github.com/users/scttfrdmn/projects/62. **#49, #51 and #52 are
+  closed; #50 and #53 remain, both `needs-spend-approval`** — #50 concurrency coverage
   ($2–4), #53's paid arm (e) sampling pass ($4.12, scoped by the shipped tool). #51's
   paid follow-on (the seeded scar-free sweep) was authorized and **run** — experiment
   30, both arms null; the only route left for raising its n is widening the corpus.
+  Two engineering issues filed and implemented this session: **#72** (`-seed-kind`
+  wrote no records — the gap experiment 30 exposed) and **#74** (untagged Bedrock
+  spend). Neither is a research gap, so neither is on the board.
 - **New last session:** the four **scar-free race operators**
   (`internal/verify/mutation.go`, `-seed-kind=scar-free-race`) plus their coverage
   measurement and the **paid sweep** that used them — experiments 28/29/30,
   `results/scarfree-coverage-n11.md`, `deferred-escape-n11.md`,
   `scarfree-sweep-n9.md`, and `results/scarfree_coverage.py` for the power arithmetic.
-  **Known gap left deliberately unfixed: `-seed-kind` has no `-rec-out`**, so the sweep
-  writes stdout only — no per-problem counts, no mutant sources, not resumable. Fix that
-  before any re-run at larger n; `KilledMutant` already carries everything needed.
+  The gap that run exposed — **`-seed-kind` wrote stdout only**: no per-problem counts,
+  no mutant sources, not resumable — is closed by **PR #73** (issue #72), `-records` /
+  `-resume` via `cascade.SeededRecord`. If that PR is still open, the gap is still open.
 - **From the session before:** `go-cascade absorption` (§5.5(4) dial + multi-seed null
   envelope, `internal/calibrate/absorb.go`) and `go-cascade selfconsistency` (arm (e)
   feasibility gate + sampling arm, `internal/calibrate/selfconsistency.go`,
@@ -369,6 +372,27 @@ and blocks *all* Bash; Read/Grep/Glob keep working, so do read-only work and ret
   `input-tokens`/`output-tokens`, because `cache-read-input-token-count` under a study
   model name is other traffic (go-cascade sends no cached prompts) and over-attributes by
   an order of magnitude. Prefer a same-day delta on a day with no other activity.
+- **Runs from here on are TAGGED, so the three-filter reconciliation is a fallback, not
+  the method** (issue #74, PR #75, `internal/model/costtag.go`). `-cost-tag` (default
+  `go-cascade`) bills each run against a tagged **application inference profile** whose
+  ARN goes out as `ConverseInput.ModelId`; the key is the account's already-ACTIVE
+  `Project`, because a fresh cost-allocation key attributes nothing until activated and
+  **activation does not backfill**. Pass a per-experiment value (`-cost-tag exp-31`) to
+  separate one run from another. This does **not** retroactively attribute anything: the
+  ~$197 to date and experiment 30's ~$1.20 stay in the untagged bucket, which is the
+  motivation — this account's `Amazon Bedrock Service` line ran **$1126.23 in one day**,
+  all untagged. Three things not to undo: the ARN is created only at the **provider
+  boundary** (`Router.contaminated` enforces invariant #3 by string equality on model IDs
+  and that comparison *fires* in the default config, so an ARN upstream silently stops
+  flagging contamination with no test failing — pinned by
+  `TestContaminationComparesLogicalModelIDs`); resolution **never fails a run** (falls
+  back to the bare ID, warns once per model, caches the fallback); and
+  `ConverseInput.RequestMetadata` is **not** the mechanism despite looking like it — it
+  filters *invocation logs*, which are not even configured here, so it would have
+  attributed nothing and returned no error. Still unverified: **one ~$0.01 probe per ARN
+  family** to confirm a tagged profile ARN is accepted by `converse` for both the `us.*`
+  Claude and bare-ID open-weight shapes; Cost Explorer's ~1-day lag means the attribution
+  itself is only confirmable the following day.
 - Bedrock models ACTIVE (us-west-2): maverick-17b, haiku-4-5, sonnet-4-5, sonnet-4-6,
   opus-4-5 (+ newer opus/sonnet/fable-5 profiles — keep configs pinned to the models
   each experiment used, for cross-run cost comparability). Re-run `go-cascade models`
