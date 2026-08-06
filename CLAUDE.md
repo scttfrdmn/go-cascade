@@ -186,6 +186,41 @@ a test, but the tests will not catch every way of violating them.
   (filtering on the latter alone totals $1.14 for the whole study). That service line
   also contains Claude Code's own usage — filter by `USAGE_TYPE`. See `results/README.md`
   §"A correction to every cost figure on this page".
+- **A model ID becomes an ARN at the provider boundary and nowhere else** (issue #74,
+  `internal/model/costtag.go`). Bedrock spend is attributed by billing against a
+  **tagged application inference profile**, whose ARN is what `ConverseInput.ModelId`
+  carries; `-cost-tag` (default `go-cascade`, `""` disables) sets the value of the
+  `Project` cost-allocation tag. Why this is defaulted **on**: untagged spend cannot be
+  attributed after the fact, so a forgotten flag costs a reconciliation permanently —
+  this account's `Amazon Bedrock Service` line ran $1126.23 in one day, entirely
+  untagged, against a whole-study total of ~$197, and experiment 30's ~$1.20 is
+  unrecoverable for exactly this reason. Four traps, three of which produce no error:
+  **(a) `ConverseInput.RequestMetadata` is not it.** It is a `map[string]string` on the
+  struct this package already builds, so it looks like the answer; its own doc says it
+  filters *invocation logs* — and logging is not even configured here. It would have
+  attributed nothing, silently. **(b) Substituting the ARN upstream of the provider
+  disables invariant #3.** `Router.contaminated` enforces it by **string equality** on
+  model IDs (`tier.ModelID == cfg.TestModel`), and in the default config that comparison
+  fires today (tier `mid` and `TestModel` are both claude-sonnet-4-5). One model spelled
+  two ways means `OracleContaminated` never sets and contaminated records enter
+  calibration, with **no test failing** — the guarded branch just stops running. Hence
+  `config.Tier.ModelID` keeps the logical ID everywhere and resolution happens one
+  function above the wire, pinned by
+  `TestContaminationComparesLogicalModelIDs`. **(c) A cost-allocation key must be
+  ACTIVE and activation does not backfill**, so the key is the account's existing
+  `Project` rather than a fresh go-cascade one — a new key would leave everything before
+  activation unattributed forever. **(d) `ListInferenceProfiles` with no `TypeEquals`
+  returns only the SYSTEM_DEFINED profiles**, so the obvious single call cannot see the
+  account's own application profiles: an unfiltered lookup would create a duplicate
+  profile every run and split one model's spend across rows. Same shape as the standing
+  caveat that `models` omits the bare-ID open-weight catalog — an absence there is not
+  evidence of absence. Two properties to preserve: resolution **never fails** (on any
+  error it falls back to the bare ID, warns **once per model**, and caches the fallback —
+  a lost sample is worse than a lost invoice line, and `CreateInferenceProfile` is a
+  distinct IAM permission from `InvokeModel`), and the source ARN is **looked up, never
+  assembled** — the two model families have different ARN shapes (`us.*` Claude is an
+  account-scoped inference-profile ARN, `qwen.*` an account-less foundation-model one),
+  so a hand-built ARN works for one family and fails for the other.
 - **Long `calibrate` runs checkpoint and resume.** A paired run over n=64 takes
   ~60–90 min and can be SIGTERM'd externally (issue #21). The loop writes records
   after *every* problem, treats a cancelled context as a clean stop (not a

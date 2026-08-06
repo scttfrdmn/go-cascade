@@ -2,6 +2,7 @@ package cascade
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -691,4 +692,67 @@ func TestTwoStageTierRunsPlanner(t *testing.T) {
 	if res.Cost.ModelCalls < 1 {
 		t.Error("planner cost was not accounted")
 	}
+}
+
+// Invariant #3 is enforced by STRING EQUALITY on model IDs, so the identifier a
+// tier carries must stay the logical model ID all the way to the provider — no
+// layer may rewrite it into an equivalent-but-differently-spelled name.
+//
+// The concrete hazard is cost attribution: billing a run to a tagged Bedrock
+// application inference profile means sending a profile ARN as ConverseInput's
+// ModelId, and doing that anywhere upstream of contaminated() turns one model
+// into two strings. In the default config that comparison fires today (tier
+// "mid" and TestModel are both claude-sonnet-4-5), so the failure is not
+// hypothetical: OracleContaminated would stop setting, contaminated records
+// would enter calibration, and NOTHING would fail — the guarded branch simply
+// stops running. Hence this asserts both halves: contamination fires on
+// equality, and the provider sees the configured IDs verbatim.
+func TestContaminationComparesLogicalModelIDs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs candidates")
+	}
+	cfg := testConfig(t)
+	cfg.CacheDir = ""
+	// Tier 0's coder IS the oracle's author. Validate permits this (unlike a
+	// planner collision) precisely so the run can proceed and be flagged.
+	cfg.Tiers[0].ModelID = cfg.TestModel
+
+	rec := newRecording(model.Mock{})
+	r, err := New(cfg, rec, nil)
+	if err != nil {
+		t.Skipf("cannot build router (no go toolchain?): %v", err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+
+	out, err := r.Profile(context.Background(), "p1", cfg.Tiers[0].ModelID+" "+seqProblem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Contaminated {
+		t.Error("a tier whose coder equals TestModel must flag the record contaminated (invariant #3); " +
+			"if this fails, check that nothing rewrote a model ID between config and the comparison")
+	}
+	// The provider was addressed by logical ID. A rewrite would show up here as a
+	// key the config never named.
+	for _, tier := range cfg.Tiers {
+		if rec.byModel[tier.ModelID] == 0 {
+			t.Errorf("tier %s (%s) was never requested under its configured model id; "+
+				"the provider saw %v", tier.Name, tier.ModelID, keysOf(rec.byModel))
+		}
+	}
+	for id := range rec.byModel {
+		if strings.HasPrefix(id, "arn:") {
+			t.Errorf("the provider was called with %q; an ARN upstream of contaminated() "+
+				"silently disables the invariant-#3 check", id)
+		}
+	}
+}
+
+func keysOf(m map[string]int) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
 }

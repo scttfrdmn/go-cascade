@@ -99,6 +99,7 @@ type commonFlags struct {
 	maxAllocs  int
 	execWrap   string
 	shadow     float64
+	costTag    string
 }
 
 func (f *commonFlags) register(fs *flag.FlagSet) {
@@ -116,6 +117,13 @@ func (f *commonFlags) register(fs *flag.FlagSet) {
 	fs.IntVar(&f.maxAllocs, "max-allocs", 0, "reject solutions above this allocs/op (needs a benchmark)")
 	fs.StringVar(&f.execWrap, "exec-wrapper", "", "command prefix used to sandbox test execution, e.g. 'firejail --net=none'")
 	fs.Float64Var(&f.shadow, "shadow-rate", -1, "fraction of queries routed past the cache to keep calibration unbiased")
+	// Defaulted ON, not opt-in. Untagged Bedrock spend is unrecoverable after the
+	// fact, so a forgotten flag costs a reconciliation permanently and the failure
+	// is silent and one-way — this account's Bedrock line is ~$1100/day against a
+	// whole-study total of ~$197, and experiment 30's ~$1.20 is unreconcilable for
+	// exactly this reason.
+	fs.StringVar(&f.costTag, "cost-tag", model.DefaultCostTag,
+		"value for the "+model.CostTagKey+" cost-allocation tag on this run's Bedrock spend; empty disables tagging")
 }
 
 func (f *commonFlags) build() (*config.Config, model.Provider, *calibrate.Certificate, error) {
@@ -172,7 +180,7 @@ func (f *commonFlags) build() (*config.Config, model.Provider, *calibrate.Certif
 		}
 		cfg.TestModel = model.MockOracle
 	case "bedrock":
-		p, err := model.NewBedrock(context.Background(), cfg.Region)
+		p, err := model.NewBedrock(context.Background(), cfg.Region, f.costTag)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1991,7 +1999,9 @@ func cmdModels(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	b, err := model.NewBedrock(ctx, *region)
+	// No cost tag: listing profiles is a control-plane read and must not create one
+	// as a side effect of asking what exists.
+	b, err := model.NewBedrock(ctx, *region, "")
 	if err != nil {
 		return err
 	}
@@ -2004,12 +2014,19 @@ func cmdModels(ctx context.Context, args []string) error {
 		if *filter != "" && !strings.Contains(p.ID, *filter) {
 			continue
 		}
-		fmt.Printf("%-60s %-10s %s\n", p.ID, p.Status, p.Name)
+		fmt.Printf("%-60s %-14s %-10s %s\n", p.ID, p.Type, p.Status, p.Name)
 		n++
 	}
 	if n == 0 {
 		fmt.Fprintln(os.Stderr, "no inference profiles matched; check the region and model access")
 	}
+	// An absence here is not evidence a model is unavailable, and saying so is the
+	// point: this call covers inference profiles only, so the bare-ID open-weight
+	// catalog (qwen, deepseek, kimi, glm, devstral) is invisible to it however many
+	// of those models the account can actually invoke.
+	fmt.Fprintln(os.Stderr, "\nnote: inference profiles only. Bare-ID foundation models "+
+		"(qwen, deepseek, kimi, ...) are NOT listed here — use\n"+
+		"  aws bedrock list-foundation-models --region "+*region+"\nfor those.")
 	return nil
 }
 
