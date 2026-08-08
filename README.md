@@ -398,7 +398,9 @@ profiles under a separate `smoke-test` tag value, so a probe never lands in an
 experiment's cost row. **Run it twice** — the first call exercises profile
 creation, the second exercises lookup, and they fail independently. It does not
 verify the attribution itself: Cost Explorer lags about a day, so that is a
-next-day query under `Project=smoke-test`.
+next-day query under `Project=smoke-test`. **Confirmed 2026-08-08**: the probe's
+spend showed up there as $0.0001703, the right order of magnitude for two
+24-token completions.
 
 ## Where it breaks
 
