@@ -7,16 +7,33 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be `99a657a` — the cost-tagging cross-region fix
-   (PR #76, follow-up to #75 / issue #74) — with 74 PRs merged and nothing in flight.
-   If a PR *is* open, confirm CI green and I'll tell you whether to merge; don't merge
-   unilaterally.
-   **First actual task: verify the cost attribution in Cost Explorer.** It lags ~1 day,
-   so the tagging has never been confirmed end to end — only that the runtime accepts
-   the ARN. Query `Project=smoke-test` (the ~$0.01 probe on 2026-08-05, expect two tiny
-   line items: haiku and qwen) and `Project=go-cascade`. If `smoke-test` shows nothing
-   while untagged spend moved, the mechanism does not work and every "tagged from here
-   on" claim in this file is wrong.
+1. **Check git state.** `main` should be `1de7b30` — the `PlainRefuted`
+   machine-dependence fix (PR #79) on top of the cost-tagging work (#75–#77, issue #74)
+   — with 76 PRs merged and nothing in flight. If a PR *is* open, confirm CI green and
+   I'll tell you whether to merge; don't merge unilaterally.
+   **PR #79 matters beyond its diff: `main` was red on every merge from #75 through
+   #78** — `TestScarFreeSeedCountOnTheConcurrencyBenchmark` pinned a per-operator count
+   derived from *running* a racing program, which is machine-dependent (CI's 2 cores vs
+   this box's 12). If CI is ever red again on an unrelated diff, check whether it is
+   this class of problem before assuming the diff broke something — see the CLAUDE.md
+   gotcha and `results/deferred-escape-n11.md`'s 2026-08-06 correction.
+   **First actual task: verify the cost attribution in Cost Explorer.** It has never
+   been confirmed end to end — only that `converse` accepts the profile ARN. Query
+   `Project=smoke-test` (expect two tiny line items, haiku and qwen, totalling ~$0.01)
+   and `Project=go-cascade`. If `smoke-test` shows nothing while untagged Bedrock spend
+   moved on the same day, the mechanism does not work and every "tagged from here on"
+   claim in this file is wrong.
+   **The billing day is 2026-08-06 UTC, not 08-05** — the profiles were created
+   `2026-08-06T05:39Z`, which was the evening of 08-05 *locally*. Cost Explorer bills in
+   UTC and a query for the wrong day returns an empty `Groups` list, which reads exactly
+   like a mechanism that did not work. Checked on 08-06 it was still `Estimated: true`
+   with `$0` for the whole service, i.e. not yet ingested — so **only a query on 08-07 or
+   later is evidence**. Same trap as the `AWS_REGION` one: an absence that is really a
+   wrong coordinate. Note `get-tags --tag-key Project` will not list `smoke-test` until
+   spend under it is ingested; the tag *is* on the profile
+   (`bedrock list-tags-for-resource` confirms `Project=smoke-test` on
+   `application-inference-profile/o7qkc8duc9a3`), so an absent tag *value* is a
+   Cost-Explorer-ingestion fact, not a tagging failure.
 2. **Read the project board** —
    https://github.com/users/scttfrdmn/projects/62 — which is now where the open work
    lives, one issue per gap (#49–#53). This file no longer restates the backlog.

@@ -247,6 +247,19 @@ a test, but the tests will not catch every way of violating them.
   experiment are `us-west-2`. Both worked, but "it passed" was about the wrong region.
   Pass the region explicitly when a live check is meant to be evidence about a
   particular one.
+- **Cost Explorer bills in UTC and returns an empty `Groups` list for a day it has not
+  ingested — which is indistinguishable from a tag that does not work.** The cost-tag
+  probes ran on the evening of 2026-08-05 *locally* and created their profiles at
+  `2026-08-06T05:39Z`, so their spend is on the **08-06** UTC day; a first query against
+  08-05 grouped by `Project` returned only the untagged bucket, and 08-06 came back
+  `Estimated: true` with `$0` for the entire Bedrock service. Neither is evidence about
+  attribution. `ce get-tags --tag-key Project` likewise omits a value until spend under
+  it is ingested, while `bedrock list-tags-for-resource` confirms the tag is on the
+  profile — so the *tag* and the *attribution* are separately checkable, and only the
+  second one lags. Convert the local timestamp to UTC, pick the day from the profile's
+  `createdAt`, and treat any `Estimated: true` total of `$0` for a service that
+  definitely ran as "not ingested", not as a finding. Same shape as the `AWS_REGION`
+  trap above: an absence that is really a wrong coordinate.
 - **Long `calibrate` runs checkpoint and resume.** A paired run over n=64 takes
   ~60–90 min and can be SIGTERM'd externally (issue #21). The loop writes records
   after *every* problem, treats a cancelled context as a clean stop (not a
