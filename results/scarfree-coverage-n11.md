@@ -9,8 +9,11 @@ Experiment 28. Offline, **$0**, ~20 s of toolchain time per harvest. No model ca
 > supplies a **tenth** seed, so the count is now 10 against this page's bar of 10 and the
 > sweep is **fundable rather than declined**. The bar did not move; the measurement did.
 > Two other findings here are also revised there: **Result 3's "all 9 seeds are also
-> refuted without `-race`" is now 9 of 10** (the new seed is the first that genuinely
-> needs the rung), and the "harvest from model draws" route is **measured and closed** —
+> refuted without `-race`" is now 9 of 10 on a 12-core machine and 8 of 10 on a 2-core
+> one** (the new seed is the first that genuinely needs the rung; the count is
+> machine-dependent because `PlainRefuted` is the outcome of *running* a racing program —
+> see the 2026-08-06 correction in `deferred-escape-n11.md`), and the "harvest from model
+> draws" route is **measured and closed** —
 > 8 raw / 6 unique / 5 from execution-correct bases, not clearly above 10.
 > Everything below is left exactly as written. The decline was correct on the evidence it
 > had, and rewriting it would erase the sequence that makes a pre-registered bar mean

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -274,22 +275,69 @@ func TestScarFreeSeedCountOnTheConcurrencyBenchmark(t *testing.T) {
 	// not: undeferring the Unlock widens the window enough that the ordinary run
 	// passes and only ThreadSanitizer objects.
 	//
-	// Pinned per operator rather than as a total because that is the claim: the
-	// escape-defer operator is the one that produces -race-only seeds, and a
-	// total of 1 could be satisfied by any operator drifting into the bucket.
-	// PlainRefuted is recorded and never filtered (it must not be — filtering one
-	// arm breaks comparability with the scar-bearing arm), so this is the only
-	// place the asymmetry is asserted.
-	wantRaceOnly := map[string]int{
-		"defer-wait": 0, "downgrade": 0, "escape": 0, "escape-defer": 1,
+	// ASYMMETRIC ASSERTION, and the asymmetry is the point. `PlainRefuted` is not
+	// a property of a mutant; it is the outcome of RUNNING a racing program once,
+	// and it is MACHINE-DEPENDENT. Measured per seed, 10 plain runs each:
+	//
+	//	                                        12 cores    2 cores
+	//	hard_conc_rate_limiter:38 downgrade     10/10       1/10
+	//	hard_conc_rate_limiter:56 escape-defer   0/10        0/10
+	//	the other eight                         10/10      10/10
+	//
+	// So the downgrade seed on the rate limiter crosses into -race-only on a
+	// 2-core box and not on a 12-core one, which is why this test passed locally
+	// and failed on CI for three merges running (#75, #76, #78). Pinning an exact
+	// count per operator pins the runner, not the operators.
+	//
+	// The floor is therefore asserted and the ceiling is not:
+	//
+	//   - escape-defer >= 1 is the CLAIM, and it is stable (0/10 on both machines,
+	//     by construction — undeferring widens the window unconditionally). If it
+	//     falls to 0 the sweep is back to measuring reader-visibility on defects a
+	//     plain run already catches, and that must fail loudly.
+	//   - Other operators are NOT pinned to 0. A seed crossing into -race-only
+	//     STRENGTHENS the arm — it means more seeds genuinely require the
+	//     interleaving — so failing the suite for it would be failing on good news,
+	//     and worse, it would tempt whoever hits it to "fix" a real measurement by
+	//     editing the expectation.
+	//
+	// Total is not pinned either, for the same reason. What is checked instead is
+	// that a crossing gets REPORTED: silence would let the machine-dependence go
+	// unnoticed again, and this quantity is a premise of experiment 30's funding
+	// (results/deferred-escape-n11.md, Result 2).
+	//
+	// PlainRefuted stays recorded and never FILTERED on (it must not be — filtering
+	// one arm breaks comparability with the scar-bearing arm). This is only an
+	// assertion about it.
+	const wantEscapeDeferRaceOnly = 1
+	if raceOnly["escape-defer"] < wantEscapeDeferRaceOnly {
+		t.Errorf("operator escape-defer: %d seeds refuted ONLY under -race, want >= %d.\n"+
+			"This is the seed that makes the -race rung load-bearing for the sweep. At 0 "+
+			"the arm is back to measuring whether a reader notices a program that already "+
+			"fails deterministically — see results/deferred-escape-n11.md Result 2.",
+			raceOnly["escape-defer"], wantEscapeDeferRaceOnly)
 	}
-	for op, w := range wantRaceOnly {
-		if raceOnly[op] != w {
-			t.Errorf("operator %s: %d seeds refuted ONLY under -race, recorded %d.\n"+
-				"If this fell to 0 for escape-defer the sweep is back to measuring "+
-				"reader-visibility on defects a plain run already catches; if it rose "+
-				"elsewhere, say so in the write-up — it strengthens the arm.",
-				op, raceOnly[op], w)
+	for _, op := range []string{"defer-wait", "downgrade", "escape"} {
+		if raceOnly[op] > 0 {
+			// Deliberately Logf, not Errorf: more -race-only seeds is a better arm.
+			//
+			// This is only visible under `go test -v` — a passing test's output is
+			// buffered and discarded, and writing to os.Stderr instead does NOT escape
+			// that (measured, not assumed). So do not read the absence of this line in
+			// a CI log as the absence of a crossing. That is tolerable only because the
+			// ACTIONABLE direction is the floor above, which fails loudly; a crossing
+			// needs no action beyond not quoting a per-operator figure without its
+			// machine, which is recorded permanently in the write-up instead.
+			//
+			// NumCPU, not GOMAXPROCS(0): the mutant runs are child processes with a
+			// curated env (workspace.go) that does not carry GOMAXPROCS, so their
+			// parallelism is the machine's core count, not this binary's setting.
+			t.Logf("operator %s: %d of %d seeds refuted ONLY under -race on this machine "+
+				"(NumCPU=%d). Not a failure — it strengthens the arm — but PlainRefuted is "+
+				"machine-dependent, so name the machine beside any per-operator figure "+
+				"quoted in a write-up. See results/deferred-escape-n11.md, correction of "+
+				"2026-08-06.",
+				op, raceOnly[op], gotByOperator[op], runtime.NumCPU())
 		}
 	}
 }

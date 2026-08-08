@@ -73,6 +73,30 @@ ordinary run passes and only ThreadSanitizer objects. So the arm now contains at
 seed of exactly the shape §3.1 is about — a program a reader must reason about
 interleavings to reject, and which a deterministic test run lets through.
 
+**Correction (2026-08-06): "9 of 10" is a fact about a 12-core machine, not about the
+operators.** `PlainRefuted` is the outcome of *running* a racing program, so it depends on
+available parallelism. Re-measured 10 plain runs per seed on both machine shapes:
+
+| seed | 12 cores | 2 cores |
+|---|---|---|
+| `hard_conc_rate_limiter:38` downgrade | 10/10 refuted | **1/10** |
+| `hard_conc_rate_limiter:56` escape-defer | 0/10 | 0/10 |
+| the other eight | 10/10 | 10/10 |
+
+So on a 2-core runner it is **8 of 10 plain-refuted, not 9** — the rate limiter's
+*downgrade* seed also becomes `-race`-only, and stochastically so (1/10, not 0/10). This
+was found because `TestScarFreeSeedCountOnTheConcurrencyBenchmark` pinned the per-operator
+count to an exact value and so **failed on CI while passing locally**, across three merges
+(#75, #76, #78) before anyone read the post-merge run.
+
+Two things follow. The claim of this Result **survives and strengthens**: the escape-defer
+seed is `-race`-only on *both* machines (0/10 each, as its construction implies — undeferring
+widens the window unconditionally), and on the CI shape a second seed joins it. But **any
+per-operator plain-refutation figure must name the machine that produced it**, and the test
+now asserts only the floor (`escape-defer >= 1`), logging rather than failing when other
+operators cross — failing the suite on "more seeds genuinely need the interleaving" would be
+failing on good news, and would invite editing the expectation to match.
+
 This is a bigger change to *what the sweep would measure* than the count going 9 → 10.
 
 `PlainRefuted` remains **recorded and never filtered on** — filtering one arm and not the

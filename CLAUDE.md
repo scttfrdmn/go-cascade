@@ -493,9 +493,20 @@ a test, but the tests will not catch every way of violating them.
   arm comparability holds. **Seed quality changed more than the count did:** experiment 28
   found *all* 9 seeds were also refuted without `-race` — so the sweep could only have
   measured whether a reader notices a deterministically-wrong program — and it is now **9
-  of 10**, the new seed being the first that genuinely requires the interleaving.
-  `PlainRefuted` is still recorded and **never filtered**, and the asymmetry is asserted
-  **per operator**, since a total of 1 could be satisfied by drift.
+  of 10 on a 12-core box, 8 of 10 on a 2-core one**, the new seed being the first that
+  genuinely requires the interleaving. **`PlainRefuted` IS MACHINE-DEPENDENT and must never
+  be pinned to an exact count.** It is the outcome of *running* a racing program, so
+  available parallelism decides it: measured 10 plain runs per seed,
+  `hard_conc_rate_limiter:38` (downgrade) is refuted 10/10 at 12 cores and **1/10 at 2**,
+  while the escape-defer seed is 0/10 on both (undeferring widens the window
+  unconditionally, so the claim itself is stable). An exact per-operator expectation
+  therefore pins the *runner*: it passed locally 10/10 and failed CI on three consecutive
+  merges (#75, #76, #78) with `downgrade: 1 seeds refuted ONLY under -race, recorded 0`.
+  The test now asserts a **floor** (`escape-defer >= 1`, the load-bearing claim) and
+  **logs** rather than fails when another operator crosses — a crossing means more seeds
+  genuinely need the rung, so failing on it is failing on good news and invites "fixing"
+  a real measurement by editing the expectation. Quote the machine alongside any
+  plain-refutation figure. `PlainRefuted` is still recorded and **never filtered**.
   **Route 1 is measured and closed:** `ProfileSeeded` mutates a tier-0 **model draw**,
   never a reference, and that population gives **8 raw / 6 unique / 5 from
   execution-correct bases** — 9 recorded rows are 7 unique programs (`conc_safe_counter`
