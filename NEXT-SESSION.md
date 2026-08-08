@@ -7,11 +7,10 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be `cf1ec9b` — the Cost-Explorer-UTC docs fix
-   (PR #78) rebased onto the `PlainRefuted` machine-dependence fix (PR #79) on top of
-   the cost-tagging work (#75–#77, issue #74) — with 77 PRs merged and nothing in
-   flight. If a PR *is* open, confirm CI green and I'll tell you whether to merge;
-   don't merge unilaterally.
+1. **Check git state.** `main` should be `87d1391` — cost-tagging (#75–#77, issue #74),
+   the `PlainRefuted` machine-dependence fix (#79), and the Cost-Explorer confirmation
+   (#78, #80) — 78 PRs merged, nothing in flight. If a PR *is* open, confirm CI green
+   and I'll tell you whether to merge; don't merge unilaterally.
    **PR #79 matters beyond its diff: `main` was red on every merge from #75 through
    #78** — `TestScarFreeSeedCountOnTheConcurrencyBenchmark` pinned a per-operator count
    derived from *running* a racing program, which is machine-dependent (CI's 2 cores vs
@@ -24,17 +23,32 @@ We're continuing the go-cascade study. Before anything else:
    **$0.0001703** — the right order of magnitude for the two 24-token completions the
    smoke test sent. `ce get-tags` for `Project` now lists `smoke-test` too (it did not
    on 08-06, confirming that absence was ingestion lag, not a broken tag). **No
-   `go-cascade`-tagged spend yet** — expected,
-   since no full experiment has run under tagging since #76 landed; that will confirm
-   itself the first time one does.
-2. **Read the project board** —
+   `go-cascade`-tagged spend yet** — expected, since no full experiment has run under
+   tagging since #76 landed; that will confirm itself the first time one does.
+2. **A design-space review exists and has two open threads.**
+   `docs/model-combination-design-space-2026-08-08.md` covers six approaches to
+   combining models for cost savings beyond the existing cascade/cache/self-consistency
+   arms (adaptive tier ordering, cross-family ensemble voting, problem decomposition,
+   a specialized repair model, an upfront difficulty classifier, parallel tier racing —
+   the last of which turned out to already be partly implemented as `speculative`,
+   `cascade.go:473-593`, gated on `--deadline`). Two of its six gating checks have been
+   RUN (`results/design_space_offline_checks.py`, $0, no live spend) and came back
+   unfavorable for the two approaches they gated: cross-family voting's
+   correlated-failure signal replicated across 28/29 record pairs (not just the
+   original n=47 pair), and specialized repair's ceiling on total spend is ≈1.6–4.7%.
+   Neither is killed outright, but both are re-ranked behind adaptive-ordering's
+   Phase 1 (stopping-time rule), which is the one approach whose check came back
+   unambiguously positive. **Nothing in `internal/` has been changed** — this is
+   still design research. If picking this up: read the doc's "Recommended build
+   order" section, which is current as of this run.
+3. **Read the project board** —
    https://github.com/users/scttfrdmn/projects/62 — which is now where the open work
    lives, one issue per gap (#49–#53). This file no longer restates the backlog.
-3. **Re-read `results/README.md`** (twenty-nine experiments; 24 live, 5 decided
+4. **Re-read `results/README.md`** (twenty-nine experiments; 24 live, 5 decided
    offline for $0) and
    **`docs/verification-saturated-cascades.md` §5.6** (the live-evaluation
    reconciliation). `AWS_PROFILE=aws` for live Bedrock; `--provider=mock` is free.
-4. The MultiPL-E benchmark is built and used. It lives *outside* the repo at
+5. The MultiPL-E benchmark is built and used. It lives *outside* the repo at
    `~/mple-bench` (4 MB, 488 problems) — see "The benchmark" below.
 
 ## Where the study stands
