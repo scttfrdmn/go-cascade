@@ -7,10 +7,16 @@ Paste the block below to start the next session. It assumes memory is loaded
 
 We're continuing the go-cascade study. Before anything else:
 
-1. **Check git state.** `main` should be `b808474` — the NEXT-SESSION refresh on top of
-   the cost-tagging cross-region fix (PRs #76, #77; issue #74) — with 75 PRs merged and
-   nothing in flight. If a PR *is* open, confirm CI green and I'll tell you whether to
-   merge; don't merge unilaterally.
+1. **Check git state.** `main` should be `1de7b30` — the `PlainRefuted`
+   machine-dependence fix (PR #79) on top of the cost-tagging work (#75–#77, issue #74)
+   — with 76 PRs merged and nothing in flight. If a PR *is* open, confirm CI green and
+   I'll tell you whether to merge; don't merge unilaterally.
+   **PR #79 matters beyond its diff: `main` was red on every merge from #75 through
+   #78** — `TestScarFreeSeedCountOnTheConcurrencyBenchmark` pinned a per-operator count
+   derived from *running* a racing program, which is machine-dependent (CI's 2 cores vs
+   this box's 12). If CI is ever red again on an unrelated diff, check whether it is
+   this class of problem before assuming the diff broke something — see the CLAUDE.md
+   gotcha and `results/deferred-escape-n11.md`'s 2026-08-06 correction.
    **First actual task: verify the cost attribution in Cost Explorer.** It has never
    been confirmed end to end — only that `converse` accepts the profile ARN. Query
    `Project=smoke-test` (expect two tiny line items, haiku and qwen, totalling ~$0.01)
