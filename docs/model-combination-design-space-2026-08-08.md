@@ -63,17 +63,33 @@ reordering rule that only conditions on already-recorded per-tier signals are
 *both* offline-replayable against existing n=409/470 records, since `Profile`
 already runs every tier on every problem regardless of policy.
 
-**Recommendation.** Pursue Phase 1 (cheap, offline-validated, no invariant
-risk, strict generalization of `preferRepair`). Do not build Phase 2 without
-first exhausting Phase 1 — the measured non-nested rate (0.5–2.2%) is an
-order of magnitude below the nested rate, and Phase 2's cost (re-keying the
-certificate machinery) is the single riskiest refactor in the whole set.
+**Recommendation — REVISED 2026-08-08, after a follow-up check.** The rate at
+which non-nested crossings occur (0.5–2.2%) only bounds how often reordering
+would matter *if a rule could identify those cases*; it says nothing about
+whether the rule can. Checked directly: neither the visible cluster score
+nor tier-0 cost predicts whether escalating pays off, on either an n=72
+resampled set (properly deduplicated to 27 unique problems, p=0.66/p=0.43)
+or the larger independent n=488 set at both tier boundaries (p=0.166,
+p=0.831). See `results/design_space_offline_checks.py`'s
+`check3_stopping_signal` for the reproducible check, including a printed
+demonstration of two apparent signals (p=0.02, p=0.0096) that evaporate once
+non-independent repeated draws are collapsed to one row per problem — a
+caution about this exact kind of analysis, not just this exact result. Do not build Phase 1 on the strength
+of the crossing-rate check alone; no stopping rule has a demonstrated signal
+to act on yet. Phase 2 remains deprioritized regardless, for the reasons
+below.
 
-**Open questions.** Is "adaptive ordering" meant as reordering or as
-stop/continue (very different costs)? Should `Certificate.Thresholds` move
-to identity-keyed regardless, ahead of any specific policy needing it? What
-reservation-value estimator is defensible given errors are strongly
-positively correlated across tiers?
+**Open questions.** Is there a richer visible-partition signal — verifier
+diagnostic category, disagreement structure across the tier-0 fan-out, cost
+*trajectory* rather than final cost — that predicts escalation value where
+score and cost did not? None of the currently recorded fields do, but the
+question was only checked against what happens to already be in
+`calibrate.TierObs` today, not against anything a code change might newly
+capture. Is "adaptive ordering" meant as reordering or as stop/continue (very
+different costs)? Should `Certificate.Thresholds` move to identity-keyed
+regardless, ahead of any specific policy needing it? What reservation-value
+estimator is defensible given errors are strongly positively correlated
+across tiers?
 
 ## 2. Cross-family ensemble voting
 
@@ -466,13 +482,50 @@ preferred; #5 does not need to be built to get the benefit it was chasing.
    riskiest surface in the codebase — for a benefit the existing data argues
    is small (#1: 0.5–2.2% non-nested crossings) or negative (#5: below-chance
    AUC on the class that matters).
-3. **Build adaptive-ordering Phase 1** (stopping-time rule) first among the
-   remaining candidates — promoted ahead of specialized repair and family
-   voting now that step 1 has run: it is the one approach in the set whose
-   gating check came back *unambiguously positive* (fully offline-replayable,
-   zero live spend, no result contradicting it), where both #4 and #2 came
-   back with real but small/unfavorable numbers. Fully offline-replayable,
-   doesn't touch repair dispatch.
+3. **Adaptive-ordering Phase 1 (stopping-time rule) is now ALSO checked, and
+   the check is unfavorable — retracting the previous version of this step.**
+   The original gating check only asked *how often* a non-nested crossing
+   occurs (0.5–2.2%); it never asked whether the one signal a stopping rule
+   could use — the visible cluster score — actually *predicts* when escalating
+   pays off, which is the thing that would need to be true to build one.
+   Checked directly, on two independent samples:
+
+   - **Cluster score does not predict escalation value.** Pooling four
+     re-sampled draws over the same 64 problems (richer 5-sample tier-0
+     fan-out, so score isn't just two values) at the small→mid boundary
+     (n=72 live decisions): mean score where escalating helped (0.185) vs.
+     didn't (0.135), Mann-Whitney p=0.127 — not significant, and the
+     per-bucket rates aren't monotonic. On the larger, properly independent
+     n=488 set at the mid→large boundary, total refutation at tier 0
+     (score=0) predicts escalation helps *less* often (61%) than partial
+     agreement does (50%) — backwards from what a stopping rule needs.
+   - **Tier-0 cost (a proxy for repair activity) looked promising, then
+     didn't survive the right unit of analysis.** Pooled across the four
+     resampled draws (n=72, non-independent — same 64 problems 4 times),
+     cost showed p=0.020, and a joint score-AND-cost-above-median bucket
+     showed p=0.0096 (85.7% help rate vs. 32.3%). Collapsing to the 27
+     *unique* problems actually decided live (one row per problem, majority
+     vote across its draws) — the correct unit, since the four draws are
+     resampled outcomes on the same fixed problem set, not independent
+     observations — both signals evaporate: cost p=0.66, score p=0.43. The
+     joint bucket's best cell also turned out to be 3 of its 7 rows the same
+     problem (`scale_chunk`) recurring across draws. Confirmed independently
+     on the n=488 set at both tier boundaries: p=0.166 (small→mid) and
+     p=0.831 (mid→large).
+
+   **Revised conclusion: none of the three approaches with a free gating
+   check survived contact with the data.** Adaptive ordering is no longer
+   ahead of specialized repair or family voting in this build order — all
+   three are now similarly unfavorable-but-not-fatal, for three different
+   reasons (adaptive ordering: no usable stopping signal found yet;
+   specialized repair: low cost ceiling; family voting: correlated-failure
+   evidence against the diversity premise). None should be built next on the
+   strength of what's been checked so far.
+   A live shadow-probe (see the synergy section below) is the only path that
+   would change this for adaptive ordering — it's possible a richer signal
+   (verifier diagnostic category, not yet recorded per-tier) predicts better
+   than score or cost, but that is now a new, unproven hypothesis, not a
+   near-certainty as the previous version of this step assumed.
 4. **Build specialized repair (#4) only if the shadow-probe below changes
    the arithmetic**, not as a standalone next step — step 1 found repair's
    ceiling on total spend is ≈1.6–4.7%, in the same range every prior

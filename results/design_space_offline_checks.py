@@ -26,6 +26,18 @@ share of the TOTAL bill including the shared spec/oracle call, which CLAUDE.md d
 proxy for repair cost, computed at all three tiers, then converts tier-only spend into a
 share of an assumed total using that documented range.
 
+CHECK 3 — does any visible-partition signal predict escalation value? (gates approach #1,
+adaptive tier ordering, Phase 1). The design review's first pass only measured how OFTEN a
+non-nested crossing occurs (0.5-2.2% of records); it never checked whether a stopping-time
+rule could actually identify those cases from signal available before acceptance. This check
+does, against two candidate signals already recorded (cluster score, tier cost) and at two
+different sample constructions — and is the reason this script has a `--dedupe` discipline
+worth reading closely: pooling four resampled draws over the SAME 64 problems as if they were
+72 independent observations produced two apparently significant results (p=0.02, p=0.0096)
+that evaporated (p=0.66, p=0.43) once collapsed to one row per unique problem. Both a naive
+pooled version and the deduplicated version are printed, so the trap is visible in the output
+rather than silently avoided.
+
 Both checks are read as first-pass signals bounding whether a live/code effort is worth
 funding, not as certified findings on the order of the numbered results/*.md experiments.
 """
@@ -192,6 +204,99 @@ def check2_repair_cost_share():
           "or negative net.")
 
 
+def _outcome_rows(records, boundary):
+    """Extract per-record (score, cost, helped) for one tier boundary.
+
+    boundary="small_mid": among records where tier 0 did NOT accept (escalation is a live
+    decision), did escalating to mid-or-large help? Signal is tier 0's own score/cost.
+    boundary="mid_large": among records that reached `large` unsolved-or-solved-there, did
+    escalating to large help? Signal is mid's own score/cost.
+    """
+    rows = []
+    for rec in records:
+        if rec.get("contaminated"):
+            continue
+        tiers = {t["tier"]: t for t in rec.get("tiers", [])}
+        if not all(k in tiers for k in ("small", "mid", "large")):
+            continue
+        solved_at = next((n for n in ("small", "mid", "large") if tiers[n].get("correct")), None)
+        if boundary == "small_mid":
+            if solved_at == "small":
+                continue
+            rows.append({"id": rec["id"], "score": tiers["small"]["score"],
+                         "cost": tiers["small"]["cost_usd"], "helped": solved_at in ("mid", "large")})
+        else:
+            if solved_at not in (None, "large"):
+                continue
+            rows.append({"id": rec["id"], "score": tiers["mid"]["score"],
+                         "cost": tiers["mid"]["cost_usd"], "helped": solved_at == "large"})
+    return rows
+
+
+def check3_stopping_signal():
+    print("\n\n=== Check 3: does any visible signal predict escalation value? ===\n")
+    print("Gates approach #1 (adaptive tier ordering, Phase 1 stopping-time rule).\n")
+
+    # Independent, one draw per problem -- the clean comparison.
+    d488 = load("results/s55-fixed.records.execution.json")
+    for boundary, label in [("small_mid", "small -> mid"), ("mid_large", "mid -> large")]:
+        rows = _outcome_rows(d488, boundary)
+        helps = [r for r in rows if r["helped"]]
+        nohelp = [r for r in rows if not r["helped"]]
+        if not helps or not nohelp:
+            continue
+        _, p_score = stats.mannwhitneyu([r["score"] for r in helps], [r["score"] for r in nohelp])
+        _, p_cost = stats.mannwhitneyu([r["cost"] for r in helps], [r["cost"] for r in nohelp])
+        print(f"n=488 set, {label} boundary (n_helps={len(helps)}, n_nohelp={len(nohelp)}):")
+        print(f"  score: mean_helps={statistics.mean(r['score'] for r in helps):.4f} "
+              f"mean_nohelp={statistics.mean(r['score'] for r in nohelp):.4f} p={p_score:.4f}")
+        print(f"  cost:  mean_helps={statistics.mean(r['cost'] for r in helps):.6f} "
+              f"mean_nohelp={statistics.mean(r['cost'] for r in nohelp):.6f} p={p_cost:.4f}")
+
+    # Four resampled draws over the SAME 64 problems -- demonstrates the pooling trap.
+    draw_files = [
+        "results/go-specialist-511-pinned-n64.execution.json",
+        "results/go-specialist-511-draw-d.execution.json",
+        "results/go-specialist-511-draw-e.execution.json",
+        "results/go-specialist-511-draw-f.execution.json",
+    ]
+    pooled = []
+    for f in draw_files:
+        try:
+            pooled.extend(_outcome_rows(load(f), "small_mid"))
+        except FileNotFoundError:
+            continue
+
+    print(f"\nFour resampled draws over the same 64 problems, small -> mid boundary:")
+    helps = [r for r in pooled if r["helped"]]
+    nohelp = [r for r in pooled if not r["helped"]]
+    _, p_cost_pooled = stats.mannwhitneyu([r["cost"] for r in helps], [r["cost"] for r in nohelp])
+    print(f"  NAIVE POOLED (n={len(pooled)}, treats 4 draws of the same problems as "
+          f"independent -- WRONG unit of analysis): cost p={p_cost_pooled:.4f}")
+
+    per_id = {}
+    for r in pooled:
+        per_id.setdefault(r["id"], []).append(r)
+    dedup = [{"score": statistics.mean(x["score"] for x in v), "cost": statistics.mean(x["cost"] for x in v),
+              "helped": statistics.mean(1.0 if x["helped"] else 0.0 for x in v) >= 0.5}
+             for v in per_id.values()]
+    dhelps = [r for r in dedup if r["helped"]]
+    dnohelp = [r for r in dedup if not r["helped"]]
+    _, p_cost_dedup = stats.mannwhitneyu([r["cost"] for r in dhelps], [r["cost"] for r in dnohelp])
+    _, p_score_dedup = stats.mannwhitneyu([r["score"] for r in dhelps], [r["score"] for r in dnohelp])
+    print(f"  DEDUPLICATED (n={len(dedup)} unique problems, majority vote across draws -- "
+          f"CORRECT unit of analysis): cost p={p_cost_dedup:.4f}, score p={p_score_dedup:.4f}")
+
+    print("\nConclusion for the design-space review: neither cluster score nor tier cost "
+          "predicts escalation value at either tier boundary, on the properly independent "
+          "n=488 sample or the deduplicated resampled set. The naive-pooled result above is "
+          "printed specifically to show how a real-looking signal (p<0.05) can appear from "
+          "treating non-independent repeated draws as independent observations -- a trap "
+          "worth checking for before trusting any p-value computed from this repo's "
+          "multiple-draw record files (go-specialist-511-draw-*, sweep*.execution.json).")
+
+
 if __name__ == "__main__":
     check1_cross_family_correlated_failure()
     check2_repair_cost_share()
+    check3_stopping_signal()

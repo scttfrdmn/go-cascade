@@ -25,22 +25,33 @@ We're continuing the go-cascade study. Before anything else:
    on 08-06, confirming that absence was ingestion lag, not a broken tag). **No
    `go-cascade`-tagged spend yet** — expected, since no full experiment has run under
    tagging since #76 landed; that will confirm itself the first time one does.
-2. **A design-space review exists and has two open threads.**
+2. **A design-space review exists and all three of its code-worthy candidates have
+   been checked against real data — none survived.**
    `docs/model-combination-design-space-2026-08-08.md` covers six approaches to
    combining models for cost savings beyond the existing cascade/cache/self-consistency
    arms (adaptive tier ordering, cross-family ensemble voting, problem decomposition,
    a specialized repair model, an upfront difficulty classifier, parallel tier racing —
    the last of which turned out to already be partly implemented as `speculative`,
-   `cascade.go:473-593`, gated on `--deadline`). Two of its six gating checks have been
-   RUN (`results/design_space_offline_checks.py`, $0, no live spend) and came back
-   unfavorable for the two approaches they gated: cross-family voting's
-   correlated-failure signal replicated across 28/29 record pairs (not just the
-   original n=47 pair), and specialized repair's ceiling on total spend is ≈1.6–4.7%.
-   Neither is killed outright, but both are re-ranked behind adaptive-ordering's
-   Phase 1 (stopping-time rule), which is the one approach whose check came back
-   unambiguously positive. **Nothing in `internal/` has been changed** — this is
-   still design research. If picking this up: read the doc's "Recommended build
-   order" section, which is current as of this run.
+   `cascade.go:473-593`, gated on `--deadline`). Three gating checks have now been RUN
+   (`results/design_space_offline_checks.py`, $0, no live spend, all three checks in
+   one script) and all three came back unfavorable:
+   - **Cross-family voting**: the correlated-failure signal (different model families
+     failing on the same problems together) replicated across 28/29 available record
+     pairs, not just the original n=47 pair — weighs against the diversity premise.
+   - **Specialized repair**: ceiling on total spend is ≈1.6–4.7% even under a generous
+     estimate — a low ceiling, consistent with every prior tier-0/repair-level lever in
+     this study's history.
+   - **Adaptive-ordering Phase 1**: initially looked like the one clear "go" (checked
+     only how *often* reordering would matter, 0.5–2.2%), but a follow-up check of
+     whether any visible signal (cluster score, tier cost) actually *predicts*
+     escalation value found nothing — p=0.66/p=0.43 on the correct unit of analysis,
+     after two apparent signals (p=0.02, p=0.0096) turned out to be an artifact of
+     pooling non-independent resampled draws. This is now the same status as the
+     other two: real check, unfavorable result, not fatal.
+   **Nothing in `internal/` has been changed** — this is still design research, and
+   none of the six approaches currently has a data-backed case to build next. If
+   picking this up: read the doc's "Recommended build order" section (current as of
+   this run) before assuming any of the three "obvious" candidates is still ahead.
 3. **Read the project board** —
    https://github.com/users/scttfrdmn/projects/62 — which is now where the open work
    lives, one issue per gap (#49–#53). This file no longer restates the backlog.
